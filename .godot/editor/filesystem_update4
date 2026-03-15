@@ -1,0 +1,4 @@
+res://scripts/core/EventBus.gd
+res://scripts/ui/TapeEditorPanel.gd
+res://scripts/machines/PunchMachine.gd
+res://scripts/data/PunchEncoding.gd
