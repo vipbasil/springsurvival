@@ -3,13 +3,10 @@
 [ext_resource type="Script" path="res://scripts/machines/PunchMachine.gd" id="1"]
 
 [node name="PunchMachine" type="Control"]
-custom_minimum_size = Vector2(760, 540)
-layout_mode = 3
-anchors_preset = 15
-grow_horizontal = 2
-grow_vertical = 2
-offset_right = 760.0
-offset_bottom = 540.0
+custom_minimum_size = Vector2(980, 620)
+layout_mode = 1
+offset_right = 980.0
+offset_bottom = 620.0
 script = ExtResource("1")
 
 [node name="Frame" type="Control" parent="."]
@@ -19,314 +16,241 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Margin" type="MarginContainer" parent="."]
+[node name="Header" type="Control" parent="."]
+layout_mode = 1
+offset_left = 22.0
+offset_top = 16.0
+offset_right = 958.0
+offset_bottom = 74.0
+mouse_filter = 2
+
+[node name="TitleLabel" type="Label" parent="Header"]
+layout_mode = 1
+offset_left = 12.0
+offset_top = 6.0
+offset_right = 320.0
+offset_bottom = 30.0
+text = ""
+
+[node name="SubtitleLabel" type="Label" parent="Header"]
+layout_mode = 1
+offset_left = 12.0
+offset_top = 32.0
+offset_right = 460.0
+offset_bottom = 54.0
+text = ""
+
+[node name="InputSection" type="Control" parent="."]
+layout_mode = 1
+offset_left = 46.0
+offset_top = 252.0
+offset_right = 722.0
+offset_bottom = 596.0
+mouse_filter = 2
+
+[node name="KeyboardDeck" type="Control" parent="InputSection"]
 layout_mode = 1
 anchors_preset = 15
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 18
-theme_override_constants/margin_top = 18
-theme_override_constants/margin_right = 18
-theme_override_constants/margin_bottom = 18
-
-[node name="RootVBox" type="VBoxContainer" parent="Margin"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_constants/separation = 14
-
-[node name="Header" type="VBoxContainer" parent="Margin/RootVBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 56)
-
-[node name="TitleLabel" type="Label" parent="Margin/RootVBox/Header"]
-layout_mode = 2
-text = "Punch Machine"
-
-[node name="SubtitleLabel" type="Label" parent="Margin/RootVBox/Header"]
-layout_mode = 2
-text = "5-channel bench punch for automaton tape"
-
-[node name="MachineBody" type="HBoxContainer" parent="Margin/RootVBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_constants/separation = 14
-
-[node name="LeftColumn" type="VBoxContainer" parent="Margin/RootVBox/MachineBody"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 0.78
-theme_override_constants/separation = 14
-
-[node name="TopRow" type="HBoxContainer" parent="Margin/RootVBox/MachineBody/LeftColumn"]
-layout_mode = 2
-size_flags_vertical = 3
-size_flags_stretch_ratio = 1.6
-theme_override_constants/separation = 14
-
-[node name="InputSection" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow"]
-custom_minimum_size = Vector2(180, 220)
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 0.62
 mouse_filter = 2
 
-[node name="InputMargin" type="MarginContainer" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection"]
+[node name="KeyboardGrid" type="GridContainer" parent="InputSection"]
+layout_mode = 1
+offset_left = 96.0
+offset_top = 54.0
+offset_right = 580.0
+offset_bottom = 288.0
+columns = 8
+theme_override_constants/h_separation = 6
+theme_override_constants/v_separation = 6
+
+[node name="MechanicalSection" type="Control" parent="."]
+layout_mode = 1
+offset_left = 46.0
+offset_top = 68.0
+offset_right = 722.0
+offset_bottom = 196.0
+mouse_filter = 2
+
+[node name="TapeViewport" type="Control" parent="MechanicalSection"]
+layout_mode = 1
+offset_left = 96.0
+offset_top = 72.0
+offset_right = 580.0
+offset_bottom = 168.0
+mouse_filter = 2
+
+[node name="TapeStrip" type="Control" parent="MechanicalSection/TapeViewport"]
+layout_mode = 1
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 472.0
+offset_bottom = 82.0
+mouse_filter = 2
+
+[node name="PunchHead" type="Control" parent="MechanicalSection"]
+layout_mode = 1
+offset_left = 324.0
+offset_top = 46.0
+offset_right = 360.0
+offset_bottom = 108.0
+mouse_filter = 2
+
+[node name="GuideRails" type="Control" parent="MechanicalSection"]
+layout_mode = 1
+offset_left = 84.0
+offset_top = 74.0
+offset_right = 592.0
+offset_bottom = 170.0
+mouse_filter = 2
+
+[node name="LeftCartridge" type="Control" parent="MechanicalSection"]
+layout_mode = 1
+offset_left = 8.0
+offset_top = 56.0
+offset_right = 80.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="FeedWheelLeft" type="Control" parent="MechanicalSection"]
+layout_mode = 1
+offset_left = 85.0
+offset_top = 76.0
+offset_right = 105.0
+offset_bottom = 160.0
+mouse_filter = 2
+
+[node name="FeedWheelRight" type="Control" parent="MechanicalSection"]
+layout_mode = 1
+offset_left = 571.0
+offset_top = 76.0
+offset_right = 591.0
+offset_bottom = 160.0
+mouse_filter = 2
+
+[node name="RightCartridge" type="Control" parent="MechanicalSection"]
+layout_mode = 1
+offset_left = 596.0
+offset_top = 56.0
+offset_right = 668.0
+offset_bottom = 180.0
+mouse_filter = 2
+
+[node name="LinkageBar" type="Control" parent="MechanicalSection"]
+layout_mode = 1
+offset_left = 116.0
+offset_top = 164.0
+offset_right = 560.0
+offset_bottom = 198.0
+mouse_filter = 2
+
+[node name="HorizontalBeam" type="Control" parent="MechanicalSection/LinkageBar"]
 layout_mode = 1
 anchors_preset = 15
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 18
-theme_override_constants/margin_top = 18
-theme_override_constants/margin_right = 18
-theme_override_constants/margin_bottom = 18
 mouse_filter = 2
 
-[node name="InputVBox" type="VBoxContainer" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_constants/separation = 14
-
-[node name="ChannelButtons" type="HBoxContainer" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="ChannelButton0" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox/ChannelButtons"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "A"
-
-[node name="ChannelButton1" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox/ChannelButtons"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "B"
-
-[node name="ChannelButton2" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox/ChannelButtons"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "C"
-
-[node name="ChannelButton3" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox/ChannelButtons"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "D"
-
-[node name="ChannelButton4" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox/ChannelButtons"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "E"
-
-[node name="CurrentRowPreview" type="Label" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox"]
-custom_minimum_size = Vector2(0, 52)
-layout_mode = 2
-autowrap_mode = 3
-text = "Current row [0 0 0 0 0] 00000"
-
-[node name="PunchButton" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-text = "Punch"
-
-[node name="RowActions" type="HBoxContainer" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox"]
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="AdvanceButton" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox/RowActions"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Advance"
-
-[node name="ClearRowButton" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/InputSection/InputMargin/InputVBox/RowActions"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Clear Row"
-
-[node name="MechanicalSection" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow"]
-custom_minimum_size = Vector2(300, 300)
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-size_flags_stretch_ratio = 1.3
-mouse_filter = 2
-
-[node name="TapeViewport" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/MechanicalSection"]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.18
-anchor_top = 0.10
-anchor_right = 0.82
-anchor_bottom = 0.88
-mouse_filter = 2
-
-[node name="TapeStrip" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/MechanicalSection/TapeViewport"]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.30
-anchor_top = 0.03
-anchor_right = 0.70
-anchor_bottom = 0.97
-mouse_filter = 2
-
-[node name="PunchHead" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/MechanicalSection"]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.36
-anchor_top = 0.06
-anchor_right = 0.64
-anchor_bottom = 0.22
-mouse_filter = 2
-
-[node name="GuideRails" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/MechanicalSection"]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.16
-anchor_top = 0.10
-anchor_right = 0.84
-anchor_bottom = 0.88
-mouse_filter = 2
-
-[node name="FeedWheelLeft" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/MechanicalSection"]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.08
-anchor_top = 0.78
-anchor_right = 0.22
-anchor_bottom = 0.94
-mouse_filter = 2
-
-[node name="FeedWheelRight" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/MechanicalSection"]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.78
-anchor_top = 0.78
-anchor_right = 0.92
-anchor_bottom = 0.94
-mouse_filter = 2
-
-[node name="FeedRatchet" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/MechanicalSection"]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.44
-anchor_top = 0.92
-anchor_right = 0.56
-anchor_bottom = 0.98
-mouse_filter = 2
-
-[node name="OptionalMaskDrum" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TopRow/MechanicalSection"]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.74
-anchor_top = 0.10
-anchor_right = 0.94
-anchor_bottom = 0.34
-mouse_filter = 2
-
-[node name="TapeControlSection" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn"]
-custom_minimum_size = Vector2(0, 180)
-layout_mode = 2
-size_flags_horizontal = 3
-mouse_filter = 2
-
-[node name="ControlsMargin" type="MarginContainer" parent="Margin/RootVBox/MachineBody/LeftColumn/TapeControlSection"]
+[node name="LinkageDecor" type="Control" parent="MechanicalSection/LinkageBar"]
 layout_mode = 1
 anchors_preset = 15
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 18
-theme_override_constants/margin_top = 18
-theme_override_constants/margin_right = 18
-theme_override_constants/margin_bottom = 18
 mouse_filter = 2
 
-[node name="ControlsGrid" type="GridContainer" parent="Margin/RootVBox/MachineBody/LeftColumn/TapeControlSection/ControlsMargin"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-columns = 3
-theme_override_constants/h_separation = 10
-theme_override_constants/v_separation = 10
+[node name="TapeControlSection" type="Control" parent="."]
+layout_mode = 1
+offset_left = 778.0
+offset_top = 472.0
+offset_right = 958.0
+offset_bottom = 612.0
+mouse_filter = 2
 
-[node name="RewindButton" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TapeControlSection/ControlsMargin/ControlsGrid"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
+[node name="RewindButton" type="Button" parent="TapeControlSection"]
+layout_mode = 1
+offset_left = 10.0
+offset_top = 8.0
+offset_right = 170.0
+offset_bottom = 34.0
 text = "Rewind"
 
-[node name="ClearTapeButton" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TapeControlSection/ControlsMargin/ControlsGrid"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
+[node name="ClearTapeButton" type="Button" parent="TapeControlSection"]
+layout_mode = 1
+offset_left = 10.0
+offset_top = 38.0
+offset_right = 170.0
+offset_bottom = 64.0
 text = "Clear Tape"
 
-[node name="LoadToAutomatonButton" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TapeControlSection/ControlsMargin/ControlsGrid"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
+[node name="LoadToAutomatonButton" type="Button" parent="TapeControlSection"]
+layout_mode = 1
+offset_left = 10.0
+offset_top = 68.0
+offset_right = 170.0
+offset_bottom = 94.0
 text = "Load to Automaton"
 
-[node name="DecodePreviewButton" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TapeControlSection/ControlsMargin/ControlsGrid"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
+[node name="DecodePreviewButton" type="Button" parent="TapeControlSection"]
+layout_mode = 1
+offset_left = 10.0
+offset_top = 98.0
+offset_right = 170.0
+offset_bottom = 124.0
 text = "Decode Preview"
 
-[node name="ExampleTapeButton" type="Button" parent="Margin/RootVBox/MachineBody/LeftColumn/TapeControlSection/ControlsMargin/ControlsGrid"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
+[node name="ExampleTapeButton" type="Button" parent="TapeControlSection"]
+layout_mode = 1
+offset_left = 10.0
+offset_top = 128.0
+offset_right = 170.0
+offset_bottom = 154.0
 text = "Example Tape"
 
-[node name="Spacer" type="Control" parent="Margin/RootVBox/MachineBody/LeftColumn/TapeControlSection/ControlsMargin/ControlsGrid"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-mouse_filter = 2
-
-[node name="OutputSection" type="Control" parent="Margin/RootVBox/MachineBody"]
-custom_minimum_size = Vector2(220, 0)
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-size_flags_stretch_ratio = 0.55
-mouse_filter = 2
-
-[node name="OutputMargin" type="MarginContainer" parent="Margin/RootVBox/MachineBody/OutputSection"]
+[node name="OutputSection" type="Control" parent="."]
 layout_mode = 1
-anchors_preset = 15
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
+offset_left = 778.0
+offset_top = 92.0
+offset_right = 958.0
+offset_bottom = 456.0
 mouse_filter = 2
 
-[node name="OutputVBox" type="VBoxContainer" parent="Margin/RootVBox/MachineBody/OutputSection/OutputMargin"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_constants/separation = 10
-
-[node name="TapeRowsHeading" type="Label" parent="Margin/RootVBox/MachineBody/OutputSection/OutputMargin/OutputVBox"]
-layout_mode = 2
+[node name="TapeRowsHeading" type="Label" parent="OutputSection"]
+layout_mode = 1
+offset_left = 14.0
+offset_top = 12.0
+offset_right = 154.0
+offset_bottom = 34.0
 text = "Punched Rows"
 
-[node name="TapeRowsList" type="ItemList" parent="Margin/RootVBox/MachineBody/OutputSection/OutputMargin/OutputVBox"]
-custom_minimum_size = Vector2(0, 160)
-layout_mode = 2
-size_flags_vertical = 3
+[node name="TapeRowsList" type="ItemList" parent="OutputSection"]
+layout_mode = 1
+offset_left = 14.0
+offset_top = 38.0
+offset_right = 166.0
+offset_bottom = 170.0
 
-[node name="DecodeHeading" type="Label" parent="Margin/RootVBox/MachineBody/OutputSection/OutputMargin/OutputVBox"]
-layout_mode = 2
+[node name="DecodeHeading" type="Label" parent="OutputSection"]
+layout_mode = 1
+offset_left = 14.0
+offset_top = 184.0
+offset_right = 154.0
+offset_bottom = 206.0
 text = "Decode Preview"
 
-[node name="DecodedInstructionsLabel" type="RichTextLabel" parent="Margin/RootVBox/MachineBody/OutputSection/OutputMargin/OutputVBox"]
-custom_minimum_size = Vector2(0, 170)
-layout_mode = 2
-size_flags_vertical = 3
+[node name="DecodedInstructionsLabel" type="RichTextLabel" parent="OutputSection"]
+layout_mode = 1
+offset_left = 14.0
+offset_top = 210.0
+offset_right = 166.0
+offset_bottom = 332.0
 scroll_active = true
 
-[node name="StatusLabel" type="Label" parent="Margin/RootVBox/MachineBody/OutputSection/OutputMargin/OutputVBox"]
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
+[node name="StatusLabel" type="Label" parent="OutputSection"]
+layout_mode = 1
+offset_left = 14.0
+offset_top = 340.0
+offset_right = 166.0
+offset_bottom = 372.0
 autowrap_mode = 3
 text = "Status: Ready"
