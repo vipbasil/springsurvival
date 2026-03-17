@@ -2,9 +2,14 @@ extends Node2D
 
 const CELL_SIZE := 32.0
 const STEP_INTERVAL := 0.45
+const WORKSHOP_SCENE_PATH := "res://scenes/main/Main.tscn"
 
 @onready var automaton = $World/Automata/Automaton
 @onready var grid = $World/GridMap
+@onready var back_button: Button = get_node_or_null("UI/BackToWorkshopButton")
+@onready var punch_machine = get_node_or_null("UI/PunchMachine")
+@onready var save_cartridge_dialog: ConfirmationDialog = get_node_or_null("UI/SaveCartridgeDialog")
+@onready var cartridge_label_edit: LineEdit = get_node_or_null("UI/SaveCartridgeDialog/DialogVBox/CartridgeLabelEdit")
 
 var _step_cooldown := 0.0
 
@@ -15,6 +20,11 @@ func _ready():
 	EventBus.status_changed.connect(_on_status_changed)
 	EventBus.acc_changed.connect(_on_acc_changed)
 	EventBus.ptr_changed.connect(_on_ptr_changed)
+	if back_button:
+		back_button.pressed.connect(_on_back_to_workshop_pressed)
+	if save_cartridge_dialog:
+		save_cartridge_dialog.confirmed.connect(_on_save_cartridge_confirmed)
+		save_cartridge_dialog.close_requested.connect(_on_save_cartridge_canceled)
 
 	update_automaton()
 	grid.queue_redraw()
@@ -57,3 +67,40 @@ func update_automaton():
 	automaton.position = GameState.automaton_position * CELL_SIZE
 	automaton.queue_redraw()
 	grid.queue_redraw()
+
+func _on_back_to_workshop_pressed():
+	if punch_machine and punch_machine.has_method("has_punched_tape") and punch_machine.has_punched_tape():
+		_open_save_cartridge_dialog()
+		return
+	get_tree().change_scene_to_file(WORKSHOP_SCENE_PATH)
+
+func _open_save_cartridge_dialog():
+	if save_cartridge_dialog == null or cartridge_label_edit == null:
+		get_tree().change_scene_to_file(WORKSHOP_SCENE_PATH)
+		return
+
+	cartridge_label_edit.text = GameState.get_default_cartridge_label()
+	save_cartridge_dialog.popup_centered()
+	cartridge_label_edit.grab_focus()
+	cartridge_label_edit.select_all()
+
+func _on_save_cartridge_confirmed():
+	if punch_machine == null or not punch_machine.has_method("get_tape_rows_copy"):
+		get_tree().change_scene_to_file(WORKSHOP_SCENE_PATH)
+		return
+
+	var label := cartridge_label_edit.text if cartridge_label_edit else ""
+	var rows: Array = punch_machine.get_tape_rows_copy()
+	if not rows.is_empty():
+		var cartridge := GameState.save_programmed_cartridge(label, rows)
+		if cartridge.is_empty():
+			EventBus.log_message.emit("Cannot save cartridge: no blank stock or no free programmed slot")
+			if save_cartridge_dialog:
+				save_cartridge_dialog.hide()
+			return
+		EventBus.log_message.emit("Cartridge saved: " + str(cartridge.get("label", "")))
+	get_tree().change_scene_to_file(WORKSHOP_SCENE_PATH)
+
+func _on_save_cartridge_canceled():
+	if save_cartridge_dialog:
+		save_cartridge_dialog.hide()

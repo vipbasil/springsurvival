@@ -13,7 +13,7 @@ const INSTRUCTIONS = {
     "JNZ": {"type": "jnz", "args": 1},
     "DEC": {"type": "dec", "args": 0},
     "INC": {"type": "inc", "args": 0},
-    "CMP": {"type": "cmp", "args": 1},
+    "SET": {"type": "set", "args": 1},
     "OUT": {"type": "out", "args": 0},
     "DIE": {"type": "die", "args": 0},
     "ROT": {"type": "rot", "args": 1},  # arg: signed int for rotation

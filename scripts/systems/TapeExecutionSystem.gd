@@ -58,7 +58,7 @@ func execute_next_instruction():
             GameState.automaton_acc += 1
             EventBus.acc_changed.emit(GameState.automaton_acc)
             log_message += " - ACC now " + str(GameState.automaton_acc)
-        "cmp":
+        "set":
             GameState.automaton_acc = instruction_arg
             EventBus.acc_changed.emit(GameState.automaton_acc)
             log_message += " - ACC set to " + str(GameState.automaton_acc)

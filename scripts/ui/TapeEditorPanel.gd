@@ -36,7 +36,7 @@ func _on_stop_pressed():
 	TapeExecutionSystem.halt("Stopped by user")
 
 func _on_example_pressed():
-	text_edit.text = "CMP 3\nOUT\nDEC\nJNZ 1\nDIE"
+	text_edit.text = "SET 3\nOUT\nDEC\nJNZ 1\nDIE"
 
 func _on_decode_preview_generated(decoded_lines: Array, unknown_rows: Array):
 	if decoded_lines.is_empty() or not unknown_rows.is_empty():

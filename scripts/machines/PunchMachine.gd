@@ -206,7 +206,7 @@ func _on_load_to_automaton_pressed():
 		EventBus.log_message.emit("PunchMachine: load failed, unknown rows " + unknown_text)
 		return
 
-	var instruction_lines: Array = decode_result["decoded_lines"]
+	var instruction_lines: Array = decode_result["program_lines"]
 	var tape_text := _join_with_separator(instruction_lines, "\n")
 	var program := TapeDecoder.decode_tape(tape_text)
 	if program.is_empty():
@@ -227,8 +227,8 @@ func _on_load_to_automaton_pressed():
 
 func _on_decode_preview_pressed():
 	var decode_result := _refresh_output()
-	EventBus.log_message.emit("PunchMachine: decoded " + str(Array(decode_result["decoded_lines"]).size()) + " rows")
-	_set_status("Decoded " + str(Array(decode_result["decoded_lines"]).size()) + " rows")
+	EventBus.log_message.emit("PunchMachine: decoded " + str(Array(decode_result["program_lines"]).size()) + " instructions")
+	_set_status("Decoded " + str(Array(decode_result["program_lines"]).size()) + " instructions")
 
 func _on_example_tape_pressed():
 	tape_rows = PunchEncodingData.get_example_rows()
@@ -251,13 +251,14 @@ func _on_row_selected(index: int):
 
 func _refresh_output() -> Dictionary:
 	var decode_result := PunchEncodingData.decode_rows(tape_rows)
-	var decoded_lines: Array = decode_result["decoded_lines"]
+	var row_labels: Array = decode_result["row_labels"]
+	var program_lines: Array = decode_result["program_lines"]
 	var unknown_rows: Array = decode_result["unknown_rows"]
 
 	tape_rows_list.clear()
 	for index in range(tape_rows.size()):
 		var row: Dictionary = tape_rows[index]
-		tape_rows_list.add_item("%02d  %s  %s" % [index, str(row.get("bits", "")), str(decoded_lines[index])])
+		tape_rows_list.add_item("%02d  %s  %s" % [index, str(row.get("bits", "")), str(row_labels[index])])
 
 	tape_rows_list.deselect_all()
 	if not tape_rows.is_empty():
@@ -265,17 +266,17 @@ func _refresh_output() -> Dictionary:
 		tape_rows_list.select(selected_index)
 
 	decoded_instructions_label.clear()
-	if decoded_lines.is_empty():
+	if program_lines.is_empty():
 		decoded_instructions_label.append_text("Decode preview:\n(no tape rows punched)")
 	else:
 		var preview_lines := PackedStringArray()
-		for index in range(decoded_lines.size()):
-			preview_lines.append("%02d  %s" % [index, str(decoded_lines[index])])
+		for index in range(program_lines.size()):
+			preview_lines.append("%02d  %s" % [index, str(program_lines[index])])
 		decoded_instructions_label.append_text("Decode preview:\n" + "\n".join(preview_lines))
 		if not unknown_rows.is_empty():
 			decoded_instructions_label.append_text("\n\nUnknown rows: " + _join_with_separator(unknown_rows, ", "))
 
-	EventBus.decode_preview_generated.emit(decoded_lines, unknown_rows)
+	EventBus.decode_preview_generated.emit(program_lines, unknown_rows)
 	queue_redraw()
 	return decode_result
 
@@ -296,6 +297,18 @@ func _join_with_separator(values: Array, separator: String) -> String:
 	for value in values:
 		strings.append(str(value))
 	return separator.join(strings)
+
+func has_punched_tape() -> bool:
+	return not tape_rows.is_empty()
+
+func get_tape_rows_copy() -> Array:
+	var rows_copy: Array = []
+	for row in tape_rows:
+		rows_copy.append({
+			"bits": str(row.get("bits", "")),
+			"index": int(row.get("index", 0)),
+		})
+	return rows_copy
 
 func _animate_punch():
 	var tween := create_tween()
