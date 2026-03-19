@@ -15,6 +15,50 @@ const OPERATOR_MAX_ENERGY := 12
 const OPERATOR_MAX_HP := 6
 const CHARGE_WORK_COST := 2
 const MAX_PREDICTION_STEPS := 64
+const LOCATION_NAME_CORPUS := [
+	"watchtower",
+	"waystation",
+	"relay",
+	"bunker",
+	"spillway",
+	"scrapyard",
+	"redoubt",
+	"reservoir",
+	"glassfield",
+	"ironbank",
+	"drywell",
+	"coldpit",
+	"brinepond",
+	"windcut",
+	"crateredge",
+	"foundry",
+	"longditch",
+	"underpass",
+	"nestfield",
+	"vaultgate",
+]
+const ENEMY_NAME_CORPUS := [
+	"stalker",
+	"skitter",
+	"marauder",
+	"shrike",
+	"rattler",
+	"prowler",
+	"drifter",
+	"scavver",
+	"mangler",
+	"needleback",
+	"wretch",
+	"fangmite",
+	"thornjaw",
+	"scrapling",
+	"gnashhound",
+	"brittleswarm",
+	"redmaw",
+	"coilrunner",
+	"ashraider",
+	"spinecrawler",
+]
 
 var automaton_position: Vector2 = START_POSITION
 var automaton_facing: String = START_FACING
@@ -472,9 +516,13 @@ func get_active_or_away_bots() -> Array:
 
 func get_discovered_outside_objects() -> Array:
 	var discovered: Array = []
-	for object_entry in outside_objects:
-		if bool(object_entry.get("discovered", false)):
-			discovered.append(object_entry)
+	for location_card in location_cards:
+		discovered.append({
+			"id": str(location_card.get("id", "")),
+			"type": str(location_card.get("type", "site")),
+			"position": _vector_from_variant(location_card.get("position", {}), Vector2.ZERO),
+			"discovered": true,
+		})
 	return discovered
 
 func get_location_cards() -> Array:
@@ -489,12 +537,10 @@ func forget_location_card(card_id: String) -> bool:
 	for card_index in range(location_cards.size()):
 		if str(location_cards[card_index].get("id", "")) != card_id:
 			continue
-			var forgotten_card: Dictionary = location_cards[card_index]
-			location_cards.remove_at(card_index)
-			_forget_location_card_on_map(forgotten_card)
-			save_programmed_cartridges()
-			EventBus.outside_world_changed.emit()
-			return true
+		location_cards.remove_at(card_index)
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+		return true
 	return false
 
 func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Array) -> Dictionary:
@@ -511,8 +557,13 @@ func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Arra
 	var enemy_attack := maxi(int(enemy_card.get("attack", int(enemy_card.get("threat_level", 1)))), 1)
 	var enemy_hp := maxi(int(enemy_card.get("hp", 1)), 1)
 	var total_attack := 0
+	var operator_attack := 0
+	var operator_damage := 0
+	var bot_damage_events: Array = []
+	var bot_attack_events: Array = []
 	if use_operator and is_run_active():
-		total_attack += 2
+		operator_attack = 2
+		total_attack += operator_attack
 	for bot_index_variant in bot_indices:
 		var bot_index := int(bot_index_variant)
 		if bot_index < 0 or bot_index >= bot_loadouts.size():
@@ -520,11 +571,17 @@ func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Arra
 		var bot_state: Dictionary = bot_loadouts[bot_index]
 		if int(bot_state.get("power_charge", 0)) <= 0:
 			continue
-		total_attack += 3 if str(bot_state.get("drone_type", "spider")) == "spider" else 2
+		var bot_attack := 3 if str(bot_state.get("drone_type", "spider")) == "spider" else 2
+		total_attack += bot_attack
+		bot_attack_events.append({
+			"bot_index": bot_index,
+			"attack": bot_attack,
+		})
 	if total_attack <= 0:
 		return {}
 	enemy_hp -= total_attack
 	if use_operator and is_run_active():
+		operator_damage = enemy_attack
 		_apply_operator_loss(enemy_attack)
 	for bot_index_variant in bot_indices:
 		var bot_index := int(bot_index_variant)
@@ -536,6 +593,10 @@ func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Arra
 		bot_state["power_charge"] = maxi(int(bot_state.get("power_charge", 0)) - enemy_attack, 0)
 		_sync_power_card_count(bot_state)
 		bot_loadouts[bot_index] = bot_state
+		bot_damage_events.append({
+			"bot_index": bot_index,
+			"damage": enemy_attack,
+		})
 	var defeated := enemy_hp <= 0
 	if defeated:
 		enemy_cards.remove_at(enemy_index)
@@ -547,40 +608,32 @@ func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Arra
 	EventBus.outside_world_changed.emit()
 	return {
 		"defeated": defeated,
+		"enemy_name": str(enemy_card.get("display_name", _default_enemy_display_name(str(enemy_card.get("type", "hostile_creature"))))),
 		"enemy_type": str(enemy_card.get("type", "hostile_creature")),
 		"enemy_id": enemy_id,
+		"total_attack": total_attack,
+		"enemy_attack": enemy_attack,
+		"operator_attack": operator_attack,
+		"operator_damage": operator_damage,
+		"bot_attacks": bot_attack_events,
+		"bot_damage": bot_damage_events,
 		"remaining_hp": maxi(enemy_hp, 0),
 	}
 
 func can_operator_scan_route() -> bool:
-	if not is_run_active():
-		return false
-	for object_entry in outside_objects:
-		if not bool(object_entry.get("discovered", false)):
-			return true
-	return true
+	return is_run_active()
 
 func resolve_operator_scan() -> Dictionary:
 	if not can_operator_scan_route():
 		return {}
-	var undiscovered_indices: Array = []
-	for object_index in range(outside_objects.size()):
-		if not bool(outside_objects[object_index].get("discovered", false)):
-			undiscovered_indices.append(object_index)
-	var spawn_enemy := undiscovered_indices.is_empty() or randf() < 0.35
-	if spawn_enemy:
+	if randf() < 0.35:
 		var enemy_card := _build_enemy_scan_card()
 		enemy_cards.append(enemy_card)
 		save_programmed_cartridges()
 		EventBus.outside_world_changed.emit()
 		return {"kind": "enemy", "card": enemy_card.duplicate(true)}
-	if undiscovered_indices.is_empty():
-		return {}
-	var chosen_index := int(undiscovered_indices[randi() % undiscovered_indices.size()])
-	outside_objects[chosen_index]["discovered"] = true
-	var location_card := _build_location_card_from_object(outside_objects[chosen_index])
-	if not _has_location_card(str(location_card.get("id", ""))):
-		location_cards.append(location_card)
+	var location_card := _build_random_operator_location_card()
+	location_cards.append(location_card)
 	save_programmed_cartridges()
 	EventBus.outside_world_changed.emit()
 	return {"kind": "location", "card": location_card.duplicate(true)}
@@ -790,22 +843,28 @@ func _initialize_outside_objects():
 		{"id": "watch_arc", "type": "surveillance", "position": Vector2(3, 8), "discovered": false},
 	]
 
-func _build_location_card_from_object(object_entry: Dictionary) -> Dictionary:
-	var object_id := str(object_entry.get("id", ""))
-	var location_type := "site"
-	match object_id:
-		"supply_cache":
-			location_type = "cache"
-		"rust_pit":
-			location_type = "crater"
-		"old_tower":
-			location_type = "tower"
-		"watch_arc":
-			location_type = "surveillance_zone"
+func _build_random_operator_location_card() -> Dictionary:
+	var location_types := [
+		"cache",
+		"crater",
+		"tower",
+		"surveillance_zone",
+		"facility",
+		"pond",
+		"bunker",
+		"field",
+		"dump",
+		"nest",
+	]
+	var location_type := str(location_types[randi() % location_types.size()])
+	var position := _generate_random_location_position()
+	var location_id := "loc_%d_%d_%d" % [int(Time.get_unix_time_from_system()), int(position.x), int(position.y)]
 	return {
-		"id": "loc_%s" % object_id,
+		"id": location_id,
 		"type": location_type,
-		"position": _serialize_vector(Vector2(object_entry.get("position", Vector2.ZERO))),
+		"display_name": _generate_markov_name(LOCATION_NAME_CORPUS, true),
+		"image_seed": randi(),
+		"position": _serialize_vector(position),
 		"survey_level": 2,
 		"source": "operator_scan",
 	}
@@ -817,26 +876,30 @@ func _build_enemy_scan_card() -> Dictionary:
 	return {
 		"id": "enemy_%d_%d" % [int(Time.get_unix_time_from_system()), enemy_cards.size()],
 		"type": enemy_type,
+		"display_name": _generate_markov_name(ENEMY_NAME_CORPUS, false),
 		"threat_level": threat,
 		"attack": threat,
 		"hp": 3 + threat,
 		"source": "operator_scan",
 	}
 
-func _has_location_card(card_id: String) -> bool:
-	for card in location_cards:
-		if str(card.get("id", "")) == card_id:
-			return true
-	return false
-
-func _forget_location_card_on_map(card: Dictionary):
-	var position := _vector_from_variant(card.get("position", {}), Vector2(-999, -999))
-	for object_index in range(outside_objects.size()):
-		var object_entry: Dictionary = outside_objects[object_index]
-		if _vector_from_variant(object_entry.get("position", {}), Vector2.ZERO) != position:
+func _generate_random_location_position() -> Vector2:
+	var occupied := {}
+	occupied[_serialize_vector(get_shelter_position())] = true
+	for location_card in location_cards:
+		occupied[_serialize_vector(_vector_from_variant(location_card.get("position", {}), Vector2.ZERO))] = true
+	for _attempt in range(128):
+		var candidate := Vector2(
+			randi_range(0, int(grid_size.x) - 1),
+			randi_range(0, int(grid_size.y) - 1)
+		)
+		if occupied.has(_serialize_vector(candidate)):
 			continue
-		outside_objects[object_index]["discovered"] = false
-		return
+		return candidate
+	return Vector2(
+		randi_range(0, int(grid_size.x) - 1),
+		randi_range(0, int(grid_size.y) - 1)
+	)
 
 func _apply_operator_loss(loss: int):
 	if loss <= 0:
@@ -1220,9 +1283,12 @@ func _normalize_saved_location_cards(cards: Array) -> Array:
 	for entry in cards:
 		if typeof(entry) != TYPE_DICTIONARY:
 			continue
+		var location_type := str(entry.get("type", "site"))
 		result.append({
 			"id": str(entry.get("id", "")),
-			"type": str(entry.get("type", "site")),
+			"type": location_type,
+			"display_name": str(entry.get("display_name", _default_location_display_name(location_type))),
+			"image_seed": int(entry.get("image_seed", entry.get("seed", randi()))),
 			"position": _serialize_vector(_vector_from_variant(entry.get("position", {}), Vector2.ZERO)),
 			"survey_level": maxi(int(entry.get("survey_level", 1)), 1),
 			"source": str(entry.get("source", "operator_scan")),
@@ -1235,15 +1301,64 @@ func _normalize_saved_enemy_cards(cards: Array) -> Array:
 		if typeof(entry) != TYPE_DICTIONARY:
 			continue
 		var threat := maxi(int(entry.get("threat_level", 1)), 1)
+		var enemy_type := str(entry.get("type", "hostile_creature"))
 		result.append({
 			"id": str(entry.get("id", "")),
-			"type": str(entry.get("type", "hostile_creature")),
+			"type": enemy_type,
+			"display_name": str(entry.get("display_name", _default_enemy_display_name(enemy_type))),
 			"threat_level": threat,
 			"attack": maxi(int(entry.get("attack", threat)), 1),
 			"hp": maxi(int(entry.get("hp", 3 + threat)), 1),
 			"source": str(entry.get("source", "operator_scan")),
 		})
 	return result
+
+func _generate_markov_name(corpus: Array, allow_two_words: bool) -> String:
+	var base_name := _generate_markov_token(corpus)
+	if allow_two_words and randf() < 0.28:
+		return "%s %s" % [base_name, _generate_markov_token(corpus)]
+	return base_name
+
+func _generate_markov_token(corpus: Array) -> String:
+	if corpus.is_empty():
+		return "Unknown"
+	var chain := {}
+	var starters: Array = []
+	for sample_variant in corpus:
+		var sample := "^" + str(sample_variant).to_lower() + "$"
+		for index in range(sample.length() - 1):
+			var current_char := sample[index]
+			var next_char := sample[index + 1]
+			if current_char == "^":
+				starters.append(next_char)
+			if not chain.has(current_char):
+				chain[current_char] = []
+			chain[current_char].append(next_char)
+	var token := ""
+	var current := "^"
+	var min_length := 5
+	var max_length := 11
+	while token.length() < max_length:
+		var options: Array = starters if current == "^" else chain.get(current, [])
+		if options.is_empty():
+			break
+		var next_char := str(options[randi() % options.size()])
+		if next_char == "$":
+			if token.length() >= min_length:
+				break
+			current = "^"
+			continue
+		token += next_char
+		current = next_char
+	if token.is_empty():
+		token = str(corpus[0])
+	return token.capitalize()
+
+func _default_location_display_name(location_type: String) -> String:
+	return location_type.replace("_", " ").capitalize()
+
+func _default_enemy_display_name(enemy_type: String) -> String:
+	return enemy_type.replace("_", " ").capitalize()
 
 func _serialize_vector(vector: Vector2) -> Dictionary:
 	return {"x": int(vector.x), "y": int(vector.y)}

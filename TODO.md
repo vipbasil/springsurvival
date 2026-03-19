@@ -135,6 +135,10 @@
 - Keep scan results as pending mission intel until the drone or operator returns
 - Convert returned pending intel into persistent location cards
 - Let direct operator scan reveal more than drone scan, but allow it to trigger immediate hostile / hazard card generation
+- Keep direct operator scan as a random occurrence system:
+  - no fixed finite site pool
+  - new location cards can be generated repeatedly
+  - forgetting a location card should remove it from current route-card map knowledge
 - Add recovery / return states for halted and stranded bots
 - Add persistent detection-relevant world signals where appropriate:
   - heat
@@ -326,8 +330,13 @@
 - The shelter is now the route-table origin
 - Placing the operator card on the route-table card now starts a scan process with a card-top progress bar
 - Completed operator scans now generate persistent location cards or hostile cards onto the table
+- Location cards now carry stable `image_seed` data and use seeded procedural vector silhouettes instead of only fixed glyphs
 - Location cards can now be forgotten by dropping them onto the trash card
 - Stacking the operator or a powered drone card onto a hostile card now starts a simple Stacklands-style fight loop with a card-top progress bar
+- Combat now has first-pass card feedback:
+  - attackers lunge forward and back
+  - damaged cards shake briefly
+  - floating numbers show attack and damage amounts
 - Bots now resolve into explicit mission states:
   - active
   - returned

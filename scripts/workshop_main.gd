@@ -6,6 +6,9 @@ const OUTSIDE_STEP_INTERVAL := 0.55
 const CHARGE_PRODUCTION_INTERVAL := 7.2
 const ROUTE_SCAN_INTERVAL := 6.0
 const ENEMY_FIGHT_INTERVAL := 2.2
+const ATTACK_FEEDBACK_DURATION := 0.22
+const DAMAGE_FEEDBACK_DURATION := 0.30
+const FLOATING_NUMBER_DURATION := 0.60
 
 const WALL_DARK := Color(0.08, 0.09, 0.11)
 const WALL_MID := Color(0.11, 0.12, 0.15)
@@ -37,6 +40,13 @@ const CARD_SIZE := Vector2(128.0, 156.0)
 const BLANK_CARTRIDGE_DISPLAY_COUNT := 4
 const DRAG_THRESHOLD := 6.0
 const DROP_OVERLAP_RATIO := 0.18
+const FONT_SIZE_REGION := 24
+const FONT_SIZE_BANNER := 14
+const FONT_SIZE_VALUE := 12
+const FONT_SIZE_CARD_TITLE := 8
+const FONT_SIZE_CARD_META := 6
+const FONT_SIZE_CARD_VALUE := 9
+const FONT_SIZE_FLOATING_BASE := 14
 const OPERATOR_ID_PHOTO := preload("res://assets/cards/operator_id_photo.svg")
 const BOT_ROUTE_COLORS := [
 	Color(0.82, 0.67, 0.28),
@@ -77,6 +87,8 @@ var _table_power_positions := {}
 var _table_blank_positions := {}
 var _table_location_positions := {}
 var _table_enemy_positions := {}
+var _combat_card_fx := {}
+var _floating_numbers := []
 
 func _ready():
 	mouse_default_cursor_shape = Control.CURSOR_ARROW
@@ -110,6 +122,7 @@ func _notification(what: int):
 		_set_cursor_shape(Control.CURSOR_ARROW)
 
 func _process(delta: float):
+	_tick_combat_feedback(delta)
 	if not GameState.is_run_active():
 		return
 	_tick_charge_machine(delta)
@@ -195,12 +208,126 @@ func _tick_enemy_fights(delta: float):
 		var result: Dictionary = GameState.resolve_enemy_fight(enemy_id, bool(fight_info.get("use_operator", false)), Array(fight_info.get("bot_indices", [])))
 		if result.is_empty():
 			continue
+		_emit_enemy_fight_feedback(enemy_id, fight_info, result)
 		if bool(result.get("defeated", false)):
 			_table_enemy_positions.erase(enemy_id)
 			_enemy_fight_cooldowns.erase(enemy_id)
-			EventBus.log_message.emit("%s defeated" % str(result.get("enemy_type", "Hostile")).replace("_", " "))
+			EventBus.log_message.emit("%s defeated" % str(result.get("enemy_name", "Hostile")))
 		else:
-			EventBus.log_message.emit("%s fought back" % str(result.get("enemy_type", "Hostile")).replace("_", " "))
+			EventBus.log_message.emit("%s fought back" % str(result.get("enemy_name", "Hostile")))
+
+func _tick_combat_feedback(delta: float):
+	var active := false
+	for fx_key in _combat_card_fx.keys():
+		var entry: Dictionary = _combat_card_fx[fx_key]
+		entry["attack_timer"] = maxf(float(entry.get("attack_timer", 0.0)) - delta, 0.0)
+		entry["damage_timer"] = maxf(float(entry.get("damage_timer", 0.0)) - delta, 0.0)
+		if float(entry.get("attack_timer", 0.0)) <= 0.0 and float(entry.get("damage_timer", 0.0)) <= 0.0:
+			_combat_card_fx.erase(fx_key)
+		else:
+			_combat_card_fx[fx_key] = entry
+			active = true
+	for index in range(_floating_numbers.size() - 1, -1, -1):
+		var entry: Dictionary = _floating_numbers[index]
+		entry["timer"] = maxf(float(entry.get("timer", FLOATING_NUMBER_DURATION)) - delta, 0.0)
+		if float(entry.get("timer", 0.0)) <= 0.0:
+			_floating_numbers.remove_at(index)
+		else:
+			_floating_numbers[index] = entry
+			active = true
+	if active:
+		queue_redraw()
+
+func _emit_enemy_fight_feedback(enemy_id: String, fight_info: Dictionary, result: Dictionary):
+	var enemy_center := _get_table_card_center("enemy", enemy_id)
+	if bool(fight_info.get("use_operator", false)):
+		var operator_center := _get_table_card_center("operator", 0)
+		_trigger_attack_feedback("operator", 0, enemy_center - operator_center, int(result.get("operator_attack", 0)))
+		_trigger_damage_feedback("operator", 0, int(result.get("operator_damage", 0)))
+	for bot_attack in Array(result.get("bot_attacks", [])):
+		var attack_entry: Dictionary = bot_attack
+		var bot_index := int(attack_entry.get("bot_index", -1))
+		if bot_index == -1:
+			continue
+		var bot_center := _get_table_card_center("bot", bot_index)
+		_trigger_attack_feedback("bot", bot_index, enemy_center - bot_center, int(attack_entry.get("attack", 0)))
+	for bot_damage in Array(result.get("bot_damage", [])):
+		var damage_entry: Dictionary = bot_damage
+		_trigger_damage_feedback("bot", int(damage_entry.get("bot_index", -1)), int(damage_entry.get("damage", 0)))
+	_trigger_damage_feedback("enemy", enemy_id, int(result.get("total_attack", 0)))
+
+func _trigger_attack_feedback(kind: String, identifier, direction: Vector2, amount: int):
+	if amount <= 0:
+		return
+	var fx_key := _get_card_fx_key(kind, identifier)
+	var entry: Dictionary = _combat_card_fx.get(fx_key, {})
+	entry["attack_timer"] = ATTACK_FEEDBACK_DURATION
+	entry["attack_duration"] = ATTACK_FEEDBACK_DURATION
+	entry["attack_dir"] = direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT
+	entry["seed"] = float(fx_key.hash() % 97)
+	_combat_card_fx[fx_key] = entry
+	_floating_numbers.append({
+		"position": _get_table_card_center(kind, identifier) + Vector2(0.0, -24.0),
+		"value": str(amount),
+		"color": Color(0.90, 0.78, 0.36),
+		"timer": FLOATING_NUMBER_DURATION,
+		"duration": FLOATING_NUMBER_DURATION,
+	})
+
+func _trigger_damage_feedback(kind: String, identifier, amount: int):
+	if amount <= 0:
+		return
+	if (kind == "bot" or kind == "operator") and int(identifier) == -1:
+		return
+	var fx_key := _get_card_fx_key(kind, identifier)
+	var entry: Dictionary = _combat_card_fx.get(fx_key, {})
+	entry["damage_timer"] = DAMAGE_FEEDBACK_DURATION
+	entry["damage_duration"] = DAMAGE_FEEDBACK_DURATION
+	entry["seed"] = float((fx_key.hash() % 131) + 17)
+	_combat_card_fx[fx_key] = entry
+	_floating_numbers.append({
+		"position": _get_table_card_center(kind, identifier) + Vector2(0.0, -8.0),
+		"value": str(amount),
+		"color": Color(0.93, 0.42, 0.34),
+		"timer": FLOATING_NUMBER_DURATION,
+		"duration": FLOATING_NUMBER_DURATION,
+	})
+
+func _get_card_fx_key(kind: String, identifier) -> String:
+	return "%s:%s" % [kind, str(identifier)]
+
+func _get_card_feedback_offset(kind: String, identifier) -> Vector2:
+	var entry: Dictionary = _combat_card_fx.get(_get_card_fx_key(kind, identifier), {})
+	if entry.is_empty():
+		return Vector2.ZERO
+	var offset := Vector2.ZERO
+	var attack_timer := float(entry.get("attack_timer", 0.0))
+	var attack_duration := maxf(float(entry.get("attack_duration", ATTACK_FEEDBACK_DURATION)), 0.001)
+	if attack_timer > 0.0:
+		var attack_progress := 1.0 - attack_timer / attack_duration
+		offset += Vector2(entry.get("attack_dir", Vector2.RIGHT)) * (sin(attack_progress * PI) * 9.0)
+	var damage_timer := float(entry.get("damage_timer", 0.0))
+	var damage_duration := maxf(float(entry.get("damage_duration", DAMAGE_FEEDBACK_DURATION)), 0.001)
+	if damage_timer > 0.0:
+		var damage_progress := 1.0 - damage_timer / damage_duration
+		var amplitude := (1.0 - damage_progress) * 5.0
+		var seed := float(entry.get("seed", 1.0))
+		offset += Vector2(
+			sin(damage_progress * 28.0 + seed),
+			cos(damage_progress * 23.0 + seed * 0.7)
+		) * amplitude
+	return offset
+
+func _get_table_card_center(kind: String, identifier) -> Vector2:
+	match kind:
+		"operator":
+			return Rect2(_table_operator_position, CARD_SIZE).get_center()
+		"bot":
+			return Rect2(Vector2(_table_drone_positions.get(int(identifier), Vector2.ZERO)), CARD_SIZE).get_center()
+		"enemy":
+			return Rect2(Vector2(_table_enemy_positions.get(str(identifier), Vector2.ZERO)), CARD_SIZE).get_center()
+		_:
+			return Vector2.ZERO
 
 func _is_charge_machine_operating() -> bool:
 	var operator_rect := Rect2(_table_operator_position, CARD_SIZE)
@@ -248,6 +375,7 @@ func _draw():
 	_draw_room_shell()
 	_draw_map_bay(Rect2(Vector2(24.0, 24.0), Vector2(size.x - 48.0, size.y - 48.0)))
 	_draw_drag_overlay()
+	_draw_floating_numbers()
 	if not GameState.is_run_active():
 		_draw_run_end_overlay()
 
@@ -1053,6 +1181,18 @@ func _draw_process_bar(card_rect: Rect2, progress: float):
 	if fill_rect.size.x > 0.0:
 		draw_rect(fill_rect, Color(0.94, 0.94, 0.88))
 
+func _draw_floating_numbers():
+	for entry in _floating_numbers:
+		var timer := float(entry.get("timer", FLOATING_NUMBER_DURATION))
+		var duration := maxf(float(entry.get("duration", FLOATING_NUMBER_DURATION)), 0.001)
+		var progress := 1.0 - timer / duration
+		var position := Vector2(entry.get("position", Vector2.ZERO)) + Vector2(0.0, -20.0 * progress)
+		var color := Color(entry.get("color", TEXT))
+		color.a = clampf(1.0 - progress * 0.8, 0.0, 1.0)
+		var outline := Color(0.08, 0.07, 0.06, color.a)
+		var font_size := maxi(int(round(lerpf(FONT_SIZE_FLOATING_BASE + 2.0, float(FONT_SIZE_FLOATING_BASE), progress))), FONT_SIZE_FLOATING_BASE)
+		_draw_outlined_text(position + Vector2(0.0, 1.0), str(entry.get("value", "")), HORIZONTAL_ALIGNMENT_CENTER, 32.0, font_size, color, outline)
+
 func _draw_run_end_overlay():
 	var overlay_rect := Rect2(Vector2.ZERO, size)
 	draw_rect(overlay_rect, Color(0.0, 0.0, 0.0, 0.28))
@@ -1060,7 +1200,33 @@ func _draw_run_end_overlay():
 	draw_rect(plaque_rect, Color(0.28, 0.10, 0.10))
 	draw_rect(plaque_rect.grow(-2.0), Color(0.18, 0.08, 0.08))
 	draw_rect(plaque_rect, PANEL_BORDER, false, 1.0)
-	draw_string(ThemeDB.fallback_font, Vector2(plaque_rect.position.x, plaque_rect.position.y + 20.0), "RUN ENDED", HORIZONTAL_ALIGNMENT_CENTER, plaque_rect.size.x, 14, TEXT)
+	draw_string(ThemeDB.fallback_font, Vector2(plaque_rect.position.x, plaque_rect.position.y + 20.0), "RUN ENDED", HORIZONTAL_ALIGNMENT_CENTER, plaque_rect.size.x, FONT_SIZE_BANNER, TEXT)
+
+func _draw_centered_card_text(info_rect: Rect2, baseline_y: float, text: String, font_size: int, color: Color):
+	draw_string(ThemeDB.fallback_font, Vector2(info_rect.position.x, baseline_y), text, HORIZONTAL_ALIGNMENT_CENTER, info_rect.size.x, font_size, color)
+
+func _draw_left_card_text(position: Vector2, text: String, width: float, font_size: int, color: Color):
+	draw_string(ThemeDB.fallback_font, position, text, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, color)
+
+func _draw_right_card_value(right_edge_x: float, baseline_y: float, text: String, font_size: int, color: Color):
+	var font := ThemeDB.fallback_font
+	var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	draw_string(font, Vector2(right_edge_x - text_size.x, baseline_y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+
+func _draw_outlined_text(position: Vector2, text: String, alignment: HorizontalAlignment, width: float, font_size: int, fill: Color, outline: Color):
+	var font := ThemeDB.fallback_font
+	for offset in [
+		Vector2(-1.0, 0.0),
+		Vector2(1.0, 0.0),
+		Vector2(0.0, -1.0),
+		Vector2(0.0, 1.0),
+		Vector2(-1.0, -1.0),
+		Vector2(1.0, -1.0),
+		Vector2(-1.0, 1.0),
+		Vector2(1.0, 1.0),
+	]:
+		draw_string(font, position + offset, text, alignment, width, font_size, outline)
+	draw_string(font, position, text, alignment, width, font_size, fill)
 
 func _get_machine_card_data(rect: Rect2) -> Dictionary:
 	_ensure_table_layout(rect)
@@ -1332,10 +1498,12 @@ func _get_table_visual_cards(rect: Rect2) -> Array:
 			"z": Rect2(machine_cards["charge_rect"]).end.y,
 		})
 	if not _is_dragging_table_card("operator", 0):
+		var operator_rect := Rect2(_table_operator_position, CARD_SIZE)
+		operator_rect.position += _get_card_feedback_offset("operator", 0)
 		cards.append({
 			"kind": "operator",
-			"rect": Rect2(_table_operator_position, CARD_SIZE),
-			"z": _table_operator_position.y + CARD_SIZE.y,
+			"rect": operator_rect,
+			"z": operator_rect.end.y,
 		})
 	if not _is_dragging_table_card("trash_card", 0):
 		cards.append({
@@ -1360,6 +1528,7 @@ func _get_table_visual_cards(rect: Rect2) -> Array:
 		if enemy_id.is_empty() or _is_dragging_table_card("enemy", enemy_id):
 			continue
 		var enemy_pos := Vector2(_table_enemy_positions.get(enemy_id, rect.position))
+		enemy_pos += _get_card_feedback_offset("enemy", enemy_id)
 		cards.append({
 			"kind": "enemy",
 			"rect": Rect2(enemy_pos, CARD_SIZE),
@@ -1397,12 +1566,17 @@ func _get_table_visual_cards(rect: Rect2) -> Array:
 		var bot_index := int(slot["index"])
 		if _is_dragging_table_card("bot", bot_index):
 			continue
+		var moved_slot: Dictionary = slot.duplicate(true)
+		var fx_offset := _get_card_feedback_offset("bot", bot_index)
+		moved_slot["rect"] = Rect2(Rect2(slot["rect"]).position + fx_offset, Rect2(slot["rect"]).size)
+		moved_slot["body_hotspot"] = Rect2(Rect2(slot["body_hotspot"]).position + fx_offset, Rect2(slot["body_hotspot"]).size)
+		moved_slot["tape_badge_rect"] = Rect2(Rect2(slot["tape_badge_rect"]).position + fx_offset, Rect2(slot["tape_badge_rect"]).size)
 		cards.append({
 			"kind": "bot",
-			"rect": Rect2(slot["rect"]),
+			"rect": Rect2(moved_slot["rect"]),
 			"bot_index": bot_index,
-			"slot": slot,
-			"z": Rect2(slot["rect"]).end.y,
+			"slot": moved_slot,
+			"z": Rect2(moved_slot["rect"]).end.y,
 		})
 	for card_info in _get_power_stack_data(rect)["visible_cards"]:
 		var slot_index := int(card_info["slot_index"])
@@ -1481,7 +1655,7 @@ func _draw_region_frame(rect: Rect2, title: String) -> Rect2:
 	]:
 		draw_circle(corner, 2.0, ACCENT)
 	if not title.is_empty():
-		draw_string(ThemeDB.fallback_font, rect.position + Vector2(18.0, 28.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, TEXT)
+		draw_string(ThemeDB.fallback_font, rect.position + Vector2(18.0, 28.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE_REGION, TEXT)
 	return rect.grow(-10.0)
 
 func _draw_table_drone_card(slot: Dictionary):
@@ -1619,7 +1793,7 @@ func _draw_tape_card(rect: Rect2, programmed: bool, label: String, selected: boo
 	_draw_tape_suit(suit_rect, programmed)
 	if programmed and not label.is_empty():
 		var short_label := _trim_cartridge_label(label, 10).to_upper()
-		draw_string(ThemeDB.fallback_font, Vector2(label_rect.position.x, label_rect.position.y + 9.0), short_label, HORIZONTAL_ALIGNMENT_CENTER, label_rect.size.x, 8, STEEL_DARK)
+		_draw_centered_card_text(label_rect, label_rect.position.y + 9.0, short_label, FONT_SIZE_CARD_TITLE, STEEL_DARK)
 	elif not programmed:
 		draw_line(
 			Vector2(info_rect.position.x + 4.0, info_rect.position.y + 10.0),
@@ -1718,26 +1892,15 @@ func _draw_drone_tape_badge(rect: Rect2, loaded_cartridge: Dictionary, is_select
 	_draw_poly_outline(front_poly, ACCENT if is_selected else PANEL_BORDER, 1.0)
 	draw_rect(Rect2(tag_rect.position + Vector2(4.0, 2.0), Vector2(3.0, tag_rect.size.y - 4.0)), ACCENT)
 	var short_label := _trim_cartridge_label(str(loaded_cartridge.get("label", "")), 6).to_upper()
-	draw_string(ThemeDB.fallback_font, tag_rect.position + Vector2(12.0, 11.0), short_label, HORIZONTAL_ALIGNMENT_LEFT, tag_rect.size.x - 14.0, 8, STEEL_DARK)
+	_draw_left_card_text(tag_rect.position + Vector2(12.0, 11.0), short_label, tag_rect.size.x - 14.0, FONT_SIZE_CARD_TITLE, STEEL_DARK)
 
 func _draw_drone_power_badge(rect: Rect2, power_charge: int, has_power: bool):
 	if not has_power and power_charge <= 0:
 		return
-	var font := ThemeDB.fallback_font
-	var font_size := 9
 	var value_text := str(maxi(power_charge, 0))
-	var value_size := font.get_string_size(value_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var suit_rect := Rect2(rect.position + Vector2(0.0, 4.0), Vector2(14.0, 8.0))
 	_draw_power_suit(suit_rect, power_charge > 0, 1.0)
-	draw_string(
-		font,
-		Vector2(rect.end.x - value_size.x, rect.position.y + 12.0),
-		value_text,
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		font_size,
-		TAPE
-	)
+	_draw_right_card_value(rect.end.x, rect.position.y + 12.0, value_text, FONT_SIZE_CARD_VALUE, TAPE)
 
 func _draw_operator_card(rect: Rect2):
 	var shell := _draw_card_template(rect, "agent", false, false, null, Color(0.13, 0.14, 0.16), STEEL_LIGHT, null)
@@ -1751,55 +1914,169 @@ func _draw_operator_card(rect: Rect2):
 	draw_rect(clip_rect, ACCENT_DIM)
 	draw_rect(clip_rect.grow(-1.0), ACCENT)
 	var operator_state: Dictionary = GameState.get_operator_state()
-	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(info_rect.position.x, info_rect.position.y + 7.0), str(WORKSHOP_OPERATOR["name"]), HORIZONTAL_ALIGNMENT_CENTER, info_rect.size.x, 8, TEXT)
-	draw_string(font, Vector2(info_rect.position.x, info_rect.position.y + 16.0), "EN %d  HP %d" % [int(operator_state.get("energy", 0)), int(operator_state.get("hp", 0))], HORIZONTAL_ALIGNMENT_CENTER, info_rect.size.x, 8, TAPE)
-	draw_string(font, Vector2(info_rect.position.x, info_rect.position.y + 24.0), str(WORKSHOP_OPERATOR["focus"]), HORIZONTAL_ALIGNMENT_CENTER, info_rect.size.x, 6, TAPE_SHADE)
+	_draw_centered_card_text(info_rect, info_rect.position.y + 7.0, str(WORKSHOP_OPERATOR["name"]), FONT_SIZE_CARD_TITLE, TEXT)
+	_draw_centered_card_text(info_rect, info_rect.position.y + 16.0, "EN %d  HP %d" % [int(operator_state.get("energy", 0)), int(operator_state.get("hp", 0))], FONT_SIZE_CARD_TITLE, TAPE)
+	_draw_centered_card_text(info_rect, info_rect.position.y + 24.0, str(WORKSHOP_OPERATOR["focus"]), FONT_SIZE_CARD_META, TAPE_SHADE)
 
 func _draw_location_card(rect: Rect2, card_data: Dictionary):
 	var shell := _draw_card_template(rect, "place", false, false, null, Color(0.20, 0.22, 0.25), Color(0.84, 0.84, 0.78, 0.30), Color(0.42, 0.38, 0.24))
 	var art_rect: Rect2 = shell["art_rect"]
 	var info_rect: Rect2 = shell["info_rect"]
 	var location_type := str(card_data.get("type", "site"))
+	var display_name := str(card_data.get("display_name", location_type.replace("_", " ")))
+	var image_seed := int(card_data.get("image_seed", 0))
 	var pos: Dictionary = card_data.get("position", {"x": 0, "y": 0})
 	var coords := Vector2(int(pos.get("x", 0)), int(pos.get("y", 0)))
-	_draw_location_glyph(art_rect.grow(-8.0), location_type)
-	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(info_rect.position.x, info_rect.position.y + 8.0), location_type.replace("_", " ").to_upper(), HORIZONTAL_ALIGNMENT_CENTER, info_rect.size.x, 8, STEEL_DARK)
-	draw_string(font, Vector2(info_rect.position.x, info_rect.position.y + 18.0), "(%d,%d)" % [int(coords.x), int(coords.y)], HORIZONTAL_ALIGNMENT_CENTER, info_rect.size.x, 8, Color(0.24, 0.26, 0.30))
+	_draw_location_glyph(art_rect.grow(-4.0), location_type, image_seed)
+	_draw_centered_card_text(info_rect, info_rect.position.y + 8.0, _trim_cartridge_label(display_name.to_upper(), 16), FONT_SIZE_CARD_TITLE, STEEL_DARK)
+	_draw_centered_card_text(info_rect, info_rect.position.y + 18.0, "(%d,%d)" % [int(coords.x), int(coords.y)], FONT_SIZE_CARD_TITLE, Color(0.24, 0.26, 0.30))
 
 func _draw_enemy_card(rect: Rect2, card_data: Dictionary):
 	var shell := _draw_card_template(rect, "threat", false, false, null, Color(0.16, 0.10, 0.10), Color(0.75, 0.61, 0.40, 0.24), Color(0.48, 0.20, 0.18))
 	var art_rect: Rect2 = shell["art_rect"]
 	var info_rect: Rect2 = shell["info_rect"]
 	var enemy_type := str(card_data.get("type", "hostile_creature"))
+	var display_name := str(card_data.get("display_name", enemy_type.replace("_", " ")))
 	var threat_level := int(card_data.get("threat_level", 1))
 	var enemy_hp := int(card_data.get("hp", 1))
 	_draw_enemy_glyph(art_rect.grow(-8.0), enemy_type)
-	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(info_rect.position.x, info_rect.position.y + 8.0), enemy_type.replace("_", " ").to_upper(), HORIZONTAL_ALIGNMENT_CENTER, info_rect.size.x, 8, TAPE)
-	draw_string(font, Vector2(info_rect.position.x, info_rect.position.y + 18.0), "ATK %d  HP %d" % [threat_level, enemy_hp], HORIZONTAL_ALIGNMENT_CENTER, info_rect.size.x, 8, Color(0.93, 0.78, 0.54))
+	_draw_centered_card_text(info_rect, info_rect.position.y + 8.0, _trim_cartridge_label(display_name.to_upper(), 16), FONT_SIZE_CARD_TITLE, TAPE)
+	_draw_centered_card_text(info_rect, info_rect.position.y + 18.0, "ATK %d  HP %d" % [threat_level, enemy_hp], FONT_SIZE_CARD_TITLE, Color(0.93, 0.78, 0.54))
 
-func _draw_location_glyph(rect: Rect2, location_type: String):
+func _draw_location_glyph(rect: Rect2, location_type: String, image_seed: int):
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(image_seed) if image_seed != 0 else int(hash(location_type))
+	var horizon_y := rect.position.y + rect.size.y - 12.0
+	draw_line(Vector2(rect.position.x + 4.0, horizon_y), Vector2(rect.end.x - 4.0, horizon_y), Color(0.45, 0.40, 0.26), 1.6)
 	match location_type:
 		"tower", "surveillance_zone":
-			var tower_rect := Rect2(rect.position + Vector2(rect.size.x * 0.5 - 10.0, 8.0), Vector2(20.0, rect.size.y - 20.0))
-			draw_rect(tower_rect, STEEL_DARK)
-			draw_rect(tower_rect.grow(-2.0), STEEL)
-			draw_rect(tower_rect, PANEL_BORDER, false, 1.0)
-			draw_line(tower_rect.get_center() + Vector2(-16.0, 0.0), tower_rect.get_center() + Vector2(16.0, 0.0), ACCENT_DIM, 1.0)
-		"cache":
-			var box_rect := Rect2(rect.position + Vector2(18.0, 18.0), rect.size - Vector2(36.0, 32.0))
-			draw_rect(box_rect, TAPE_SHADE)
-			draw_rect(box_rect.grow(-2.0), TAPE)
-			draw_rect(box_rect, PANEL_BORDER, false, 1.0)
-			draw_line(box_rect.position + Vector2(0.0, box_rect.size.y * 0.5), box_rect.end - Vector2(0.0, box_rect.size.y * 0.5), PANEL_BORDER, 1.0)
-		"crater":
-			draw_arc(rect.get_center(), 24.0, 0.2, TAU - 0.2, 24, STEEL_DARK, 4.0)
-			draw_arc(rect.get_center() + Vector2(0.0, 2.0), 16.0, 0.2, TAU - 0.2, 20, Color(0.30, 0.24, 0.18), 2.0)
+			_draw_location_tower(rect, horizon_y, rng, location_type == "surveillance_zone")
+		"cache", "bunker":
+			_draw_location_bunker(rect, horizon_y, rng, location_type == "cache")
+		"crater", "pond":
+			_draw_location_basin(rect, horizon_y, rng, location_type == "pond")
+		"facility", "dump", "field":
+			_draw_location_facility(rect, horizon_y, rng, location_type)
+		"nest":
+			_draw_location_nest(rect, horizon_y, rng)
 		_:
-			draw_rect(Rect2(rect.position + Vector2(16.0, 16.0), rect.size - Vector2(32.0, 32.0)), TAPE_SHADE)
-			draw_rect(Rect2(rect.position + Vector2(16.0, 16.0), rect.size - Vector2(32.0, 32.0)), PANEL_BORDER, false, 1.0)
+			_draw_location_ruin(rect, horizon_y, rng)
+
+func _draw_location_tower(rect: Rect2, horizon_y: float, rng: RandomNumberGenerator, surveillance: bool):
+	var mast_height := rng.randi_range(42, 52)
+	var mast_width := rng.randi_range(10, 12)
+	var mast_rect := Rect2(Vector2(rect.get_center().x - mast_width * 0.5, horizon_y - mast_height), Vector2(mast_width, mast_height))
+	var cap_rect := Rect2(Vector2(mast_rect.position.x - 10.0, mast_rect.position.y - 5.0), Vector2(mast_rect.size.x + 20.0, 7.0))
+	draw_rect(mast_rect, STEEL_DARK)
+	draw_rect(cap_rect, STEEL_DARK)
+	draw_line(mast_rect.position + Vector2(0.0, mast_rect.size.y), mast_rect.position + Vector2(-14.0, mast_rect.size.y + 16.0), STEEL_LIGHT, 1.6)
+	draw_line(mast_rect.end, mast_rect.end + Vector2(14.0, 16.0), STEEL_LIGHT, 1.6)
+	draw_line(cap_rect.position + Vector2(0.0, cap_rect.size.y), cap_rect.end + Vector2(0.0, cap_rect.size.y), ACCENT_DIM, 1.2)
+	if surveillance:
+		var dish_center := mast_rect.position + Vector2(mast_rect.size.x * 0.5, -1.0)
+		draw_arc(dish_center, 11.0, PI * 0.10, PI * 0.90, 16, TAPE_SHADE, 2.2)
+		draw_line(dish_center, dish_center + Vector2(0.0, 8.0), PANEL_BORDER, 1.2)
+	else:
+		draw_line(cap_rect.get_center() + Vector2(0.0, -8.0), cap_rect.get_center() + Vector2(0.0, 2.0), PANEL_BORDER, 1.2)
+
+func _draw_location_bunker(rect: Rect2, horizon_y: float, rng: RandomNumberGenerator, cache_like: bool):
+	var width := rng.randi_range(42, 56)
+	var height := rng.randi_range(18, 24)
+	var front_rect := Rect2(Vector2(rect.get_center().x - width * 0.5, horizon_y - height), Vector2(width, height))
+	draw_rect(front_rect, TAPE_SHADE if cache_like else Color(0.35, 0.33, 0.29))
+	draw_rect(front_rect.grow(-2.0), TAPE if cache_like else Color(0.22, 0.22, 0.20))
+	draw_rect(front_rect, PANEL_BORDER, false, 1.2)
+	var doorway_rect := Rect2(Vector2(front_rect.get_center().x - 9.0, front_rect.position.y + 4.0), Vector2(18.0, front_rect.size.y - 8.0))
+	draw_rect(doorway_rect, STEEL_DARK)
+	draw_rect(doorway_rect, PANEL_BORDER, false, 1.0)
+	if not cache_like:
+		var mound := PackedVector2Array([
+			Vector2(front_rect.position.x - 4.0, horizon_y),
+			Vector2(front_rect.position.x + 6.0, front_rect.position.y + 8.0),
+			Vector2(front_rect.end.x - 6.0, front_rect.position.y + 8.0),
+			Vector2(front_rect.end.x + 4.0, horizon_y),
+		])
+		draw_colored_polygon(mound, Color(0.28, 0.26, 0.22))
+		_draw_poly_outline(mound, PANEL_BORDER, 1.0)
+
+func _draw_location_basin(rect: Rect2, horizon_y: float, rng: RandomNumberGenerator, wet: bool):
+	var center := Vector2(rect.get_center().x + rng.randf_range(-2.0, 2.0), horizon_y - 4.0)
+	var radius_x := rng.randf_range(24.0, 28.0)
+	var ring_color := STEEL_DARK if not wet else Color(0.22, 0.28, 0.31)
+	var fill_color := Color(0.30, 0.24, 0.18) if not wet else Color(0.42, 0.55, 0.50)
+	draw_arc(center, radius_x, 0.12, PI - 0.12, 24, ring_color, 6.0)
+	draw_arc(center + Vector2(0.0, 1.0), radius_x - 7.0, 0.16, PI - 0.16, 20, fill_color, 3.2)
+	if wet:
+		for ripple in range(2):
+			draw_arc(center + Vector2(float(ripple) * 2.0 - 1.0, 0.0), radius_x - 11.0 - ripple * 4.0, 0.22, PI - 0.22, 16, TAPE_SHADE, 1.2)
+
+func _draw_location_facility(rect: Rect2, horizon_y: float, rng: RandomNumberGenerator, location_type: String):
+	var width := rng.randi_range(46, 60)
+	var height := rng.randi_range(20, 28)
+	var base_rect := Rect2(Vector2(rect.get_center().x - width * 0.5, horizon_y - height), Vector2(width, height))
+	if location_type == "field":
+		for furrow in range(4):
+			var y := horizon_y - 2.0 - furrow * 5.0
+			draw_line(Vector2(base_rect.position.x + 2.0, y), Vector2(base_rect.end.x - 2.0, y), Color(0.55, 0.47, 0.28), 1.4)
+		return
+	draw_rect(base_rect, STEEL_DARK)
+	draw_rect(base_rect.grow(-2.0), STEEL)
+	draw_rect(base_rect, PANEL_BORDER, false, 1.2)
+	var roof_rect := Rect2(Vector2(base_rect.position.x - 4.0, base_rect.position.y - 4.0), Vector2(base_rect.size.x + 8.0, 5.0))
+	draw_rect(roof_rect, Color(0.18, 0.18, 0.20))
+	if location_type == "facility":
+		var stack_count := 2
+		for stack in range(stack_count):
+			var stack_x := base_rect.position.x + 10.0 + float(stack) * (base_rect.size.x - 20.0)
+			var stack_h := float(rng.randi_range(10, 18))
+			draw_rect(Rect2(Vector2(stack_x, base_rect.position.y - stack_h), Vector2(6.0, stack_h)), Color(0.24, 0.24, 0.26))
+		for window_index in range(3):
+			var window_rect := Rect2(Vector2(base_rect.position.x + 8.0 + window_index * 12.0, base_rect.position.y + 7.0), Vector2(8.0, 8.0))
+			draw_rect(window_rect, TAPE_SHADE)
+	elif location_type == "dump":
+		for pile in range(3):
+			var pile_center := Vector2(base_rect.position.x + 10.0 + pile * 15.0, horizon_y - 4.0)
+			draw_circle(pile_center, 5.0 + pile, TAPE_SHADE)
+		var crate_rect := Rect2(Vector2(base_rect.position.x + base_rect.size.x - 22.0, horizon_y - 18.0), Vector2(14.0, 12.0))
+		draw_rect(crate_rect, TAPE_SHADE)
+		draw_rect(crate_rect, PANEL_BORDER, false, 1.0)
+
+func _draw_location_nest(rect: Rect2, horizon_y: float, rng: RandomNumberGenerator):
+	var center := Vector2(rect.get_center().x, horizon_y - 10.0)
+	var mound := PackedVector2Array([
+		Vector2(center.x - 24.0, horizon_y),
+		Vector2(center.x - 16.0, horizon_y - 14.0),
+		Vector2(center.x + 16.0, horizon_y - 14.0),
+		Vector2(center.x + 24.0, horizon_y),
+	])
+	draw_colored_polygon(mound, TAPE_SHADE)
+	_draw_poly_outline(mound, PANEL_BORDER, 1.0)
+	for hole in range(3):
+		var hole_rect := Rect2(Vector2(center.x - 16.0 + hole * 12.0, horizon_y - 10.0), Vector2(8.0, 6.0))
+		draw_rect(hole_rect, STEEL_DARK)
+	for spike in range(4):
+		var spike_x := center.x - 16.0 + spike * 10.0 + rng.randf_range(-1.0, 1.0)
+		draw_line(Vector2(spike_x, horizon_y - 14.0), Vector2(spike_x + rng.randf_range(-2.0, 2.0), horizon_y - 24.0), PANEL_BORDER, 1.2)
+
+func _draw_location_ruin(rect: Rect2, horizon_y: float, rng: RandomNumberGenerator):
+	var width := rng.randi_range(40, 56)
+	var height := rng.randi_range(22, 28)
+	var body_rect := Rect2(Vector2(rect.get_center().x - width * 0.5, horizon_y - height), Vector2(width, height))
+	draw_rect(body_rect, Color(0.34, 0.33, 0.31))
+	draw_rect(body_rect, PANEL_BORDER, false, 1.2)
+	var broken_poly := PackedVector2Array([
+		body_rect.position,
+		body_rect.position + Vector2(12.0, rng.randi_range(6, 14)),
+		body_rect.position + Vector2(26.0, 0.0),
+		body_rect.position + Vector2(40.0, rng.randi_range(8, 16)),
+		Vector2(body_rect.end.x, body_rect.position.y),
+		Vector2(body_rect.end.x, horizon_y),
+		Vector2(body_rect.position.x, horizon_y),
+	])
+	draw_colored_polygon(broken_poly, TAPE_SHADE)
+	_draw_poly_outline(broken_poly, PANEL_BORDER, 1.0)
+	var door_rect := Rect2(Vector2(body_rect.get_center().x - 8.0, horizon_y - 14.0), Vector2(16.0, 14.0))
+	draw_rect(door_rect, STEEL_DARK)
 
 func _draw_enemy_glyph(rect: Rect2, enemy_type: String):
 	match enemy_type:
@@ -1942,15 +2219,12 @@ func _draw_power_card(rect: Rect2, charge: int, max_charge: int, selected: bool)
 	var art_rect: Rect2 = shell["art_rect"]
 	var info_rect: Rect2 = shell["info_rect"]
 	var fill_ratio := clampf(float(charge) / float(maxi(max_charge, 1)), 0.0, 1.0)
-	var font := ThemeDB.fallback_font
-	var font_size := 13
 	var number_text := str(maxi(charge, 0))
-	var number_size := font.get_string_size(number_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var suit_rect := Rect2(art_rect.position + Vector2(8.0, 20.0), Vector2(art_rect.size.x - 16.0, 14.0))
 	var meter_rect := Rect2(Vector2(info_rect.position.x, info_rect.end.y - 2.0), Vector2(info_rect.size.x, 3.0))
 	var fill_rect := Rect2(meter_rect.position, Vector2(meter_rect.size.x * fill_ratio, meter_rect.size.y))
 	_draw_power_suit(suit_rect, charge > 0)
-	draw_string(font, Vector2(info_rect.end.x - number_size.x, info_rect.position.y + 13.0), number_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, STEEL_DARK)
+	_draw_right_card_value(info_rect.end.x, info_rect.position.y + 13.0, number_text, FONT_SIZE_VALUE, STEEL_DARK)
 	if fill_rect.size.x > 0.0:
 		draw_rect(fill_rect, ACCENT)
 	if charge <= 0:
@@ -2055,17 +2329,17 @@ func _draw_discovery_markers(origin: Vector2, cell_size: float):
 		var center := origin + (position + Vector2.ONE * 0.5) * cell_size
 		var object_type := str(object_entry.get("type", ""))
 		match object_type:
-			"resource":
+			"resource", "cache", "field", "pond", "facility", "dump", "bunker":
 				draw_circle(center, 3.0, Color(0.42, 0.70, 0.44))
 				draw_line(center + Vector2(-4.0, 0.0), center + Vector2(4.0, 0.0), STEEL_DARK, 1.0)
 				draw_line(center + Vector2(0.0, -4.0), center + Vector2(0.0, 4.0), STEEL_DARK, 1.0)
-			"hazard":
+			"hazard", "crater", "anomaly_zone":
 				draw_line(center + Vector2(-4.0, -4.0), center + Vector2(4.0, 4.0), Color(0.72, 0.28, 0.18), 1.2)
 				draw_line(center + Vector2(-4.0, 4.0), center + Vector2(4.0, -4.0), Color(0.72, 0.28, 0.18), 1.2)
-			"landmark":
+			"landmark", "tower", "bridge", "road_node":
 				draw_rect(Rect2(center - Vector2(3.0, 3.0), Vector2(6.0, 6.0)), TAPE_SHADE)
 				draw_rect(Rect2(center - Vector2(3.0, 3.0), Vector2(6.0, 6.0)), PANEL_BORDER, false, 1.0)
-			"surveillance":
+			"surveillance", "surveillance_zone", "nest":
 				var triangle := PackedVector2Array([
 					center + Vector2(0.0, -4.5),
 					center + Vector2(4.0, 3.5),
@@ -2075,6 +2349,9 @@ func _draw_discovery_markers(origin: Vector2, cell_size: float):
 				draw_line(triangle[0], triangle[1], STEEL_DARK, 1.0)
 				draw_line(triangle[1], triangle[2], STEEL_DARK, 1.0)
 				draw_line(triangle[2], triangle[0], STEEL_DARK, 1.0)
+			_:
+				draw_circle(center, 2.8, TAPE_SHADE)
+				draw_circle(center, 1.1, PANEL_BORDER)
 
 func _draw_outside_bot_routes(origin: Vector2, cell_size: float):
 	for bot_index in range(GameState.bot_loadouts.size()):
@@ -2084,12 +2361,14 @@ func _draw_outside_bot_routes(origin: Vector2, cell_size: float):
 		var predict_color: Color = BOT_PREDICT_COLORS[bot_index % BOT_PREDICT_COLORS.size()]
 		var trail: Array = bot_state.get("outside_trail", [])
 		var predicted: Array = bot_state.get("predicted_trail", [])
-		if outside_status != "cabinet":
+		if outside_status != "cabinet" and outside_status != "returned":
 			_draw_path_segments(origin, cell_size, trail, route_color, 2.2, 3.0)
 		if outside_status == "cabinet" and not predicted.is_empty():
 			var prelaunch_path: Array = [GameState.get_shelter_position()]
 			prelaunch_path.append_array(predicted)
 			_draw_path_segments(origin, cell_size, prelaunch_path, predict_color, 1.2, 2.2)
+			continue
+		if outside_status == "returned":
 			continue
 		if not trail.is_empty():
 			var future_path: Array = [trail[-1]]

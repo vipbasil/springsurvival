@@ -158,12 +158,20 @@ Direct operator scan may:
 - reveal contents earlier
 - trigger hazards
 - trigger immediate hostile encounters
+- create new location occurrences directly, without relying on a fixed finite site pool
 
 That means direct operator scan can generate:
 
 - location knowledge on successful return
 - immediate encounter state while the operator is exposed
 - hostile creature cards or hazard cards when contact actually happens
+
+For the current tabletop prototype, operator scan on the route card behaves as current knowledge generation:
+
+- each completed scan can generate either a new location card or a hostile card
+- location cards represent the currently known scan occurrences
+- if a location card is forgotten or trashed, it disappears from current route-card map knowledge
+- later scans can generate new location cards again
 
 ## Pending Intel Rule
 

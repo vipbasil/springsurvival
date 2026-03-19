@@ -128,7 +128,8 @@ The workshop is now the main preparation hub:
 - power cards are dragged onto drone cards and add to total available power
 - launched drones execute their saved tape through the route-table card
 - the route table shows the shelter origin, executed trails, predicted paths, and discovered outside objects
-- scans are intended to detect sites in scanned territory first, then create location cards only when the drone or operator returns with the information
+- drone scans are intended to detect sites in scanned territory first, then create location cards only when the drone returns with the information
+- operator scanning on the route-table card currently generates random location or hostile cards directly; location cards are current known scan occurrences and disappear from the route-card map when forgotten
 
 The current interaction grammar is:
 
