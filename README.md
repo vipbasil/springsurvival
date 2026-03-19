@@ -28,10 +28,13 @@ One important current architecture rule:
 
 More specifically for the workshop:
 
+- the workshop is now a single table surface
+- movable entities live freely on that table as cards
 - drones are composite cards
-- one tape card becomes a visible tape label/badge on the drone card
-- one or more charged power cards add up on the drone card
-- launch and recovery stay machine actions
+- tape cards attach to drone cards as tape labels/badges
+- charged power cards add into the drone card's total available power
+- the programming bench and route table are currently represented as machinery cards on the table for interaction clarity
+- launching/recovery currently happens by dragging drone cards onto the route-table card
 
 ## Where To Look
 
@@ -43,6 +46,7 @@ If you are continuing development, use these files as the main entry points:
 - `GAME_ARCHITECTURE.md`: top-level product/system decisions, run structure, persistence rules, and layer separation
 - `ARTSTYLE.md`: visual language, materials, mood, and UI style rules
 - `DRONE_DESIGN.md`: drone design rules, visual exemplars, and future drone direction
+- `LOCATION_MODEL.md`: map-site taxonomy, scan rules, survey levels, and when detected places become cards
 
 If you want the current playable scenes:
 
@@ -71,7 +75,7 @@ If you want world / route-table behavior:
 
 ## Scene Structure
 
-- `scenes/main/Main.tscn`: Startup workshop scene with programming bench, cartridge stores, drone cabinets, and route table.
+- `scenes/main/Main.tscn`: Startup workshop scene. The current workshop is a single tabletop card space rather than separate active shelf/cabinet regions.
 - `scenes/main/ProgrammingMain.tscn`: Full punch-machine programming scene.
 - `scenes/world/`: World container and grid map.
 - `scenes/automata/`: Automaton entity with components.
@@ -118,18 +122,24 @@ Current important rules:
 
 The workshop is now the main preparation hub:
 
-- blank cartridges and programmed cartridges are physical shelf items
-- leaving the programming bench saves a new programmed cartridge into a fixed shelf slot and consumes one blank cartridge
-- programmed cartridges can be selected from the shelf and loaded into drone cabinets
-- physical power units are shelf stock and must be installed into a bot before launch
-- launched bots leave the cabinet visually and execute their saved tape on the route table
+- leaving the programming bench saves a new programmed tape card and consumes one blank tape card
+- programmed tape cards, blank tape cards, power cards, drone cards, and the trash card all live on the workshop table
+- tape cards are dragged onto drone cards
+- power cards are dragged onto drone cards and add to total available power
+- launched drones execute their saved tape through the route-table card
 - the route table shows the shelter origin, executed trails, predicted paths, and discovered outside objects
+- scans are intended to detect sites in scanned territory first, then create location cards only when the drone or operator returns with the information
 
-The intended interaction grammar for future workshop work is:
+The current interaction grammar is:
 
-- cards for movable entities such as drones, cartridges, power units, and archived program objects
+- movable entities are cards and are manipulated by drag and drop
+- workshop preparation happens by composing cards onto drone cards, not by tiny slot widgets
+- the bench and route table are the main machinery-facing tabletop cards in the current build
+
+The intended longer-term interaction grammar remains:
+
+- cards for movable entities such as drones, media, power, materials, and archived program objects
 - machinery for fixed stations such as the programming bench, route table, large map, and shelter devices
-- drone preparation should happen by composing cards onto drone cards, not by tiny slot widgets
 
 This workshop is only one layer of the intended architecture:
 

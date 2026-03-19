@@ -11,7 +11,9 @@ const PROGRAMMED_CARTRIDGE_CAPACITY := 8
 const BLANK_CARTRIDGE_SLOT_COUNT := 4
 const BOT_CABINET_CAPACITY := 2
 const BOT_POWER_CAPACITY := 10
-const POWER_UNIT_SLOT_COUNT := 4
+const OPERATOR_MAX_ENERGY := 12
+const OPERATOR_MAX_HP := 6
+const CHARGE_WORK_COST := 2
 const MAX_PREDICTION_STEPS := 64
 
 var automaton_position: Vector2 = START_POSITION
@@ -33,6 +35,10 @@ var power_unit_slots: Array = []
 var selected_cartridge_id: String = ""
 var bot_loadouts: Array = []
 var outside_objects: Array = []
+var location_cards: Array = []
+var enemy_cards: Array = []
+var workshop_layout: Dictionary = {}
+var operator_state: Dictionary = {}
 
 func _ready():
 	load_programmed_cartridges()
@@ -60,6 +66,12 @@ func has_charged_power_unit_available() -> bool:
 func has_free_programmed_slot() -> bool:
 	return _get_first_free_programmed_slot_index() != -1
 
+func is_run_active() -> bool:
+	return int(operator_state.get("hp", 0)) > 0 and str(operator_state.get("status", "active")) != "dead"
+
+func get_operator_state() -> Dictionary:
+	return operator_state.duplicate(true)
+
 func can_open_programming_bench() -> bool:
 	return has_blank_cartridge_available() and has_free_programmed_slot()
 
@@ -76,6 +88,18 @@ func get_free_programmed_slot_count() -> int:
 		if get_programmed_cartridge_in_slot(slot_index).is_empty():
 			free_count += 1
 	return free_count
+
+func get_workshop_card_position(layout_key: String, fallback: Vector2) -> Vector2:
+	if not workshop_layout.has(layout_key):
+		return fallback
+	return _vector_from_variant(workshop_layout[layout_key], fallback)
+
+func set_workshop_card_position(layout_key: String, position: Vector2):
+	var serialized := _serialize_vector(position)
+	if workshop_layout.has(layout_key) and workshop_layout[layout_key] == serialized:
+		return
+	workshop_layout[layout_key] = serialized
+	save_programmed_cartridges()
 
 func save_programmed_cartridge(label: String, rows: Array) -> Dictionary:
 	var blank_slot_index := _get_first_blank_slot_index()
@@ -172,7 +196,11 @@ func is_power_unit_charged(slot_index: int) -> bool:
 	return not power_unit.is_empty() and int(power_unit.get("charge", 0)) > 0
 
 func create_power_unit_in_slot(slot_index: int) -> bool:
-	if slot_index < 0 or slot_index >= power_unit_slots.size():
+	if slot_index < 0:
+		return false
+	if slot_index == power_unit_slots.size():
+		power_unit_slots.append({})
+	elif slot_index > power_unit_slots.size():
 		return false
 	if not power_unit_slots[slot_index].is_empty():
 		return false
@@ -184,6 +212,50 @@ func create_power_unit_in_slot(slot_index: int) -> bool:
 	save_programmed_cartridges()
 	EventBus.bot_loadouts_changed.emit(bot_loadouts)
 	return true
+
+func recharge_power_unit_in_slot(slot_index: int) -> bool:
+	if slot_index < 0 or slot_index >= power_unit_slots.size():
+		return false
+	if power_unit_slots[slot_index].is_empty():
+		return false
+	power_unit_slots[slot_index]["max_charge"] = maxi(int(power_unit_slots[slot_index].get("max_charge", BOT_POWER_CAPACITY)), BOT_POWER_CAPACITY)
+	power_unit_slots[slot_index]["charge"] = int(power_unit_slots[slot_index]["max_charge"])
+	save_programmed_cartridges()
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	return true
+
+func discard_power_unit_in_slot(slot_index: int) -> bool:
+	if slot_index < 0 or slot_index >= power_unit_slots.size():
+		return false
+	if power_unit_slots[slot_index].is_empty():
+		return false
+	power_unit_slots[slot_index] = {}
+	save_programmed_cartridges()
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	return true
+
+func consume_operator_charge_work(cost: int = CHARGE_WORK_COST) -> bool:
+	if cost <= 0:
+		return is_run_active()
+	var remaining_cost := cost
+	var current_energy := int(operator_state.get("energy", 0))
+	if current_energy > 0:
+		var energy_spent := mini(current_energy, remaining_cost)
+		current_energy -= energy_spent
+		remaining_cost -= energy_spent
+		operator_state["energy"] = current_energy
+	if remaining_cost > 0:
+		operator_state["hp"] = int(operator_state.get("hp", 0)) - remaining_cost
+	if int(operator_state.get("hp", 0)) <= 0:
+		operator_state["hp"] = 0
+		operator_state["status"] = "dead"
+	else:
+		operator_state["status"] = "exhausted" if int(operator_state.get("energy", 0)) <= 0 else "active"
+	save_programmed_cartridges()
+	EventBus.operator_state_changed.emit(get_operator_state())
+	if str(operator_state.get("status", "")) == "dead":
+		EventBus.log_message.emit("Operator collapsed. Run ended.")
+	return is_run_active()
 
 func is_bot_available_in_workshop(bot_index: int) -> bool:
 	if bot_index < 0 or bot_index >= bot_loadouts.size():
@@ -405,13 +477,125 @@ func get_discovered_outside_objects() -> Array:
 			discovered.append(object_entry)
 	return discovered
 
+func get_location_cards() -> Array:
+	return location_cards.duplicate(true)
+
+func get_enemy_cards() -> Array:
+	return enemy_cards.duplicate(true)
+
+func forget_location_card(card_id: String) -> bool:
+	if card_id.is_empty():
+		return false
+	for card_index in range(location_cards.size()):
+		if str(location_cards[card_index].get("id", "")) != card_id:
+			continue
+			var forgotten_card: Dictionary = location_cards[card_index]
+			location_cards.remove_at(card_index)
+			_forget_location_card_on_map(forgotten_card)
+			save_programmed_cartridges()
+			EventBus.outside_world_changed.emit()
+			return true
+	return false
+
+func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Array) -> Dictionary:
+	if enemy_id.is_empty():
+		return {}
+	var enemy_index := -1
+	for card_index in range(enemy_cards.size()):
+		if str(enemy_cards[card_index].get("id", "")) == enemy_id:
+			enemy_index = card_index
+			break
+	if enemy_index == -1:
+		return {}
+	var enemy_card: Dictionary = enemy_cards[enemy_index]
+	var enemy_attack := maxi(int(enemy_card.get("attack", int(enemy_card.get("threat_level", 1)))), 1)
+	var enemy_hp := maxi(int(enemy_card.get("hp", 1)), 1)
+	var total_attack := 0
+	if use_operator and is_run_active():
+		total_attack += 2
+	for bot_index_variant in bot_indices:
+		var bot_index := int(bot_index_variant)
+		if bot_index < 0 or bot_index >= bot_loadouts.size():
+			continue
+		var bot_state: Dictionary = bot_loadouts[bot_index]
+		if int(bot_state.get("power_charge", 0)) <= 0:
+			continue
+		total_attack += 3 if str(bot_state.get("drone_type", "spider")) == "spider" else 2
+	if total_attack <= 0:
+		return {}
+	enemy_hp -= total_attack
+	if use_operator and is_run_active():
+		_apply_operator_loss(enemy_attack)
+	for bot_index_variant in bot_indices:
+		var bot_index := int(bot_index_variant)
+		if bot_index < 0 or bot_index >= bot_loadouts.size():
+			continue
+		var bot_state: Dictionary = bot_loadouts[bot_index]
+		if int(bot_state.get("power_charge", 0)) <= 0:
+			continue
+		bot_state["power_charge"] = maxi(int(bot_state.get("power_charge", 0)) - enemy_attack, 0)
+		_sync_power_card_count(bot_state)
+		bot_loadouts[bot_index] = bot_state
+	var defeated := enemy_hp <= 0
+	if defeated:
+		enemy_cards.remove_at(enemy_index)
+	else:
+		enemy_cards[enemy_index]["hp"] = enemy_hp
+	save_programmed_cartridges()
+	EventBus.operator_state_changed.emit(get_operator_state())
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	EventBus.outside_world_changed.emit()
+	return {
+		"defeated": defeated,
+		"enemy_type": str(enemy_card.get("type", "hostile_creature")),
+		"enemy_id": enemy_id,
+		"remaining_hp": maxi(enemy_hp, 0),
+	}
+
+func can_operator_scan_route() -> bool:
+	if not is_run_active():
+		return false
+	for object_entry in outside_objects:
+		if not bool(object_entry.get("discovered", false)):
+			return true
+	return true
+
+func resolve_operator_scan() -> Dictionary:
+	if not can_operator_scan_route():
+		return {}
+	var undiscovered_indices: Array = []
+	for object_index in range(outside_objects.size()):
+		if not bool(outside_objects[object_index].get("discovered", false)):
+			undiscovered_indices.append(object_index)
+	var spawn_enemy := undiscovered_indices.is_empty() or randf() < 0.35
+	if spawn_enemy:
+		var enemy_card := _build_enemy_scan_card()
+		enemy_cards.append(enemy_card)
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+		return {"kind": "enemy", "card": enemy_card.duplicate(true)}
+	if undiscovered_indices.is_empty():
+		return {}
+	var chosen_index := int(undiscovered_indices[randi() % undiscovered_indices.size()])
+	outside_objects[chosen_index]["discovered"] = true
+	var location_card := _build_location_card_from_object(outside_objects[chosen_index])
+	if not _has_location_card(str(location_card.get("id", ""))):
+		location_cards.append(location_card)
+	save_programmed_cartridges()
+	EventBus.outside_world_changed.emit()
+	return {"kind": "location", "card": location_card.duplicate(true)}
+
 func load_programmed_cartridges():
 	programmed_cartridges.clear()
 	_initialize_blank_slots()
 	_initialize_power_unit_slots()
 	selected_cartridge_id = ""
+	_initialize_operator_state()
 	_initialize_bot_loadouts()
 	_initialize_outside_objects()
+	location_cards = []
+	enemy_cards = []
+	workshop_layout = {}
 	if not FileAccess.file_exists(CARTRIDGE_STORAGE_PATH):
 		_refresh_bot_predictions()
 		return
@@ -452,7 +636,9 @@ func load_programmed_cartridges():
 			blank_cartridge_slots[blank_index] = bool(blank_data[blank_index])
 	var power_data: Array = parsed.get("power_unit_slots", [])
 	if typeof(power_data) == TYPE_ARRAY:
-		for power_index in range(mini(power_data.size(), power_unit_slots.size())):
+		for power_index in range(power_data.size()):
+			if power_index >= power_unit_slots.size():
+				power_unit_slots.append({})
 			var power_entry: Variant = power_data[power_index]
 			if typeof(power_entry) == TYPE_DICTIONARY:
 				var saved_max_charge := int(power_entry.get("max_charge", BOT_POWER_CAPACITY))
@@ -481,9 +667,29 @@ func load_programmed_cartridges():
 				continue
 			_apply_saved_bot_entry(bot_index, bot_entry)
 
+	var saved_operator_state: Variant = parsed.get("operator_state", {})
+	if typeof(saved_operator_state) == TYPE_DICTIONARY:
+		operator_state["max_energy"] = maxi(int(saved_operator_state.get("max_energy", OPERATOR_MAX_ENERGY)), OPERATOR_MAX_ENERGY)
+		operator_state["energy"] = clampi(int(saved_operator_state.get("energy", OPERATOR_MAX_ENERGY)), 0, int(operator_state["max_energy"]))
+		operator_state["max_hp"] = maxi(int(saved_operator_state.get("max_hp", OPERATOR_MAX_HP)), OPERATOR_MAX_HP)
+		operator_state["hp"] = clampi(int(saved_operator_state.get("hp", OPERATOR_MAX_HP)), 0, int(operator_state["max_hp"]))
+		operator_state["status"] = str(saved_operator_state.get("status", "active"))
+
 	var object_data: Array = parsed.get("outside_objects", [])
 	if typeof(object_data) == TYPE_ARRAY:
 		_apply_saved_outside_objects(object_data)
+
+	var saved_location_cards: Array = parsed.get("location_cards", [])
+	if typeof(saved_location_cards) == TYPE_ARRAY:
+		location_cards = _normalize_saved_location_cards(saved_location_cards)
+
+	var saved_enemy_cards: Array = parsed.get("enemy_cards", [])
+	if typeof(saved_enemy_cards) == TYPE_ARRAY:
+		enemy_cards = _normalize_saved_enemy_cards(saved_enemy_cards)
+
+	var layout_data: Variant = parsed.get("workshop_layout", {})
+	if typeof(layout_data) == TYPE_DICTIONARY:
+		workshop_layout = layout_data.duplicate(true)
 
 	for bot_index in range(bot_loadouts.size()):
 		var loaded_id := str(bot_loadouts[bot_index].get("loaded_cartridge_id", ""))
@@ -502,6 +708,7 @@ func load_programmed_cartridges():
 				break
 
 	_refresh_bot_predictions()
+	EventBus.operator_state_changed.emit(get_operator_state())
 
 func save_programmed_cartridges():
 	var file := FileAccess.open(CARTRIDGE_STORAGE_PATH, FileAccess.WRITE)
@@ -515,6 +722,10 @@ func save_programmed_cartridges():
 		"power_unit_slots": power_unit_slots,
 		"bot_loadouts": _serialize_bot_loadouts(),
 		"outside_objects": _serialize_outside_objects(),
+		"location_cards": location_cards,
+		"enemy_cards": enemy_cards,
+		"workshop_layout": workshop_layout,
+		"operator_state": operator_state,
 	}
 	file.store_string(JSON.stringify(data))
 
@@ -533,6 +744,15 @@ func _initialize_bot_loadouts():
 	bot_loadouts.clear()
 	for bot_index in range(BOT_CABINET_CAPACITY):
 		bot_loadouts.append(_default_bot_state(bot_index))
+
+func _initialize_operator_state():
+	operator_state = {
+		"energy": OPERATOR_MAX_ENERGY,
+		"max_energy": OPERATOR_MAX_ENERGY,
+		"hp": OPERATOR_MAX_HP,
+		"max_hp": OPERATOR_MAX_HP,
+		"status": "active",
+	}
 
 func _default_bot_state(bot_index: int) -> Dictionary:
 	return {
@@ -561,12 +781,6 @@ func _initialize_blank_slots():
 
 func _initialize_power_unit_slots():
 	power_unit_slots.clear()
-	for slot_index in range(POWER_UNIT_SLOT_COUNT):
-		power_unit_slots.append({
-			"id": "power_unit_%d" % slot_index,
-			"charge": BOT_POWER_CAPACITY,
-			"max_charge": BOT_POWER_CAPACITY,
-		})
 
 func _initialize_outside_objects():
 	outside_objects = [
@@ -575,6 +789,74 @@ func _initialize_outside_objects():
 		{"id": "old_tower", "type": "landmark", "position": Vector2(8, 8), "discovered": false},
 		{"id": "watch_arc", "type": "surveillance", "position": Vector2(3, 8), "discovered": false},
 	]
+
+func _build_location_card_from_object(object_entry: Dictionary) -> Dictionary:
+	var object_id := str(object_entry.get("id", ""))
+	var location_type := "site"
+	match object_id:
+		"supply_cache":
+			location_type = "cache"
+		"rust_pit":
+			location_type = "crater"
+		"old_tower":
+			location_type = "tower"
+		"watch_arc":
+			location_type = "surveillance_zone"
+	return {
+		"id": "loc_%s" % object_id,
+		"type": location_type,
+		"position": _serialize_vector(Vector2(object_entry.get("position", Vector2.ZERO))),
+		"survey_level": 2,
+		"source": "operator_scan",
+	}
+
+func _build_enemy_scan_card() -> Dictionary:
+	var enemy_types: Array = ["hostile_creature", "stalker", "swarm", "raider"]
+	var enemy_type: String = str(enemy_types[enemy_cards.size() % enemy_types.size()])
+	var threat := 1 + (enemy_cards.size() % 3)
+	return {
+		"id": "enemy_%d_%d" % [int(Time.get_unix_time_from_system()), enemy_cards.size()],
+		"type": enemy_type,
+		"threat_level": threat,
+		"attack": threat,
+		"hp": 3 + threat,
+		"source": "operator_scan",
+	}
+
+func _has_location_card(card_id: String) -> bool:
+	for card in location_cards:
+		if str(card.get("id", "")) == card_id:
+			return true
+	return false
+
+func _forget_location_card_on_map(card: Dictionary):
+	var position := _vector_from_variant(card.get("position", {}), Vector2(-999, -999))
+	for object_index in range(outside_objects.size()):
+		var object_entry: Dictionary = outside_objects[object_index]
+		if _vector_from_variant(object_entry.get("position", {}), Vector2.ZERO) != position:
+			continue
+		outside_objects[object_index]["discovered"] = false
+		return
+
+func _apply_operator_loss(loss: int):
+	if loss <= 0:
+		return
+	var remaining_loss := loss
+	var current_energy := int(operator_state.get("energy", 0))
+	if current_energy > 0:
+		var energy_spent := mini(current_energy, remaining_loss)
+		current_energy -= energy_spent
+		remaining_loss -= energy_spent
+		operator_state["energy"] = current_energy
+	if remaining_loss > 0:
+		operator_state["hp"] = int(operator_state.get("hp", 0)) - remaining_loss
+	if int(operator_state.get("hp", 0)) <= 0:
+		operator_state["hp"] = 0
+		operator_state["status"] = "dead"
+	else:
+		operator_state["status"] = "exhausted" if int(operator_state.get("energy", 0)) <= 0 else "active"
+	if str(operator_state.get("status", "")) == "dead":
+		EventBus.log_message.emit("Operator collapsed. Run ended.")
 
 func _get_next_program_number() -> int:
 	var max_number := 0
@@ -932,6 +1214,36 @@ func _serialize_outside_objects() -> Array:
 			"discovered": bool(object_entry.get("discovered", false)),
 		})
 	return data
+
+func _normalize_saved_location_cards(cards: Array) -> Array:
+	var result: Array = []
+	for entry in cards:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		result.append({
+			"id": str(entry.get("id", "")),
+			"type": str(entry.get("type", "site")),
+			"position": _serialize_vector(_vector_from_variant(entry.get("position", {}), Vector2.ZERO)),
+			"survey_level": maxi(int(entry.get("survey_level", 1)), 1),
+			"source": str(entry.get("source", "operator_scan")),
+		})
+	return result
+
+func _normalize_saved_enemy_cards(cards: Array) -> Array:
+	var result: Array = []
+	for entry in cards:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var threat := maxi(int(entry.get("threat_level", 1)), 1)
+		result.append({
+			"id": str(entry.get("id", "")),
+			"type": str(entry.get("type", "hostile_creature")),
+			"threat_level": threat,
+			"attack": maxi(int(entry.get("attack", threat)), 1),
+			"hp": maxi(int(entry.get("hp", 3 + threat)), 1),
+			"source": str(entry.get("source", "operator_scan")),
+		})
+	return result
 
 func _serialize_vector(vector: Vector2) -> Dictionary:
 	return {"x": int(vector.x), "y": int(vector.y)}

@@ -1,0 +1,57 @@
+<svg width="512" height="640" viewBox="0 0 512 640" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="photoPaper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e7dbb8"/>
+      <stop offset="1" stop-color="#d4c392"/>
+    </linearGradient>
+    <linearGradient id="photoTone" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6d6556"/>
+      <stop offset="1" stop-color="#3b362f"/>
+    </linearGradient>
+    <linearGradient id="shadowTone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b2722" stop-opacity="0.0"/>
+      <stop offset="1" stop-color="#2b2722" stop-opacity="0.25"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="640" fill="#1a1c20"/>
+
+  <rect x="74" y="54" width="364" height="532" rx="6" fill="url(#photoPaper)" stroke="#9d8040" stroke-width="6"/>
+  <rect x="92" y="72" width="328" height="436" fill="#cab98a" stroke="#8f7438" stroke-width="3"/>
+
+  <rect x="104" y="84" width="304" height="412" fill="#d8ccab"/>
+  <rect x="104" y="84" width="304" height="412" fill="url(#shadowTone)"/>
+
+  <ellipse cx="256" cy="198" rx="74" ry="84" fill="#2f2b25"/>
+  <ellipse cx="256" cy="212" rx="58" ry="68" fill="url(#photoTone)"/>
+  <path d="M198 184
+           C212 130 300 128 314 184
+           C300 170 284 164 256 164
+           C228 164 212 170 198 184Z"
+        fill="#26221d"/>
+  <path d="M214 220
+           C228 236 244 244 256 244
+           C268 244 284 236 298 220
+           C292 264 274 284 256 284
+           C238 284 220 264 214 220Z"
+        fill="#4b4439"/>
+
+  <path d="M134 440
+           C154 364 206 324 256 324
+           C306 324 358 364 378 440
+           L332 496
+           L180 496Z"
+        fill="#322d27"/>
+
+  <path d="M206 340 L256 494 L178 494 Z" fill="#241f1a"/>
+  <path d="M306 340 L334 494 L256 494 Z" fill="#241f1a"/>
+  <path d="M228 338 L256 476 L284 338 Z" fill="#e2d5b2"/>
+
+  <rect x="92" y="510" width="328" height="58" fill="#e3d6b1" stroke="#8f7438" stroke-width="3"/>
+  <rect x="112" y="526" width="180" height="3" fill="#9d8040" opacity="0.7"/>
+  <rect x="112" y="540" width="246" height="3" fill="#9d8040" opacity="0.55"/>
+  <rect x="112" y="554" width="150" height="3" fill="#9d8040" opacity="0.4"/>
+
+  <circle cx="106" cy="86" r="3" fill="#f0e7cf"/>
+  <circle cx="406" cy="86" r="3" fill="#f0e7cf"/>
+</svg>

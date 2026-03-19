@@ -14,24 +14,27 @@
   - survive under orbital detection through low-signature, zero-waste systems
   - support the shelter with biological survival loops
   - preserve only accumulated knowledge and edited records between runs
-  - express movable entities as cards and fixed stations as machinery
+  - express workshop interactables as cards, with machinery as a card class
 
 ### Current Increment
 - The project already has:
   - a workshop overview scene
   - a preserved full programming scene
   - a working punch-machine flow
-  - visible cartridge shelves, drone cabinets, and route display
-  - persistent programmed cartridges with labels
-  - shelf selection and bot cartridge loading in the workshop
-  - per-bot installed power-unit state
+- persistent programmed tapes with labels
+- persistent dynamic power-card stock and bot power state
   - launchable outside bots with automatic route-table execution
   - a new architecture decision that movable entities should become cards
-  - shelf-side tapes and power units beginning to shift from canister/cell visuals toward card stacks
+  - a new workshop rule that the current workshop is one large table surface
+  - bench and route table represented as machinery cards on that table
+  - drones, tapes, blank tapes, power, and bucket represented as movable cards on the table
   - drone preparation moving to composite drone-card visuals:
-    - tape shown as a badge on the drone card
-    - power added as stacked card charge on the drone card
-  - power cards moving to a single large deck beside the route table, with only the top card draggable into drones
+    - tape shown as a badge/label on the drone card
+    - power shown as an accumulated value on the drone card
+  - drag-and-drop as the primary workshop interaction model
+  - remaining technical debt under that UX:
+    - workshop state code still uses partial shelf/cabinet terminology internally
+    - card faces are now partially unified, but still need a stricter shared grammar pass
 
 ### Vertical Slice Goal
 - Prove one complete playable deployment loop where:
@@ -45,10 +48,10 @@
 
 ### Vertical Slice Acceptance Criteria
 - A player can start from an Ark operator-selection scene.
-- A player can enter the workshop and understand which bot is ready or not ready.
-- A player can create or load one cartridge and load it into one bot.
-- A player can install one physical power unit into that bot.
-- A player can launch the bot and watch a live route on the route table.
+- A player can enter the workshop and understand the tabletop card grammar.
+- A player can create or load one tape card and attach it to one drone card.
+- A player can add one physical power card to that drone card.
+- A player can launch the drone by dragging it onto the route-table card.
 - A mission can end in at least one clear outcome:
   - returned
   - halted
@@ -99,34 +102,39 @@
   - one or two meaningful operator differences
 - Defer broader system breadth until this loop is playable end to end
 - Keep the slice consistent with the card/machinery rule:
-  - movable entities = cards
-  - fixed stations = machinery
+  - workshop interactables = cards
+  - machinery = a card class
 
 ### Ordered Product Backlog
 
 #### PB1. Cartridge Workflow
-- Put programmed tape cartridges on the shelf
-- Add a label area on each cartridge so programmed tapes can be named and saved
-- Turn cartridges into movable shelf cards with drag/drop assignment
+- Keep programmed tape as persistent labeled cards
+- Keep blank tape as separate physical cards
+- Make tape cards readable and movable on the table
+- Keep tape attachment to drones as a card-to-card composition step
+- Preserve tape identity while simplifying the face to match `CARD_UX.md`
 
 #### PB2. Bot Preparation Workflow
-- Load a chosen cartridge card into one of the bots
+- Load a chosen tape card into one of the drone cards
 - Add a pre-wound mechanical energy-unit card to the bot
-- Make bot preparation a card-to-machine interaction, not tiny-click widget logic
+- Keep bot preparation as card-to-card composition, not tiny widget logic
 - Treat empty power cards as spent; loading should require another charged card
 - Show tape on the drone as a label/symbol on the drone card rather than as a separate mounted object
 - Allow multiple charged power cards to be added to one drone card with additive total power
 
 #### PB3. Launch and Route Tracking
 - Launch the bot into the outside world and watch its advancement on the route table map
-- Add click interaction or hover feedback for the route table
-- Decide what the route table should actually preview:
-  - current trail only
+- Keep launch and recovery route-card driven, not button-driven
+- Refine how the route card should preview:
+  - current trail
   - predicted route
   - programmed route simulation
-- Connect the workshop route display more directly to tape logic if needed
 - Add the shelter as the map origin
 - Show discovered objects on the route table map
+- Make `SCN` / `SKN` detect whether a site exists in scanned territory, not only direct-path contact
+- Keep scan results as pending mission intel until the drone or operator returns
+- Convert returned pending intel into persistent location cards
+- Let direct operator scan reveal more than drone scan, but allow it to trigger immediate hostile / hazard card generation
 - Add recovery / return states for halted and stranded bots
 - Add persistent detection-relevant world signals where appropriate:
   - heat
@@ -139,10 +147,20 @@
 - In the large map scene, allow drawing/selecting icons for places of interest
 - Add support for shelter network, cryo-bank, and colony landmarks as later map entities
 - Decide which map findings should also exist as journal/intel cards
+- Add returned location cards with at least:
+  - `id`
+  - `type`
+  - `position.x`
+  - `position.y`
+  - `survey_level`
+- Keep location type separate from contents:
+  - map card = site
+  - journal / follow-up scan = contents
 
 #### PB5. Journal / Knowledge Progression
 - Add a persistent journal entity as the main between-run progression layer
 - Store Earth knowledge, discovered places, discovered objects, and route records
+- Store returned location records separately from field-pending scan intel
 - Store programming-language knowledge and previously created programs
 - Store biological / genetical knowledge and other research notes
 - Store operator notes, deployment history, and cryo-bank / Ark records
@@ -173,14 +191,12 @@
 - Decide whether tape rows should get more visible physical indexing
 
 #### PB9. Workshop Visual Refinement
-- Improve proportions and spacing across all four workshop regions
-- Make the programming bench miniature closer to the real punch machine proportions
-- Refine the flip-disk route display so it feels more mechanical and less abstract
-- Improve the shelves so the cartridge stock feels physically arranged rather than icon-stacked
-- Decide whether the workshop should become the hub for all future gameplay navigation
-- Refactor the workshop so movable entities are visually cards and fixed entities remain machinery
-- Refactor the drone area so drone cards are staged on the table rather than treated as mini cabinets
-- finish replacing the remaining cabinet-slot interaction logic with whole-card drag/drop behavior
+- Keep the workshop as one large table surface
+- Unify tape, power, drone, machine, and trash cards under one shared card grammar
+- Refine machinery cards so they read as infrastructure while staying table cards
+- Keep route-table and programming-bench cards recognizable while simplifying them for card scale
+- Improve free card placement, stacking, overlap, draw order, and drag readability
+- Keep the workshop aligned with `CARD_UX.md`
 
 #### PB10. Drone Direction
 - Refine the spider silhouette using the new design rules in `DRONE_DESIGN.md`
@@ -243,21 +259,26 @@
 
 ### Workshop Scene
 - Replaced the old startup layout with a workshop-style overview scene
-- Added four visible workshop regions:
-  - programming bench
-  - cartridge stores
-  - drone cabinets
-  - outside route table
 - Reworked the workshop drawing into the same dark steel / brass / paper-tape visual language as the punch machine
-- Removed most explanatory text from the workshop and kept only the section titles
+- Removed most explanatory text from the workshop
 - Agreed on the new top-level rule:
   - movable entities should become cards
-  - fixed infrastructure should remain machinery
+  - machinery should also be represented through cards on the table
+- Collapsed the workshop into one large table surface
+- Moved active workshop interaction toward freely arranged tabletop cards
+- Removed the old region-based scene structure from the visible workshop scene
+- Introduced a shared base card shell across the main workshop card types
+- Started normalizing card reading order so tape and power now share the same shell/art/info structure as the other table cards
+- Red machinery cards now share the same draggable `*_card` interaction path instead of keeping trash as a special-case object
+- Tightened tabletop card drawing and pickup so overlapping cards now follow a clearer topmost order
+- Table card placement now persists between reloads for movable workshop cards
+- Added a first movable operator card to the workshop table as a placeholder for future Ark selection
 
 ### Programming Bench Preview
 - Added a miniature version of the punch machine to the workshop
 - Reworked the miniature tape path, punch block, rollers, side canisters, and keyboard deck
 - Tightened the miniature keyboard geometry so it fits the reserved deck area
+- Simplified the bench machinery-card art so it reads faster at card scale
 
 ### Cartridge Visuals
 - Reworked the main punch-machine cartridges to feel more like mechanical canisters
@@ -265,19 +286,15 @@
 
 ### Cartridge Workflow
 - Saving from the programming scene now prompts for a cartridge label when leaving the bench
-- Programmed cartridges persist to disk and reload into the workshop shelf
-- Programmed cartridges now live in fixed shelf slots instead of auto-reordering
-- Programmed cartridges can be selected from the shelf directly in the workshop
-- The selected cartridge is shown on the shelf readout and on the cartridge body
-- Blank cartridges are now tracked as physical stock on the shelf
-- Pre-wound power units are now tracked as physical stock on the shelf
+- Programmed tapes persist to disk and reload into the workshop
+- Backend storage still keeps fixed slot identity for programmed tapes and power units
+- Blank tapes are tracked as physical stock
+- Pre-wound power units are tracked as physical stock
 - Opening the programming bench now requires blank stock and a free programmed slot
-- Saving now consumes one blank cartridge and creates one programmed cartridge in a fixed slot
-- Shelf-side tape visuals are now moving toward stacked-card representation rather than canister-only representation
+- Saving now consumes one blank tape and creates one programmed tape
+- Tape visuals have shifted from canisters/shelves toward card representation
 
 ### Bot Loadouts
-- Drone cabinets now show an empty cartridge slot when no tape is loaded
-- Clicking a cabinet body now selects that bot without changing its inventory
 - Each bot keeps its own separate loaded cartridge reference
 - Bot loadouts persist between runs
 - Empty power units are now treated as spent; removing a depleted unit clears the slot instead of preserving a zero-charge unit
@@ -285,22 +302,21 @@
   - drones should become composite cards
   - tape should appear as a card label/badge on the drone
   - power should be additive from multiple charged cards
-- Loaded cartridge labels are visible in the cabinet plaque and the cartridge mount
-- Loading a cartridge into a bot removes it from the shelf and places it in the bot
-- Unloading or replacement returns the old cartridge to its original shelf slot
+- Drone attachments have started shifting away from embedded slot widgets:
+  - tape now reads as an attached paper tag
+  - power now reads as a compact suit + value seal
+- Loading a tape into a drone removes it from loose table stock and places it in the drone state
+- Unloading or replacement returns the old tape to loose table presence
 - Each bot now has persistent installed power stored separately from tape loadout
-- Cabinets now include a power-unit slot and a visible charge gauge
-- Installing power into a bot now consumes a real shelf power unit and removing it returns that physical unit to its slot
-- Clicking a shelf power unit now installs that exact unit into the selected workshop bot
-- The cabinet-side power control is now eject-only, so install and remove are visually separated
-- Shelf power units can now be rewound to full while they remain on the shelf
-- Shelf power-unit slots can now be refilled with fresh standard `10`-charge units in the workshop
-- The shelf now has explicit workshop stock readouts for blank cartridges, free programmed slots, and stored power units
-- Selected bot state is now shown explicitly in the cabinet area
-- Selected shelf cartridges can now be recycled back into blank stock through an explicit shelf recycle control
+- Power into a drone now consumes a real table power card and adds to drone total
+- Power creation and recharge now happen through a real red charge-machine card on the table
+- When the operator card is placed on the charge-machine card, it now produces fresh power cards over time
+- Long-running tabletop processes now have a card-top progress-bar pattern; the charge machine uses it first
+- New power cards are no longer prefilled at workshop load; they only appear through actual production
+- The operator now has persistent energy/HP; charge-machine work consumes energy first, then HP on deficit, and the run ends at 0 HP
+- Table cards can now be recycled or discarded through the trash card
 - Legacy low-capacity power units are normalized to the current `10`-charge standard on load
-- Cabinets now include a separate launch control
-- Active bots leave the cabinet visually and cannot be reconfigured while outside
+- Active bots leave the table as available tabletop agents and cannot be reconfigured while outside
 - Halted or stranded bots can now be recovered manually to the shelter
 
 ### Outside World / Route Table
@@ -308,6 +324,10 @@
 - Launched bots execute their saved tape automatically on the workshop route table
 - Route progression is persistent between runs
 - The shelter is now the route-table origin
+- Placing the operator card on the route-table card now starts a scan process with a card-top progress bar
+- Completed operator scans now generate persistent location cards or hostile cards onto the table
+- Location cards can now be forgotten by dropping them onto the trash card
+- Stacking the operator or a powered drone card onto a hostile card now starts a simple Stacklands-style fight loop with a card-top progress bar
 - Bots now resolve into explicit mission states:
   - active
   - returned
@@ -319,7 +339,7 @@
 - Discovered outside objects are tracked persistently and shown with different signs by category
 - Bots can strand outside when movement runs out of installed power
 
-### Drone Cabinet Visuals
+### Drone Visual Direction
 - Replaced the first placeholder cabinet drone with a darker mechanical spider
 - Reworked the spider to feel more like an industrial repair walker and less like a toy
 - Added a second cabinet drone as a wind-up butterfly
@@ -330,6 +350,8 @@
 - Removed extra furniture and side widgets from the map area
 - Changed the map display from a simple grid screen to a flip-disk style display
 - Kept route trail, active position, and facing indication
+- Moved the route table toward a movable machinery card on the table
+- Simplified the route-table machinery-card art so it reads more clearly at card scale
 
 ### Punch Machine / Programming
 - Preserved the full punch-machine programming scene instead of overwriting it
@@ -346,15 +368,23 @@
 
 ## Next
 
+### Extra Urgent: Workshop Architecture Cleanup
+- Remove lingering shelf/cabinet assumptions from workshop-facing code paths where practical
+- Keep tightening the one-table interaction model so all workshop logic reads as tabletop card play
+- Decide whether movable machinery cards are a permanent tabletop rule or only a vertical-slice device
+- Keep `TODO.md`, `README.md`, and the codebase aligned while this cleanup happens
+
 ### 1. Vertical Slice: Mission Completion Loop
-- Surface the recovery action and danger more clearly in the cabinets and route table
+- Surface the recovery action and danger more clearly on the table and route card
 - Decide whether failed recovery should become part of the slice or remain future work
 - Decide whether returned missions should auto-unload, stay mounted, or require player acknowledgment
 - Connect returned-mission summaries to the future journal MVP
-- Fix cabinet interaction ambiguity:
-  - loading tape, unloading tape, installing power, removing power, launch, and recovery need separate affordances
-  - selected bot / selected cartridge / selected power flow still needs stronger static feedback before click
-  - shelf refill / recycle / rewind interactions still need clearer iconography
+- Fix current tabletop drag/drop ambiguity:
+  - tape attachment
+  - power attachment
+  - drone launch on the route card
+  - recycle/delete on the trash card
+  - free placement vs action drop
 
 ### 2. Vertical Slice: Journal MVP
 - Add a real journal scene or entity
@@ -383,13 +413,13 @@
   - cartridges are paper-based physical media
   - repeated use should degrade them over time
   - worn cartridges should begin to fail or break down visibly/mechanically
-- Add explicit cartridge rename/edit while the cartridge is back on the shelf
-- Add cartridge destruction/recycling flow so a new cartridge can be created when programmed slots are full or blank stock runs out
-- Decide how power units are replenished or manufactured later
-- Replace the current ad hoc shelf refill with a real in-world replenishment or manufacturing process for power units
+- Add explicit cartridge rename/edit while the tape card is back on the table
+- Add cartridge destruction/recycling flow so a new tape can be created when programmed capacity is full or blank stock runs out
+- Decide how the charge-machine card should be limited, fueled, or upgraded later
+- Replace unlimited power-card creation with a real in-world replenishment or manufacturing process
 
 ### 7. Launch and Route Tracking
-- Add click interaction or hover feedback for the route table
+- Improve drag/drop feedback for the route card
 - Add stronger visual differentiation between multiple simultaneous active bots on the route table
 - Decide how halted vs stranded bots should be recovered from the outside world
 - Expand discovered objects beyond the current fixed prototype set
@@ -427,6 +457,7 @@
 - Add a new main entry scene above the workshop
 - Present the Ark as the deployment-selection layer
 - Let the player select the next user/operator to be deployed to Earth
+- Replace the current workshop placeholder operator card with real selected-operator state
 - Define how the selected user/operator affects the workshop/run state
 - Define cryo-bank and replacement logic in the fiction and progression structure
 
@@ -437,10 +468,11 @@
 - Decide whether tape rows should get more visible physical indexing
 
 ### 14. Workshop Visual Refinement
-- Improve proportions and spacing across all four workshop regions
-- Make the programming bench miniature closer to the real punch machine proportions
-- Refine the flip-disk route display so it feels more mechanical and less abstract
-- Improve the shelves so the cartridge stock feels physically arranged rather than icon-stacked
+- Refine the shared card grammar across machines, drones, tapes, power, and trash
+- Finish tightening all card faces to one shared shell/layout budget from `CARD_UX.md`
+- Keep tuning the programming bench card so it matches the real punch machine without regaining clutter
+- Keep tuning the route-table card so it stays mechanical while remaining readable at card scale
+- Improve tabletop spacing, stacking, overlap behavior, and topmost selection feel
 - Decide whether the workshop should become the hub for all future gameplay navigation
 
 ### 15. Drone Direction
@@ -456,14 +488,11 @@
 ## Later
 
 ### Systems
-- Add real cartridge inventory logic:
-  - blank cartridges
-  - programmed cartridges
-  - loading/unloading state beyond the current single-reference model
-- Add cabinet inventory / drone ownership logic beyond the current two-bot loadout model
+- Add cleaner tabletop ownership / composition logic beyond the current two-drone loadout model
+- Refactor backend naming and ownership rules so tabletop card play is not still expressed as shelf/cabinet logic internally
 
 ### World / Gameplay
-- Expand the workshop into a real hub scene
+- Continue expanding the workshop into a real hub scene
 - Add zero-waste survival systems
 - Add stealth / detection systems
 - Add biological production systems
@@ -473,9 +502,9 @@
 
 ### Presentation
 - Add subtle mechanical animations in the workshop:
-  - cabinet lights or shutters
-  - bench idle motion
-  - route table disk changes
+  - bench-card idle motion
+  - route-card disk changes
+  - card lift / shadow response
 - Add ambient industrial props:
   - belts
   - tubes
@@ -486,11 +515,11 @@
 
 ## Open Questions
 
-- Should the workshop stay mostly illustrative, or become fully interactable?
-- Should cartridge shelves reflect actual saved tape programs?
-- Should each drone cabinet open into a dedicated drone management scene?
+- Should all workshop preparation remain on the one large table, or should some subsystems still open dedicated management scenes?
 - Should the outside route table be passive display or actual planning interface?
 - What exact opcode mapping should remain reserved as human-memorable keys?
+- How quickly should drone scan versus direct operator scan increase `survey_level`?
+- Which operator scan outcomes should immediately create hostile cards, and which should stay pending until return?
 
 ---
 
@@ -500,3 +529,6 @@
 - `ProgrammingMain.tscn` is the preserved full programming scene.
 - The workshop currently relies heavily on custom drawing in `res://scripts/workshop_main.gd`.
 - The punch machine remains the primary detailed interaction scene.
+- The workshop is now transitioning from region/shelf/cabinet language to one-table card play.
+- The workshop frontend is now tabletop-card based, but backend/state terminology still partially uses shelf/cabinet language.
+- The programming bench and route table currently exist as machinery cards on the table as part of the current workshop card model.

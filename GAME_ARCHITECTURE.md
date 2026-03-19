@@ -89,6 +89,7 @@ Purpose:
 - live operational display
 - show what active bots are doing now
 - show predicted vs executed movement
+- show detected site presence before durable knowledge is recovered
 
 ### Large Map Layer
 
@@ -110,6 +111,20 @@ Short rule:
 - route table = what is happening now
 - large map = what we think the world looks like
 - journal = what we know, believe, and preserve
+
+### Scan And Return Rule
+
+Scanning should follow one strict knowledge rule:
+
+- scan detects whether a site exists in scanned territory
+- scan may partially classify that site
+- scan does not immediately create durable location cards
+- successful return converts pending mission intel into persistent location cards and journal/map knowledge
+
+This applies to both drones and operators, with one difference:
+
+- drone scan is safer and lower-fidelity
+- direct operator scan is richer but can trigger immediate encounters such as hostile creatures or hazards
 
 ---
 
