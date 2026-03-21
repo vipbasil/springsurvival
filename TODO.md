@@ -35,6 +35,7 @@
   - remaining technical debt under that UX:
     - workshop state code still uses partial shelf/cabinet terminology internally
     - card faces are now partially unified, but still need a stricter shared grammar pass
+    - static workshop card/site rendering now lives mostly in `scripts/ui/WorkshopArt.gd`, but `scripts/workshop_main.gd` still owns state-driven overlays like route markers, process bars, floating combat numbers, and run-end feedback
 
 ### Vertical Slice Goal
 - Prove one complete playable deployment loop where:
@@ -160,6 +161,8 @@
 - Keep location type separate from contents:
   - map card = site
   - journal / follow-up scan = contents
+- Replace the current abstract procedural location glyphs with the fixed archetype sheet in `LOCATION_MODEL.md`
+- Keep location art readable by using canonical site silhouettes first and only minor controlled variation second
 
 #### PB5. Journal / Knowledge Progression
 - Add a persistent journal entity as the main between-run progression layer
@@ -199,6 +202,7 @@
 - Unify tape, power, drone, machine, and trash cards under one shared card grammar
 - Refine machinery cards so they read as infrastructure while staying table cards
 - Keep route-table and programming-bench cards recognizable while simplifying them for card scale
+- Continue migrating any remaining static/fallback art from `workshop_main.gd` into `WorkshopArt.gd` and SVG assets where the art is canonical rather than generated
 - Improve free card placement, stacking, overlap, draw order, and drag readability
 - Keep the workshop aligned with `CARD_UX.md`
 

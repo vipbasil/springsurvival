@@ -64,6 +64,145 @@ These are the first recommended map-detectable site types:
 
 These are map site categories, not direct loot categories.
 
+## Location Icon Sheet
+
+Location cards must read as **sites**, not abstract glyphs.
+
+The rule is:
+
+- recognition first
+- variation second
+
+Every site type should be built from:
+
+- one canonical silhouette
+- one defining cue
+- one supporting cue
+
+At card scale, the image should still be understandable if:
+
+- color is removed
+- internal detail is reduced
+- only the main dark masses remain
+
+### Core Archetypes
+
+These are the first fixed icon families the renderer should use.
+
+#### tower
+
+- canonical silhouette: tall vertical mast
+- defining cue: antenna or signal head at the top
+- supporting cue: grounded tripod, struts, or service base
+- family accent: cold brass / steel
+
+#### bunker
+
+- canonical silhouette: low buried structure
+- defining cue: dark entrance or hatch
+- supporting cue: earth berm, slope, or reinforced lip
+- family accent: muted concrete / brass
+
+#### pond
+
+- canonical silhouette: shallow basin
+- defining cue: visible water surface line
+- supporting cue: reeds, shore lip, or small bank
+- family accent: faded blue-grey
+
+#### facility
+
+- canonical silhouette: industrial block or low building mass
+- defining cue: vent, chimney, annex, or tank
+- supporting cue: paved base, side box, or pipe rhythm
+- family accent: steel / oxidized brass
+
+#### ruin
+
+- canonical silhouette: broken wall or collapsed building shell
+- defining cue: missing top edge, broken corner, or open doorway
+- supporting cue: rubble line or fractured side panel
+- family accent: dusty stone / rust
+
+#### nest
+
+- canonical silhouette: organic mound
+- defining cue: clustered holes, cavities, or egg-like forms
+- supporting cue: small spines, tendrils, or uneven rim
+- family accent: muted organic brown-green
+
+#### dump
+
+- canonical silhouette: low debris heap
+- defining cue: stacked scrap masses, drums, or box forms
+- supporting cue: broken posts, tilted panel, or contamination spill line
+- family accent: rust / waste orange
+
+#### field
+
+- canonical silhouette: flat cultivated or worked ground
+- defining cue: repeated rows, stakes, or crop rhythm
+- supporting cue: boundary line, irrigation trench, or growth patch
+- family accent: dry soil / muted green
+
+### Extended Archetypes
+
+These can come after the core sheet is readable:
+
+- bridge
+- road_node
+- crater
+- anomaly_zone
+- settlement
+- mine
+- forest_patch
+- cavern
+
+### Composition Rules
+
+Each location image should use three layers:
+
+1. ground or horizon
+2. main site mass
+3. one defining secondary cue
+
+Example:
+
+- bunker = ground + buried block + doorway
+- tower = ground + mast + antenna head
+- pond = bank + basin + waterline
+- ruin = ground + broken wall + rubble
+
+### Variation Rules
+
+Do not procedurally invent silhouettes from scratch.
+
+Variation should be limited to:
+
+- width or height
+- left/right placement of one detail
+- one damage mark or break
+- one secondary attachment
+- one accent-color family
+
+The variation must never destroy the core read.
+
+So:
+
+- every bunker still looks like bunker
+- every tower still looks like tower
+- every pond still looks like pond
+
+### Readability Test
+
+A location icon is good enough only if all three are true:
+
+1. it is recognizable without reading the text label
+2. it is still readable when shrunk to current card art size
+3. it still reads if rendered as a simplified dark silhouette with one accent
+
+If it fails those tests, it is too abstract for the card system.
+
 ## Minimum Internal Location Model
 
 Every location should have at least:

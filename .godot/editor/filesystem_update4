@@ -1,9 +1,2 @@
-res://scripts/machines/PunchMachine.gd
-res://scripts/data/PunchEncoding.gd
-res://scripts/data/InstructionLibrary.gd
-res://scripts/systems/TapeExecutionSystem.gd
-res://scripts/ui/TapeEditorPanel.gd
-res://scripts/main.gd
+res://scripts/ui/WorkshopArt.gd
 res://scripts/workshop_main.gd
-res://scripts/core/EventBus.gd
-res://scripts/core/GameState.gd
