@@ -24,6 +24,15 @@
 - persistent programmed tapes with labels
 - persistent dynamic power-card stock and bot power state
   - launchable outside bots with automatic route-table execution
+  - a first journal research loop:
+    - operator + any researchable card on the journal starts a timed research attempt
+    - research can fail or discover a recipe note
+    - discovered recipes are written into journal pages
+    - clicking a recipe copies out a blueprint card onto the table
+  - a first blueprint crafting loop:
+    - blueprint + machine/operator/resources can start a timed craft process
+    - crafting consumes material quantities
+    - successful crafting creates persistent result cards on the table
   - a new architecture decision that movable entities should become cards
   - a new workshop rule that the current workshop is one large table surface
   - bench and route table represented as machinery cards on that table

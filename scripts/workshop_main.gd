@@ -1,15 +1,21 @@
 extends Control
 
 const WorkshopArtData := preload("res://scripts/ui/WorkshopArt.gd")
+const WorkshopCardRuntimeData := preload("res://scripts/ui/WorkshopCardRuntime.gd")
 const PROGRAMMING_SCENE_PATH := "res://scenes/main/ProgrammingMain.tscn"
 const MACHINE_CAPACITY := 48.0
 const OUTSIDE_STEP_INTERVAL := 0.55
 const CHARGE_PRODUCTION_INTERVAL := 7.2
 const ROUTE_SCAN_INTERVAL := 6.0
+const JOURNAL_RESEARCH_INTERVAL := 9.5
+const BLUEPRINT_CRAFT_INTERVAL := 6.5
 const ENEMY_FIGHT_INTERVAL := 2.2
 const ATTACK_FEEDBACK_DURATION := 0.22
 const DAMAGE_FEEDBACK_DURATION := 0.30
+const RESEARCH_FEEDBACK_DURATION := 0.72
+const MERGE_FEEDBACK_DURATION := 0.40
 const FLOATING_NUMBER_DURATION := 0.60
+const DISCOVERY_BANNER_DURATION := 1.8
 
 const WALL_DARK := Color(0.08, 0.09, 0.11)
 const WALL_MID := Color(0.11, 0.12, 0.15)
@@ -68,6 +74,8 @@ const WORKSHOP_OPERATOR := {
 var _outside_step_cooldown := 0.0
 var _charge_production_cooldown := CHARGE_PRODUCTION_INTERVAL
 var _route_scan_cooldown := ROUTE_SCAN_INTERVAL
+var _journal_research_cooldown := JOURNAL_RESEARCH_INTERVAL
+var _blueprint_craft_cooldown := BLUEPRINT_CRAFT_INTERVAL
 var _enemy_fight_cooldowns := {}
 var _selected_bot_index := 0
 var _selected_power_slot_index := -1
@@ -80,6 +88,7 @@ var _current_cursor_shape := Control.CURSOR_ARROW
 var _table_machine_position := Vector2.ZERO
 var _table_route_position := Vector2.ZERO
 var _table_charge_position := Vector2.ZERO
+var _table_journal_position := Vector2.ZERO
 var _table_operator_position := Vector2.ZERO
 var _table_trash_position := Vector2.ZERO
 var _table_drone_positions := {}
@@ -88,8 +97,19 @@ var _table_power_positions := {}
 var _table_blank_positions := {}
 var _table_location_positions := {}
 var _table_enemy_positions := {}
+var _table_material_positions := {}
+var _table_blueprint_positions := {}
+var _table_crafted_positions := {}
 var _combat_card_fx := {}
 var _floating_numbers := []
+var _floating_announcements := []
+var _journal_open := false
+var _journal_page_index := 0
+var _journal_recipe_click_rects := []
+var _journal_prev_rect := Rect2()
+var _journal_next_rect := Rect2()
+var _journal_close_rect := Rect2()
+var _journal_viewed_subject_key := ""
 var _location_bunker_texture: Texture2D
 var _location_cache_texture: Texture2D
 var _location_pond_texture: Texture2D
@@ -101,6 +121,244 @@ var _location_field_texture: Texture2D
 var _location_dump_texture: Texture2D
 var _location_nest_texture: Texture2D
 var _location_ruin_texture: Texture2D
+
+func _get_state_table_position_store(kind: String) -> Dictionary:
+	match kind:
+		"location":
+			return _table_location_positions
+		"enemy":
+			return _table_enemy_positions
+		"material":
+			return _table_material_positions
+		"blueprint":
+			return _table_blueprint_positions
+		"crafted":
+			return _table_crafted_positions
+		_:
+			return {}
+
+func _get_default_state_table_card_position(kind: String, visible_index: int, workspace: Rect2) -> Vector2:
+	match kind:
+		"location":
+			return workspace.position + Vector2(520.0 + float(visible_index) * 18.0, workspace.end.y - 220.0 + absf(float(visible_index) - 1.5) * 6.0)
+		"enemy":
+			return workspace.position + Vector2(workspace.end.x - 240.0 + float(visible_index) * 14.0, workspace.end.y - 220.0 + absf(float(visible_index) - 1.0) * 6.0)
+		"material":
+			return workspace.position + Vector2(360.0 + float(visible_index) * 16.0, workspace.end.y - 220.0 + absf(float(visible_index) - 1.5) * 6.0)
+		"blueprint":
+			return workspace.position + Vector2(508.0 + float(visible_index) * 18.0, workspace.end.y - 232.0 + absf(float(visible_index) - 1.5) * 6.0)
+		"crafted":
+			return workspace.position + Vector2(600.0 + float(visible_index) * 18.0, workspace.end.y - 210.0 + absf(float(visible_index) - 1.5) * 6.0)
+		_:
+			return workspace.position
+
+func _sync_state_table_card_positions(kind: String, workspace: Rect2) -> void:
+	var store := _get_state_table_position_store(kind)
+	var valid_ids := {}
+	var visible_index := 0
+	for card_data in GameState.get_state_table_cards(kind):
+		var card_id := str(card_data.get("id", ""))
+		if card_id.is_empty():
+			continue
+		valid_ids[card_id] = true
+		if not store.has(card_id):
+			var fallback := _get_default_state_table_card_position(kind, visible_index, workspace)
+			var layout_key := GameState.get_state_table_card_layout_key(kind, card_id)
+			store[card_id] = _clamp_table_position(
+				GameState.get_workshop_card_position(layout_key, fallback),
+				CARD_SIZE,
+				workspace
+			)
+		visible_index += 1
+	for card_id in store.keys():
+		if not valid_ids.has(card_id):
+			store.erase(card_id)
+
+func _append_state_table_visual_cards(cards: Array, kind: String, rect: Rect2) -> void:
+	var store := _get_state_table_position_store(kind)
+	for card_data in GameState.get_state_table_cards(kind):
+		var card_id := str(card_data.get("id", ""))
+		if card_id.is_empty() or _is_dragging_table_card(kind, card_id):
+			continue
+		var card_pos := Vector2(store.get(card_id, rect.position))
+		card_pos += _get_card_feedback_offset(kind, card_id)
+		var visual_card := {
+			"kind": kind,
+			"rect": Rect2(card_pos, CARD_SIZE),
+			"card_data": card_data,
+			"z": card_pos.y + CARD_SIZE.y,
+		}
+		visual_card["%s_id" % kind] = card_id
+		cards.append(visual_card)
+
+func _set_state_table_card_position(kind: String, card_id: String, position: Vector2) -> void:
+	if card_id.is_empty():
+		return
+	var store := _get_state_table_position_store(kind)
+	store[card_id] = position
+	var layout_key := GameState.get_state_table_card_layout_key(kind, card_id)
+	if not layout_key.is_empty():
+		GameState.set_workshop_card_position(layout_key, position)
+
+func _forget_state_table_card(kind: String, card_id: String) -> bool:
+	if card_id.is_empty():
+		return false
+	if not GameState.forget_state_table_card(kind, card_id):
+		return false
+	_get_state_table_position_store(kind).erase(card_id)
+	var layout_key := GameState.get_state_table_card_layout_key(kind, card_id)
+	if not layout_key.is_empty():
+		GameState.clear_workshop_card_position(layout_key)
+	return true
+
+func _set_non_state_table_card_position(kind: String, identifier, position: Vector2) -> void:
+	match kind:
+		"cartridge":
+			_table_cartridge_positions[identifier] = position
+			GameState.set_workshop_card_position("cartridge_%s" % str(identifier), position)
+		"power":
+			_table_power_positions[identifier] = position
+			GameState.set_workshop_card_position("power_%d" % int(identifier), position)
+		"blank":
+			_table_blank_positions[identifier] = position
+			GameState.set_workshop_card_position("blank_%d" % int(identifier), position)
+		"bot":
+			_table_drone_positions[identifier] = position
+			GameState.set_workshop_card_position("drone_%d" % int(identifier), position)
+
+func _sync_programmed_cartridge_positions(workspace: Rect2) -> void:
+	var valid_cartridge_ids := {}
+	var visible_index := 0
+	for slot_index in range(GameState.PROGRAMMED_CARTRIDGE_CAPACITY):
+		var cartridge: Dictionary = GameState.get_programmed_cartridge_in_slot(slot_index)
+		if cartridge.is_empty():
+			continue
+		var cartridge_id := str(cartridge.get("id", ""))
+		valid_cartridge_ids[cartridge_id] = true
+		if not _table_cartridge_positions.has(cartridge_id):
+			var fallback := workspace.position + Vector2(36.0 + float(visible_index) * 34.0, workspace.end.y - 190.0 + absf(float(visible_index) - 1.5) * 8.0)
+			_table_cartridge_positions[cartridge_id] = _clamp_table_position(
+				GameState.get_workshop_card_position("cartridge_%s" % cartridge_id, fallback),
+				CARD_SIZE,
+				workspace
+			)
+		visible_index += 1
+	for cartridge_id in _table_cartridge_positions.keys():
+		if not valid_cartridge_ids.has(cartridge_id):
+			_table_cartridge_positions.erase(cartridge_id)
+
+func _sync_blank_card_positions(workspace: Rect2) -> void:
+	for blank_index in range(BLANK_CARTRIDGE_DISPLAY_COUNT):
+		if not _table_blank_positions.has(blank_index):
+			_table_blank_positions[blank_index] = _clamp_table_position(
+				GameState.get_workshop_card_position("blank_%d" % blank_index, workspace.position + Vector2(workspace.end.x - 340.0 + float(blank_index) * 28.0, workspace.end.y - 190.0 + absf(float(blank_index) - 1.5) * 6.0)),
+				CARD_SIZE,
+				workspace
+			)
+
+func _sync_power_card_positions(workspace: Rect2) -> void:
+	var valid_power_slots := {}
+	var power_visible_index := 0
+	for slot_index in range(GameState.power_unit_slots.size()):
+		var power_unit: Dictionary = GameState.get_power_unit_in_slot(slot_index)
+		if power_unit.is_empty():
+			continue
+		valid_power_slots[slot_index] = true
+		if not _table_power_positions.has(slot_index):
+			var fallback := workspace.position + Vector2(workspace.end.x - 170.0 + float(power_visible_index) * 6.0, workspace.position.y + 26.0 + absf(float(power_visible_index) - 1.0) * 6.0)
+			_table_power_positions[slot_index] = _clamp_table_position(
+				GameState.get_workshop_card_position("power_%d" % slot_index, fallback),
+				CARD_SIZE,
+				workspace
+			)
+		power_visible_index += 1
+	for slot_index in _table_power_positions.keys():
+		if not valid_power_slots.has(slot_index):
+			_table_power_positions.erase(slot_index)
+
+func _sync_drone_card_positions(workspace: Rect2) -> void:
+	for bot_index in range(2):
+		if not _table_drone_positions.has(bot_index):
+			_table_drone_positions[bot_index] = _clamp_table_position(
+				GameState.get_workshop_card_position("drone_%d" % bot_index, workspace.position + Vector2(workspace.size.x - 320.0 + float(bot_index) * 146.0, 34.0)),
+				CARD_SIZE,
+				workspace
+			)
+
+func _append_programmed_cartridge_visual_cards(cards: Array, tape_data: Dictionary) -> void:
+	for slot in tape_data["programmed_slots"]:
+		var cartridge: Dictionary = slot["cartridge"]
+		var cartridge_id := str(cartridge.get("id", ""))
+		if _is_dragging_table_card("cartridge", cartridge_id):
+			continue
+		var cartridge_rect := Rect2(slot["rect"])
+		cartridge_rect.position += _get_card_feedback_offset("cartridge", cartridge_id)
+		cards.append({
+			"kind": "cartridge",
+			"rect": cartridge_rect,
+			"cartridge_id": cartridge_id,
+			"label": str(cartridge.get("label", "")),
+			"selected": bool(slot["selected"]),
+			"z": cartridge_rect.end.y,
+		})
+
+func _append_blank_visual_cards(cards: Array, tape_data: Dictionary) -> void:
+	for slot in tape_data["blank_slots"]:
+		if not bool(slot["filled"]):
+			continue
+		var blank_index := int(slot["index"])
+		if _is_dragging_table_card("blank", blank_index):
+			continue
+		var blank_rect := Rect2(slot["rect"])
+		blank_rect.position += _get_card_feedback_offset("blank", blank_index)
+		cards.append({
+			"kind": "blank",
+			"rect": blank_rect,
+			"blank_index": blank_index,
+			"z": blank_rect.end.y,
+		})
+
+func _append_drone_visual_cards(cards: Array, rect: Rect2) -> void:
+	for slot in _get_table_drone_data(rect):
+		var bot_index := int(slot["index"])
+		if _is_dragging_table_card("bot", bot_index):
+			continue
+		var moved_slot: Dictionary = slot.duplicate(true)
+		var fx_offset := _get_card_feedback_offset("bot", bot_index)
+		moved_slot["rect"] = Rect2(Rect2(slot["rect"]).position + fx_offset, Rect2(slot["rect"]).size)
+		moved_slot["body_hotspot"] = Rect2(Rect2(slot["body_hotspot"]).position + fx_offset, Rect2(slot["body_hotspot"]).size)
+		moved_slot["tape_badge_rect"] = Rect2(Rect2(slot["tape_badge_rect"]).position + fx_offset, Rect2(slot["tape_badge_rect"]).size)
+		cards.append({
+			"kind": "bot",
+			"rect": Rect2(moved_slot["rect"]),
+			"bot_index": bot_index,
+			"slot": moved_slot,
+			"z": Rect2(moved_slot["rect"]).end.y,
+		})
+
+func _append_power_visual_cards(cards: Array, rect: Rect2) -> void:
+	for card_info in _get_power_stack_data(rect)["visible_cards"]:
+		var slot_index := int(card_info["slot_index"])
+		if _is_dragging_table_card("power", slot_index):
+			continue
+		var power_unit: Dictionary = card_info["power_unit"]
+		var power_rect := Rect2(card_info["rect"])
+		power_rect.position += _get_card_feedback_offset("power", slot_index)
+		cards.append({
+			"kind": "power",
+			"rect": power_rect,
+			"slot_index": slot_index,
+			"charge": int(power_unit.get("charge", 0)),
+			"max_charge": int(power_unit.get("max_charge", 1)),
+			"selected": slot_index == _selected_power_slot_index,
+			"z": power_rect.end.y,
+		})
+
+func _begin_drag_candidate(root_point: Vector2, rect: Rect2, kind: String, extra: Dictionary = {}) -> void:
+	var drag_state := WorkshopCardRuntimeData.begin_drag_candidate(root_point, rect, kind, extra)
+	_drag_start_root = Vector2(drag_state.get("drag_start_root", root_point))
+	_drag_pickup_offset = Vector2(drag_state.get("drag_pickup_offset", root_point - rect.position))
+	_drag_candidate = Dictionary(drag_state.get("payload", {}))
 
 func _ready():
 	mouse_default_cursor_shape = Control.CURSOR_ARROW
@@ -150,6 +408,8 @@ func _process(delta: float):
 		return
 	_tick_charge_machine(delta)
 	_tick_route_scan(delta)
+	_tick_journal_research(delta)
+	_tick_blueprint_crafting(delta)
 	_tick_enemy_fights(delta)
 	_outside_step_cooldown -= delta
 	if _outside_step_cooldown > 0.0:
@@ -212,6 +472,64 @@ func _tick_route_scan(delta: float):
 				EventBus.log_message.emit("Hostile contact inferred")
 	queue_redraw()
 
+func _tick_journal_research(delta: float):
+	if not is_instance_valid(map_region):
+		return
+	var rect := _rect_in_root(map_region)
+	_ensure_table_layout(rect)
+	var subject := _get_journal_research_subject(rect)
+	if subject.is_empty():
+		_journal_research_cooldown = JOURNAL_RESEARCH_INTERVAL
+		return
+	_journal_research_cooldown -= delta
+	queue_redraw()
+	if _journal_research_cooldown > 0.0:
+		return
+	_journal_research_cooldown = JOURNAL_RESEARCH_INTERVAL
+	var result: Dictionary = GameState.resolve_journal_research(subject)
+	if result.is_empty():
+		return
+	var recipe: Dictionary = result.get("recipe", {})
+	var entry: Dictionary = result.get("entry", {})
+	var failure_penalty: Dictionary = result.get("failure_penalty", {})
+	if bool(result.get("success", false)) and not recipe.is_empty():
+		var blueprint := GameState.create_blueprint_card(recipe)
+		var blueprint_id := str(blueprint.get("id", ""))
+		if not blueprint_id.is_empty():
+			_place_generated_blueprint_card(blueprint_id, Rect2(_table_journal_position, CARD_SIZE))
+		_trigger_research_success_feedback(subject, recipe)
+		EventBus.log_message.emit("Research noted: %s" % str(recipe.get("result", "Formula")))
+	else:
+		_trigger_research_failure_feedback(subject, failure_penalty)
+		var fail_message := "Research failed: %s" % str(entry.get("title", "ENTRY"))
+		if bool(failure_penalty.get("collapsed", false)):
+			fail_message = "Research failed: %s. Operator collapsed." % str(entry.get("title", "ENTRY"))
+		EventBus.log_message.emit(fail_message)
+	queue_redraw()
+
+func _tick_blueprint_crafting(delta: float):
+	if not is_instance_valid(map_region):
+		return
+	var rect := _rect_in_root(map_region)
+	_ensure_table_layout(rect)
+	var craft_state := _get_active_blueprint_craft_state(rect)
+	if craft_state.is_empty():
+		_blueprint_craft_cooldown = BLUEPRINT_CRAFT_INTERVAL
+		return
+	_blueprint_craft_cooldown -= delta
+	queue_redraw()
+	if _blueprint_craft_cooldown > 0.0:
+		return
+	_blueprint_craft_cooldown = BLUEPRINT_CRAFT_INTERVAL
+	var crafted_card := GameState.resolve_blueprint_craft(str(craft_state.get("blueprint_id", "")), Array(craft_state.get("material_consumptions", [])))
+	if crafted_card.is_empty():
+		return
+	var crafted_id := str(crafted_card.get("id", ""))
+	if not crafted_id.is_empty():
+		_place_generated_crafted_card(crafted_id, Rect2(craft_state.get("machine_rect", Rect2())))
+		EventBus.log_message.emit("%s crafted" % str(crafted_card.get("result", "Item")))
+	queue_redraw()
+
 func _tick_enemy_fights(delta: float):
 	if not is_instance_valid(map_region):
 		return
@@ -233,19 +551,27 @@ func _tick_enemy_fights(delta: float):
 			continue
 		_emit_enemy_fight_feedback(enemy_id, fight_info, result)
 		if bool(result.get("defeated", false)):
+			var drop_card: Dictionary = result.get("drop_card", {})
+			var drop_kind := str(drop_card.get("kind", ""))
+			var drop_id := str(drop_card.get("id", ""))
 			_table_enemy_positions.erase(enemy_id)
 			_enemy_fight_cooldowns.erase(enemy_id)
 			EventBus.log_message.emit("%s defeated" % str(result.get("enemy_name", "Hostile")))
+			if not drop_id.is_empty():
+				if drop_kind == "power":
+					_place_generated_power_card(int(drop_card.get("slot_index", -1)), Rect2(fight_info.get("rect", Rect2())))
+				else:
+					_place_generated_material_card(drop_id, Rect2(fight_info.get("rect", Rect2())))
+				EventBus.log_message.emit("%s dropped" % str(drop_card.get("display_name", "Material")))
 		else:
 			EventBus.log_message.emit("%s fought back" % str(result.get("enemy_name", "Hostile")))
 
 func _tick_combat_feedback(delta: float):
 	var active := false
 	for fx_key in _combat_card_fx.keys():
-		var entry: Dictionary = _combat_card_fx[fx_key]
-		entry["attack_timer"] = maxf(float(entry.get("attack_timer", 0.0)) - delta, 0.0)
-		entry["damage_timer"] = maxf(float(entry.get("damage_timer", 0.0)) - delta, 0.0)
-		if float(entry.get("attack_timer", 0.0)) <= 0.0 and float(entry.get("damage_timer", 0.0)) <= 0.0:
+		var tick_result := WorkshopCardRuntimeData.tick_feedback_entry(Dictionary(_combat_card_fx[fx_key]), delta)
+		var entry: Dictionary = tick_result.get("entry", {})
+		if not bool(tick_result.get("active", false)):
 			_combat_card_fx.erase(fx_key)
 		else:
 			_combat_card_fx[fx_key] = entry
@@ -257,6 +583,14 @@ func _tick_combat_feedback(delta: float):
 			_floating_numbers.remove_at(index)
 		else:
 			_floating_numbers[index] = entry
+			active = true
+	for index in range(_floating_announcements.size() - 1, -1, -1):
+		var announcement: Dictionary = _floating_announcements[index]
+		announcement["timer"] = maxf(float(announcement.get("timer", DISCOVERY_BANNER_DURATION)) - delta, 0.0)
+		if float(announcement.get("timer", 0.0)) <= 0.0:
+			_floating_announcements.remove_at(index)
+		else:
+			_floating_announcements[index] = announcement
 			active = true
 	if active:
 		queue_redraw()
@@ -283,18 +617,17 @@ func _trigger_attack_feedback(kind: String, identifier, direction: Vector2, amou
 	if amount <= 0:
 		return
 	var fx_key := _get_card_fx_key(kind, identifier)
-	var entry: Dictionary = _combat_card_fx.get(fx_key, {})
-	entry["attack_timer"] = ATTACK_FEEDBACK_DURATION
-	entry["attack_duration"] = ATTACK_FEEDBACK_DURATION
-	entry["attack_dir"] = direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT
-	entry["seed"] = float(fx_key.hash() % 97)
-	_combat_card_fx[fx_key] = entry
+	_combat_card_fx[fx_key] = WorkshopCardRuntimeData.set_feedback_phase(Dictionary(_combat_card_fx.get(fx_key, {})), "attack", ATTACK_FEEDBACK_DURATION, {
+		"attack_dir": direction.normalized() if direction.length() > 0.0 else Vector2.RIGHT,
+		"seed": float(fx_key.hash() % 97),
+	})
 	_floating_numbers.append({
 		"position": _get_table_card_center(kind, identifier) + Vector2(0.0, -24.0),
 		"value": str(amount),
 		"color": Color(0.90, 0.78, 0.36),
 		"timer": FLOATING_NUMBER_DURATION,
 		"duration": FLOATING_NUMBER_DURATION,
+		"width": 32.0,
 	})
 
 func _trigger_damage_feedback(kind: String, identifier, amount: int):
@@ -303,17 +636,89 @@ func _trigger_damage_feedback(kind: String, identifier, amount: int):
 	if (kind == "bot" or kind == "operator") and int(identifier) == -1:
 		return
 	var fx_key := _get_card_fx_key(kind, identifier)
-	var entry: Dictionary = _combat_card_fx.get(fx_key, {})
-	entry["damage_timer"] = DAMAGE_FEEDBACK_DURATION
-	entry["damage_duration"] = DAMAGE_FEEDBACK_DURATION
-	entry["seed"] = float((fx_key.hash() % 131) + 17)
-	_combat_card_fx[fx_key] = entry
+	_combat_card_fx[fx_key] = WorkshopCardRuntimeData.set_feedback_phase(Dictionary(_combat_card_fx.get(fx_key, {})), "damage", DAMAGE_FEEDBACK_DURATION, {
+		"seed": float((fx_key.hash() % 131) + 17),
+	})
 	_floating_numbers.append({
 		"position": _get_table_card_center(kind, identifier) + Vector2(0.0, -8.0),
 		"value": str(amount),
 		"color": Color(0.93, 0.42, 0.34),
 		"timer": FLOATING_NUMBER_DURATION,
 		"duration": FLOATING_NUMBER_DURATION,
+		"width": 32.0,
+	})
+
+func _trigger_research_card_feedback(kind: String, identifier) -> void:
+	var fx_key := _get_card_fx_key(kind, identifier)
+	_combat_card_fx[fx_key] = WorkshopCardRuntimeData.set_feedback_phase(Dictionary(_combat_card_fx.get(fx_key, {})), "research", RESEARCH_FEEDBACK_DURATION)
+
+func _trigger_merge_feedback(kind: String, identifier, added_quantity: int) -> void:
+	if added_quantity <= 0:
+		return
+	var fx_key := _get_card_fx_key(kind, identifier)
+	_combat_card_fx[fx_key] = WorkshopCardRuntimeData.set_feedback_phase(Dictionary(_combat_card_fx.get(fx_key, {})), "merge", MERGE_FEEDBACK_DURATION, {
+		"seed": float((fx_key.hash() % 149) + 11),
+	})
+	_spawn_floating_feedback(
+		_get_table_card_center(kind, identifier) + Vector2(0.0, -18.0),
+		"+%d" % added_quantity,
+		Color(0.86, 0.78, 0.42),
+		40.0,
+		0.70
+	)
+
+func _trigger_research_success_feedback(subject: Dictionary, recipe: Dictionary) -> void:
+	_trigger_research_card_feedback("journal_card", 0)
+	_trigger_research_card_feedback("operator", 0)
+	var source_kind := str(subject.get("source_kind", ""))
+	if not source_kind.is_empty():
+		_trigger_research_card_feedback(source_kind, subject.get("source_identifier", 0))
+	_floating_announcements.append({
+		"position": Rect2(_table_journal_position, CARD_SIZE).get_center() + Vector2(0.0, -28.0),
+		"text": "NEW DISCOVERY",
+		"subtext": str(recipe.get("result", "")),
+		"timer": DISCOVERY_BANNER_DURATION,
+		"duration": DISCOVERY_BANNER_DURATION,
+	})
+
+func _trigger_research_failure_feedback(subject: Dictionary, penalty: Dictionary) -> void:
+	_trigger_research_failure_card_feedback("journal_card", 0)
+	_trigger_research_failure_card_feedback("operator", 0)
+	var source_kind := str(subject.get("source_kind", ""))
+	if not source_kind.is_empty():
+		_trigger_research_failure_card_feedback(source_kind, subject.get("source_identifier", 0))
+	var operator_center := Rect2(_table_operator_position, CARD_SIZE).get_center()
+	var energy_loss := int(penalty.get("energy_loss", 0))
+	var hp_loss := int(penalty.get("hp_loss", 0))
+	if energy_loss > 0:
+		_spawn_floating_feedback(operator_center + Vector2(-16.0, -18.0), "-%d EN" % energy_loss, Color(0.89, 0.71, 0.29), 68.0)
+	if hp_loss > 0:
+		_spawn_floating_feedback(operator_center + Vector2(14.0, -6.0), "-%d HP" % hp_loss, Color(0.93, 0.42, 0.34), 68.0)
+	var fail_text := "RESEARCH FAILED"
+	if bool(penalty.get("collapsed", false)):
+		fail_text = "RESEARCH FAILED - COLLAPSE"
+	_floating_announcements.append({
+		"position": Rect2(_table_journal_position, CARD_SIZE).get_center() + Vector2(0.0, -28.0),
+		"text": fail_text,
+		"subtext": "",
+		"timer": DISCOVERY_BANNER_DURATION,
+		"duration": DISCOVERY_BANNER_DURATION,
+	})
+
+func _trigger_research_failure_card_feedback(kind: String, identifier) -> void:
+	var fx_key := _get_card_fx_key(kind, identifier)
+	_combat_card_fx[fx_key] = WorkshopCardRuntimeData.set_feedback_phase(Dictionary(_combat_card_fx.get(fx_key, {})), "failure", DAMAGE_FEEDBACK_DURATION * 1.9, {
+		"seed": float((fx_key.hash() % 179) + 29),
+	})
+
+func _spawn_floating_feedback(position: Vector2, value: String, color: Color, width: float = 32.0, duration: float = FLOATING_NUMBER_DURATION) -> void:
+	_floating_numbers.append({
+		"position": position,
+		"value": value,
+		"color": color,
+		"timer": duration,
+		"duration": duration,
+		"width": width,
 	})
 
 func _get_card_fx_key(kind: String, identifier) -> String:
@@ -339,6 +744,32 @@ func _get_card_feedback_offset(kind: String, identifier) -> Vector2:
 			sin(damage_progress * 28.0 + seed),
 			cos(damage_progress * 23.0 + seed * 0.7)
 		) * amplitude
+	var research_timer := float(entry.get("research_timer", 0.0))
+	var research_duration := maxf(float(entry.get("research_duration", RESEARCH_FEEDBACK_DURATION)), 0.001)
+	if research_timer > 0.0:
+		var research_progress := 1.0 - research_timer / research_duration
+		offset += Vector2(
+			sin(research_progress * TAU * 4.0) * 3.0,
+			cos(research_progress * TAU * 2.0) * 1.4
+		)
+	var merge_timer := float(entry.get("merge_timer", 0.0))
+	var merge_duration := maxf(float(entry.get("merge_duration", MERGE_FEEDBACK_DURATION)), 0.001)
+	if merge_timer > 0.0:
+		var merge_progress := 1.0 - merge_timer / merge_duration
+		offset += Vector2(
+			sin(merge_progress * TAU * 3.0) * 4.0,
+			cos(merge_progress * TAU * 2.0) * 0.9
+		)
+	var failure_timer := float(entry.get("failure_timer", 0.0))
+	var failure_duration := maxf(float(entry.get("failure_duration", DAMAGE_FEEDBACK_DURATION * 1.9)), 0.001)
+	if failure_timer > 0.0:
+		var failure_progress := 1.0 - failure_timer / failure_duration
+		var amplitude := (1.0 - failure_progress) * 8.5
+		var fail_seed := float(entry.get("seed", 3.0))
+		offset += Vector2(
+			sin(failure_progress * 41.0 + fail_seed),
+			cos(failure_progress * 37.0 + fail_seed * 1.2)
+		) * amplitude
 	return offset
 
 func _get_table_card_center(kind: String, identifier) -> Vector2:
@@ -349,6 +780,8 @@ func _get_table_card_center(kind: String, identifier) -> Vector2:
 			return Rect2(Vector2(_table_drone_positions.get(int(identifier), Vector2.ZERO)), CARD_SIZE).get_center()
 		"enemy":
 			return Rect2(Vector2(_table_enemy_positions.get(str(identifier), Vector2.ZERO)), CARD_SIZE).get_center()
+		"material":
+			return Rect2(Vector2(_table_material_positions.get(str(identifier), Vector2.ZERO)), CARD_SIZE).get_center()
 		_:
 			return Vector2.ZERO
 
@@ -362,7 +795,271 @@ func _is_route_scan_operating() -> bool:
 	var route_rect := Rect2(_table_route_position, CARD_SIZE)
 	return _has_meaningful_overlap(route_rect, operator_rect, 0.30)
 
+func _is_journal_research_operating() -> bool:
+	if not _get_journal_research_subject(_rect_in_root(map_region)).is_empty():
+		var operator_rect := Rect2(_table_operator_position, CARD_SIZE)
+		var journal_rect := Rect2(_table_journal_position, CARD_SIZE)
+		return _has_meaningful_overlap(journal_rect, operator_rect, 0.30)
+	return false
+
+func _get_journal_research_subject(rect: Rect2) -> Dictionary:
+	_ensure_table_layout(rect)
+	var journal_rect := Rect2(_table_journal_position, CARD_SIZE)
+	var operator_rect := Rect2(_table_operator_position, CARD_SIZE)
+	if not _has_meaningful_overlap(journal_rect, operator_rect, 0.30):
+		return {}
+	var cards := _get_table_visual_cards(rect)
+	for card_index in range(cards.size() - 1, -1, -1):
+		var card_info: Dictionary = cards[card_index]
+		var kind := str(card_info.get("kind", ""))
+		if kind in ["journal_card", "operator", "trash_card", "blueprint"]:
+			continue
+		if not _has_meaningful_overlap(journal_rect, Rect2(card_info.get("rect", Rect2())), 0.30):
+			continue
+		return _build_research_subject_from_card(card_info)
+	return {}
+
+func _build_research_subject_from_card(card_info: Dictionary) -> Dictionary:
+	var kind := str(card_info.get("kind", ""))
+	match kind:
+		"location":
+			var location_card: Dictionary = card_info.get("card_data", {})
+			return {"kind": "location", "type": str(location_card.get("type", "")), "source_kind": "location", "source_identifier": str(location_card.get("id", ""))}
+		"enemy":
+			var enemy_card: Dictionary = card_info.get("card_data", {})
+			return {"kind": "enemy", "type": str(enemy_card.get("type", "")), "source_kind": "enemy", "source_identifier": str(enemy_card.get("id", ""))}
+		"material":
+			var material_card: Dictionary = card_info.get("card_data", {})
+			return {
+				"kind": "material",
+				"type": str(material_card.get("type", "")),
+				"card_id": str(material_card.get("id", "")),
+				"source_kind": "material",
+				"source_identifier": str(material_card.get("id", "")),
+				"requires_quantity": true,
+			}
+		"bot":
+			var slot: Dictionary = card_info.get("slot", {})
+			return {"kind": "drone", "type": str(slot.get("drone_type", "spider")), "source_kind": "bot", "source_identifier": int(card_info.get("bot_index", -1))}
+		"cartridge":
+			return {"kind": "tape", "type": "programmed", "source_kind": "cartridge", "source_identifier": str(card_info.get("cartridge_id", ""))}
+		"blank":
+			return {"kind": "tape", "type": "blank", "source_kind": "blank", "source_identifier": int(card_info.get("blank_index", -1))}
+		"power":
+			return {
+				"kind": "resource",
+				"type": "spring_charge",
+				"slot_index": int(card_info.get("slot_index", -1)),
+				"source_kind": "power",
+				"source_identifier": int(card_info.get("slot_index", -1)),
+				"requires_quantity": true,
+			}
+		"bench_card":
+			return {"kind": "machine", "type": "bench", "source_kind": "bench_card", "source_identifier": 0}
+		"route_card":
+			return {"kind": "machine", "type": "route", "source_kind": "route_card", "source_identifier": 0}
+		"charge_card":
+			return {"kind": "machine", "type": "charge", "source_kind": "charge_card", "source_identifier": 0}
+		"trash_card":
+			return {"kind": "machine", "type": "trash", "source_kind": "trash_card", "source_identifier": 0}
+		_:
+			return {}
+
+func _get_active_blueprint_craft_state(rect: Rect2) -> Dictionary:
+	_ensure_table_layout(rect)
+	var machine_specs := [
+		{"token": "BENCH", "rect": Rect2(_table_machine_position, CARD_SIZE)},
+		{"token": "ROUTE TABLE", "rect": Rect2(_table_route_position, CARD_SIZE)},
+		{"token": "CHARGE MACHINE", "rect": Rect2(_table_charge_position, CARD_SIZE)},
+		{"token": "JOURNAL", "rect": Rect2(_table_journal_position, CARD_SIZE)},
+		{"token": "TRASH", "rect": Rect2(_table_trash_position, CARD_SIZE)},
+	]
+	var visual_cards := _get_table_visual_cards(rect)
+	for machine_spec_variant in machine_specs:
+		var machine_spec: Dictionary = machine_spec_variant
+		var machine_rect := Rect2(machine_spec.get("rect", Rect2()))
+		var overlapping_cards: Array = []
+		var operator_present := false
+		for card_info in visual_cards:
+			var kind := str(card_info.get("kind", ""))
+			if kind in ["bench_card", "route_card", "charge_card", "journal_card", "trash_card"]:
+				continue
+			if not _has_meaningful_overlap(machine_rect, Rect2(card_info.get("rect", Rect2())), 0.30):
+				continue
+			if kind == "operator":
+				operator_present = true
+			overlapping_cards.append(card_info)
+		for card_info in overlapping_cards:
+			if str(card_info.get("kind", "")) != "blueprint":
+				continue
+			var craft_state := _build_blueprint_craft_state(Dictionary(card_info.get("card_data", {})), overlapping_cards, operator_present, str(machine_spec.get("token", "")), machine_rect)
+			if not craft_state.is_empty():
+				return craft_state
+	for blueprint_info in visual_cards:
+		if str(blueprint_info.get("kind", "")) != "blueprint":
+			continue
+		var blueprint_rect := Rect2(blueprint_info.get("rect", Rect2()))
+		var overlapping_cards: Array = []
+		var operator_present := false
+		for card_info in visual_cards:
+			if not _has_meaningful_overlap(blueprint_rect, Rect2(card_info.get("rect", Rect2())), 0.30):
+				continue
+			if str(card_info.get("kind", "")) == "operator":
+				operator_present = true
+			overlapping_cards.append(card_info)
+		var blueprint_craft_state := _build_blueprint_craft_state(Dictionary(blueprint_info.get("card_data", {})), overlapping_cards, operator_present, "", blueprint_rect)
+		if not blueprint_craft_state.is_empty():
+			return blueprint_craft_state
+	return {}
+
+func _build_blueprint_craft_state(blueprint_card: Dictionary, overlapping_cards: Array, operator_present: bool, machine_token: String, machine_rect: Rect2) -> Dictionary:
+	var formula_parts: Array = _get_blueprint_formula_parts(blueprint_card)
+	if formula_parts.is_empty():
+		return {}
+	var requires_operator := false
+	var required_machine := ""
+	var material_requirements := {}
+	var required_subject_tokens: Array = []
+	for part_variant in formula_parts:
+		var part := str(part_variant).strip_edges().to_upper()
+		if part == "BLUEPRINT":
+			continue
+		if part == "OPERATOR":
+			requires_operator = true
+			continue
+		if part in ["BENCH", "ROUTE TABLE", "CHARGE MACHINE", "JOURNAL", "TRASH"]:
+			required_machine = part
+			continue
+		var parsed_requirement := _parse_material_requirement(part)
+		if not parsed_requirement.is_empty():
+			material_requirements[str(parsed_requirement.get("type", ""))] = int(parsed_requirement.get("quantity", 1))
+			continue
+		required_subject_tokens.append(part)
+	if not required_machine.is_empty() and required_machine != machine_token:
+		return {}
+	if requires_operator and not operator_present:
+		return {}
+	for token_variant in required_subject_tokens:
+		var token := str(token_variant)
+		var token_found := false
+		for card_info in overlapping_cards:
+			if _card_satisfies_blueprint_token(Dictionary(card_info), token):
+				token_found = true
+				break
+		if not token_found:
+			return {}
+	var material_cards_by_type := {}
+	for card_info in overlapping_cards:
+		if str(card_info.get("kind", "")) != "material":
+			continue
+		var card_data: Dictionary = card_info.get("card_data", {})
+		var material_type := str(card_data.get("type", ""))
+		if not material_cards_by_type.has(material_type):
+			material_cards_by_type[material_type] = []
+		var bucket: Array = material_cards_by_type[material_type]
+		bucket.append(card_data.duplicate(true))
+		material_cards_by_type[material_type] = bucket
+	var material_consumptions: Array = []
+	for material_type in material_requirements.keys():
+		var needed := int(material_requirements[material_type])
+		var available_cards: Array = material_cards_by_type.get(material_type, [])
+		var collected := 0
+		for available_variant in available_cards:
+			var available_card: Dictionary = available_variant
+			if collected >= needed:
+				break
+			var card_quantity := maxi(int(available_card.get("quantity", 0)), 0)
+			if card_quantity <= 0:
+				continue
+			var used_quantity := mini(needed - collected, card_quantity)
+			material_consumptions.append({
+				"card_id": str(available_card.get("id", "")),
+				"quantity": used_quantity,
+			})
+			collected += used_quantity
+		if collected < needed:
+			return {}
+	return {
+		"machine_rect": machine_rect,
+		"machine_token": machine_token,
+		"blueprint_id": str(blueprint_card.get("id", "")),
+		"material_consumptions": material_consumptions,
+	}
+
+func _get_blueprint_formula_parts(blueprint_card: Dictionary) -> Array:
+	var formula_parts: Array = Array(blueprint_card.get("formula_parts", [])).duplicate(true)
+	if not formula_parts.is_empty():
+		return formula_parts
+	var formula := str(blueprint_card.get("formula", ""))
+	if formula.is_empty():
+		return []
+	var rhs := formula
+	if formula.contains("="):
+		var pieces := formula.split("=", false, 1)
+		if pieces.size() == 2:
+			rhs = str(pieces[1])
+	var parsed_parts: Array = []
+	for part in rhs.split("+", false):
+		var normalized := str(part).strip_edges()
+		if not normalized.is_empty():
+			parsed_parts.append(normalized)
+	return parsed_parts
+
+func _card_satisfies_blueprint_token(card_info: Dictionary, token: String) -> bool:
+	var kind := str(card_info.get("kind", ""))
+	match kind:
+		"location":
+			var location_card: Dictionary = card_info.get("card_data", {})
+			return _tokenize_subject_name(str(location_card.get("type", ""))) == token
+		"enemy":
+			var enemy_card: Dictionary = card_info.get("card_data", {})
+			return _tokenize_subject_name(str(enemy_card.get("type", ""))) == token
+		"bot":
+			var slot: Dictionary = card_info.get("slot", {})
+			return _tokenize_subject_name("%s drone" % str(slot.get("drone_type", "spider"))) == token
+		"cartridge":
+			return token == "PROGRAMMED TAPE"
+		"blank":
+			return token == "BLANK TAPE"
+		"power":
+			return token in ["SPRING CHARGE", "POWER UNIT"]
+		_:
+			return false
+
+func _tokenize_subject_name(raw_name: String) -> String:
+	return raw_name.replace("_", " ").strip_edges().to_upper()
+
+func _parse_material_requirement(part: String) -> Dictionary:
+	var normalized := part.strip_edges().to_upper()
+	var quantity := 1
+	var material_name := normalized
+	if normalized.contains(" X"):
+		var pieces := normalized.split(" X")
+		if pieces.size() == 2:
+			material_name = str(pieces[0]).strip_edges()
+			quantity = maxi(str(pieces[1]).to_int(), 1)
+	var material_map := {
+		"METAL": "metal",
+		"SPRING": "spring",
+		"BIOMASS": "biomass",
+		"HIDE": "hide",
+		"BONE": "bone",
+		"PAPER": "paper",
+	}
+	if not material_map.has(material_name):
+		return {}
+	return {
+		"type": str(material_map[material_name]),
+		"quantity": quantity,
+	}
+
 func _input(event: InputEvent):
+	if _journal_open:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			var modal_click: InputEventMouseButton = event
+			_handle_journal_modal_click(modal_click.position)
+			queue_redraw()
+		return
 	if not GameState.is_run_active():
 		return
 	if event is InputEventMouseMotion:
@@ -399,6 +1096,9 @@ func _draw():
 	_draw_map_bay(Rect2(Vector2(24.0, 24.0), Vector2(size.x - 48.0, size.y - 48.0)))
 	_draw_drag_overlay()
 	_draw_floating_numbers()
+	_draw_floating_announcements()
+	if _journal_open:
+		_draw_journal_overlay()
 	if not GameState.is_run_active():
 		_draw_run_end_overlay()
 
@@ -451,6 +1151,11 @@ func _ensure_table_layout(rect: Rect2):
 		CARD_SIZE,
 		workspace
 	)
+	_table_journal_position = _clamp_table_position(
+		GameState.get_workshop_card_position("machine_journal", workspace.position + Vector2(536.0, 24.0)) if _table_journal_position == Vector2.ZERO else _table_journal_position,
+		CARD_SIZE,
+		workspace
+	)
 	_table_operator_position = _clamp_table_position(
 		GameState.get_workshop_card_position("operator_card", workspace.position + Vector2(workspace.size.x * 0.5 - CARD_SIZE.x * 0.5, 28.0)) if _table_operator_position == Vector2.ZERO else _table_operator_position,
 		CARD_SIZE,
@@ -462,96 +1167,17 @@ func _ensure_table_layout(rect: Rect2):
 		workspace
 	)
 
-	for bot_index in range(2):
-		if not _table_drone_positions.has(bot_index):
-			_table_drone_positions[bot_index] = _clamp_table_position(
-				GameState.get_workshop_card_position("drone_%d" % bot_index, workspace.position + Vector2(workspace.size.x - 320.0 + float(bot_index) * 146.0, 34.0)),
-				CARD_SIZE,
-				workspace
-			)
+	_sync_drone_card_positions(workspace)
+	_sync_programmed_cartridge_positions(workspace)
+	_sync_blank_card_positions(workspace)
+	_sync_power_card_positions(workspace)
 
-	var valid_cartridge_ids := {}
-	var visible_index := 0
-	for slot_index in range(GameState.PROGRAMMED_CARTRIDGE_CAPACITY):
-		var cartridge: Dictionary = GameState.get_programmed_cartridge_in_slot(slot_index)
-		if cartridge.is_empty():
-			continue
-		var cartridge_id := str(cartridge.get("id", ""))
-		valid_cartridge_ids[cartridge_id] = true
-		if not _table_cartridge_positions.has(cartridge_id):
-			_table_cartridge_positions[cartridge_id] = _clamp_table_position(
-				GameState.get_workshop_card_position("cartridge_%s" % cartridge_id, workspace.position + Vector2(36.0 + float(visible_index) * 34.0, workspace.end.y - 190.0 + absf(float(visible_index) - 1.5) * 8.0)),
-				CARD_SIZE,
-				workspace
-			)
-		visible_index += 1
-	for cartridge_id in _table_cartridge_positions.keys():
-		if not valid_cartridge_ids.has(cartridge_id):
-			_table_cartridge_positions.erase(cartridge_id)
-
-	for blank_index in range(BLANK_CARTRIDGE_DISPLAY_COUNT):
-		if not _table_blank_positions.has(blank_index):
-			_table_blank_positions[blank_index] = _clamp_table_position(
-				GameState.get_workshop_card_position("blank_%d" % blank_index, workspace.position + Vector2(workspace.end.x - 340.0 + float(blank_index) * 28.0, workspace.end.y - 190.0 + absf(float(blank_index) - 1.5) * 6.0)),
-				CARD_SIZE,
-				workspace
-			)
-
-	var valid_power_slots := {}
-	var power_visible_index := 0
-	for slot_index in range(GameState.power_unit_slots.size()):
-		var power_unit: Dictionary = GameState.get_power_unit_in_slot(slot_index)
-		if power_unit.is_empty():
-			continue
-		valid_power_slots[slot_index] = true
-		if not _table_power_positions.has(slot_index):
-			_table_power_positions[slot_index] = _clamp_table_position(
-				GameState.get_workshop_card_position("power_%d" % slot_index, workspace.position + Vector2(workspace.end.x - 170.0 + float(power_visible_index) * 6.0, workspace.position.y + 26.0 + absf(float(power_visible_index) - 1.0) * 6.0)),
-				CARD_SIZE,
-				workspace
-			)
-		power_visible_index += 1
-	for slot_index in _table_power_positions.keys():
-		if not valid_power_slots.has(slot_index):
-			_table_power_positions.erase(slot_index)
-
-	var valid_location_ids := {}
-	var location_visible_index := 0
-	for location_card in GameState.get_location_cards():
-		var location_id := str(location_card.get("id", ""))
-		if location_id.is_empty():
-			continue
-		valid_location_ids[location_id] = true
-		if not _table_location_positions.has(location_id):
-			_table_location_positions[location_id] = _clamp_table_position(
-				GameState.get_workshop_card_position("location_%s" % location_id, workspace.position + Vector2(520.0 + float(location_visible_index) * 18.0, workspace.end.y - 220.0 + absf(float(location_visible_index) - 1.5) * 6.0)),
-				CARD_SIZE,
-				workspace
-			)
-		location_visible_index += 1
-	for location_id in _table_location_positions.keys():
-		if not valid_location_ids.has(location_id):
-			_table_location_positions.erase(location_id)
-
-	var valid_enemy_ids := {}
-	var enemy_visible_index := 0
-	for enemy_card in GameState.get_enemy_cards():
-		var enemy_id := str(enemy_card.get("id", ""))
-		if enemy_id.is_empty():
-			continue
-		valid_enemy_ids[enemy_id] = true
-		if not _table_enemy_positions.has(enemy_id):
-			_table_enemy_positions[enemy_id] = _clamp_table_position(
-				GameState.get_workshop_card_position("enemy_%s" % enemy_id, workspace.position + Vector2(workspace.end.x - 240.0 + float(enemy_visible_index) * 14.0, workspace.end.y - 220.0 + absf(float(enemy_visible_index) - 1.0) * 6.0)),
-				CARD_SIZE,
-				workspace
-			)
-		enemy_visible_index += 1
-	for enemy_id in _table_enemy_positions.keys():
-		if not valid_enemy_ids.has(enemy_id):
-			_table_enemy_positions.erase(enemy_id)
+	for kind in WorkshopCardRuntimeData.STATE_TABLE_CARD_KINDS:
+		_sync_state_table_card_positions(kind, workspace)
 
 func _on_map_gui_input(event: InputEvent):
+	if _journal_open:
+		return
 	if event is InputEventMouseMotion:
 		var motion: InputEventMouseMotion = event
 		var root_point := map_region.global_position - global_position + motion.position
@@ -569,101 +1195,104 @@ func _on_map_gui_input(event: InputEvent):
 			var loaded_cartridge: Dictionary = badge_hit["loaded_cartridge"]
 			if not loaded_cartridge.is_empty():
 				_selected_bot_index = bot_index
-				_drag_start_root = root_point
-				_drag_pickup_offset = Vector2(18.0, 24.0)
-				_drag_candidate = {
-					"kind": "cartridge",
+				var badge_rect := Rect2(badge_hit["tape_badge_rect"])
+				_begin_drag_candidate(root_point, badge_rect, "cartridge", {
 					"source": "bot",
+					"identifier": str(loaded_cartridge.get("id", "")),
 					"bot_index": bot_index,
 					"cartridge_id": str(loaded_cartridge.get("id", "")),
-				}
+				})
+				_drag_pickup_offset = Vector2(18.0, 24.0)
 			return
 		var top_card := _get_top_table_card_at_point(_rect_in_root(map_region), root_point)
 		if not top_card.is_empty():
+			var top_rect := Rect2(top_card["rect"])
 			match str(top_card.get("kind", "")):
 				"bench_card":
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {"kind": "bench_card"}
+					_begin_drag_candidate(root_point, top_rect, "bench_card")
 					return
 				"route_card":
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {"kind": "route_card"}
+					_begin_drag_candidate(root_point, top_rect, "route_card")
 					return
 				"charge_card":
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {"kind": "charge_card"}
+					_begin_drag_candidate(root_point, top_rect, "charge_card")
+					return
+				"journal_card":
+					_begin_drag_candidate(root_point, top_rect, "journal_card")
 					return
 				"cartridge":
 					var cartridge_id := str(top_card.get("cartridge_id", ""))
 					if not cartridge_id.is_empty():
-						_drag_start_root = root_point
-						_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-						_drag_candidate = {
-							"kind": "cartridge",
+						_begin_drag_candidate(root_point, top_rect, "cartridge", {
 							"source": "table",
+							"identifier": cartridge_id,
 							"cartridge_id": cartridge_id,
-						}
+						})
 						_selected_power_slot_index = -1
 						GameState.select_programmed_cartridge(cartridge_id)
 					return
 				"blank":
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {
-						"kind": "blank",
+					_begin_drag_candidate(root_point, top_rect, "blank", {
+						"identifier": int(top_card.get("blank_index", -1)),
 						"blank_index": int(top_card.get("blank_index", -1)),
-					}
+					})
 					return
 				"power":
 					var slot_index := int(top_card.get("slot_index", -1))
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {
-						"kind": "power",
+					_begin_drag_candidate(root_point, top_rect, "power", {
 						"source": "table",
+						"identifier": slot_index,
 						"slot_index": slot_index,
-					}
+					})
 					_selected_power_slot_index = slot_index
 					return
 				"location":
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {
-						"kind": "location",
+					_begin_drag_candidate(root_point, top_rect, "location", {
+						"identifier": str(top_card.get("location_id", "")),
 						"location_id": str(top_card.get("location_id", "")),
 						"card_data": Dictionary(top_card.get("card_data", {})),
-					}
+					})
 					return
 				"enemy":
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {
-						"kind": "enemy",
+					_begin_drag_candidate(root_point, top_rect, "enemy", {
+						"identifier": str(top_card.get("enemy_id", "")),
 						"enemy_id": str(top_card.get("enemy_id", "")),
 						"card_data": Dictionary(top_card.get("card_data", {})),
-					}
+					})
+					return
+				"material":
+					_begin_drag_candidate(root_point, top_rect, "material", {
+						"identifier": str(top_card.get("material_id", "")),
+						"material_id": str(top_card.get("material_id", "")),
+						"card_data": Dictionary(top_card.get("card_data", {})),
+					})
+					return
+				"blueprint":
+					_begin_drag_candidate(root_point, top_rect, "blueprint", {
+						"identifier": str(top_card.get("blueprint_id", "")),
+						"blueprint_id": str(top_card.get("blueprint_id", "")),
+						"card_data": Dictionary(top_card.get("card_data", {})),
+					})
+					return
+				"crafted":
+					_begin_drag_candidate(root_point, top_rect, "crafted", {
+						"identifier": str(top_card.get("crafted_id", "")),
+						"crafted_id": str(top_card.get("crafted_id", "")),
+						"card_data": Dictionary(top_card.get("card_data", {})),
+					})
 					return
 				"bot":
 					_selected_bot_index = int(top_card.get("bot_index", 0))
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {
-						"kind": "bot",
+					_begin_drag_candidate(root_point, top_rect, "bot", {
+						"identifier": _selected_bot_index,
 						"bot_index": _selected_bot_index,
-					}
+					})
 					return
 				"operator":
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {"kind": "operator"}
+					_begin_drag_candidate(root_point, top_rect, "operator")
 					return
 				"trash_card":
-					_drag_start_root = root_point
-					_drag_pickup_offset = root_point - Rect2(top_card["rect"]).position
-					_drag_candidate = {"kind": "trash_card"}
+					_begin_drag_candidate(root_point, top_rect, "trash_card")
 					return
 
 func _complete_click_candidate(candidate: Dictionary):
@@ -672,6 +1301,10 @@ func _complete_click_candidate(candidate: Dictionary):
 			_selected_bot_index = int(candidate.get("bot_index", 0))
 		"bench_card":
 			_open_programming_scene()
+		"journal_card":
+			_journal_open = true
+			_journal_page_index = clampi(_journal_page_index, 0, maxi(GameState.get_journal_entries().size() - 1, 0))
+			_journal_viewed_subject_key = _get_current_journal_subject_key()
 
 func _complete_drag(drop_root: Vector2):
 	match str(_active_drag.get("kind", "")):
@@ -687,6 +1320,12 @@ func _complete_drag(drop_root: Vector2):
 			_complete_table_card_drag("location", drop_root, CARD_SIZE)
 		"enemy":
 			_complete_table_card_drag("enemy", drop_root, CARD_SIZE)
+		"material":
+			_complete_table_card_drag("material", drop_root, CARD_SIZE)
+		"blueprint":
+			_complete_table_card_drag("blueprint", drop_root, CARD_SIZE)
+		"crafted":
+			_complete_table_card_drag("crafted", drop_root, CARD_SIZE)
 		"operator":
 			_complete_table_card_drag("operator", drop_root, CARD_SIZE)
 		"bench_card":
@@ -695,6 +1334,8 @@ func _complete_drag(drop_root: Vector2):
 			_complete_machine_card_drag("route", drop_root, CARD_SIZE)
 		"charge_card":
 			_complete_machine_card_drag("charge", drop_root, CARD_SIZE)
+		"journal_card":
+			_complete_machine_card_drag("journal", drop_root, CARD_SIZE)
 		"trash_card":
 			_complete_machine_card_drag("trash", drop_root, CARD_SIZE)
 
@@ -730,8 +1371,10 @@ func _is_valid_drop_target(root_point: Vector2) -> bool:
 			return _get_drop_drone_index_for_rect(drop_rect) != -1 or _is_rect_in_tape_hand(drop_rect) or _is_rect_in_recycle_zone(drop_rect)
 		"power":
 			return _get_drop_drone_index_for_rect(drop_rect) != -1 or _is_rect_in_charge_machine(drop_rect) or _is_rect_in_table_workspace(drop_rect) or _is_rect_in_recycle_zone(drop_rect)
-		"location":
+		"location", "material", "blueprint":
 			return _is_rect_in_table_workspace(drop_rect) or _is_rect_in_recycle_zone(drop_rect)
+		"crafted":
+			return _is_rect_in_table_workspace(drop_rect) or _is_rect_in_recycle_zone(drop_rect) or _has_meaningful_overlap(Rect2(_table_operator_position, CARD_SIZE), drop_rect, 0.30)
 		"bot", "blank", "operator", "enemy":
 			return _is_rect_in_table_workspace(drop_rect) or _is_rect_in_route_machine(drop_rect)
 		"bench_card", "route_card", "charge_card", "trash_card":
@@ -823,13 +1466,21 @@ func _complete_blank_drag(drop_root: Vector2):
 
 func _complete_table_card_drag(kind: String, drop_root: Vector2, card_size: Vector2):
 	var drop_rect := _get_drop_rect(drop_root)
-	if kind == "location" and _is_rect_in_recycle_zone(drop_rect):
-		var location_id := str(_active_drag.get("location_id", ""))
-		if location_id.is_empty():
+	if kind in WorkshopCardRuntimeData.STATE_TABLE_CARD_RECYCLE_MESSAGES and _is_rect_in_recycle_zone(drop_rect):
+		var recycled_card_id := str(_active_drag.get("%s_id" % kind, ""))
+		if recycled_card_id.is_empty():
 			return
-		if GameState.forget_location_card(location_id):
-			_table_location_positions.erase(location_id)
-			EventBus.log_message.emit("Location card forgotten")
+		if _forget_state_table_card(kind, recycled_card_id):
+			EventBus.log_message.emit(str(WorkshopCardRuntimeData.STATE_TABLE_CARD_RECYCLE_MESSAGES[kind]))
+		return
+	if kind == "crafted" and _has_meaningful_overlap(Rect2(_table_operator_position, CARD_SIZE), drop_rect, 0.30):
+		var edible_crafted_id := str(_active_drag.get("crafted_id", ""))
+		if edible_crafted_id.is_empty():
+			return
+		var use_result: Dictionary = GameState.use_crafted_card_on_operator(edible_crafted_id)
+		if bool(use_result.get("ok", false)):
+			_table_crafted_positions.erase(edible_crafted_id)
+		EventBus.log_message.emit(str(use_result.get("message", "Operator supply used")))
 		return
 	if not _is_rect_in_table_workspace(_get_drop_rect(drop_root)):
 		return
@@ -838,21 +1489,49 @@ func _complete_table_card_drag(kind: String, drop_root: Vector2, card_size: Vect
 	if kind == "operator":
 		_table_operator_position = clamped
 		GameState.set_workshop_card_position("operator_card", clamped)
-	elif kind == "location":
-		var location_id := str(_active_drag.get("location_id", ""))
-		if location_id.is_empty():
+	elif kind in ["location", "enemy", "material", "blueprint", "crafted"]:
+		var state_card_id := str(_active_drag.get("%s_id" % kind, ""))
+		if state_card_id.is_empty():
 			return
-		_table_location_positions[location_id] = clamped
-		GameState.set_workshop_card_position("location_%s" % location_id, clamped)
-	elif kind == "enemy":
-		var enemy_id := str(_active_drag.get("enemy_id", ""))
-		if enemy_id.is_empty():
-			return
-		_table_enemy_positions[enemy_id] = clamped
-		GameState.set_workshop_card_position("enemy_%s" % enemy_id, clamped)
+		if kind == "material":
+			var material_card: Dictionary = _active_drag.get("card_data", {})
+			var added_quantity := maxi(int(material_card.get("quantity", 0)), 0)
+			var merge_target := _get_material_merge_target(state_card_id, str(material_card.get("type", "")), Rect2(clamped, card_size))
+			if not merge_target.is_empty():
+				var target_material_id := str(merge_target.get("material_id", ""))
+				var merged := GameState.merge_material_cards(state_card_id, target_material_id)
+				if not merged.is_empty():
+					_table_material_positions.erase(state_card_id)
+					var merged_layout_key := GameState.get_state_table_card_layout_key("material", state_card_id)
+					if not merged_layout_key.is_empty():
+						GameState.clear_workshop_card_position(merged_layout_key)
+					_trigger_merge_feedback("material", target_material_id, added_quantity)
+					EventBus.log_message.emit("%s merged to %dx" % [
+						str(merged.get("type", "resource")).capitalize(),
+						int(merged.get("quantity", 0)),
+					])
+					return
+		_set_state_table_card_position(kind, state_card_id, clamped)
 	elif kind == "trash":
 		_table_trash_position = clamped
 		GameState.set_workshop_card_position("trash_card", clamped)
+
+func _get_material_merge_target(source_material_id: String, source_type: String, drop_rect: Rect2) -> Dictionary:
+	if source_material_id.is_empty() or source_type.is_empty():
+		return {}
+	var table_rect := _rect_in_root(map_region)
+	for card_info in _get_table_visual_cards(table_rect):
+		if str(card_info.get("kind", "")) != "material":
+			continue
+		var target_material_id := str(card_info.get("material_id", ""))
+		if target_material_id.is_empty() or target_material_id == source_material_id:
+			continue
+		var target_card: Dictionary = card_info.get("card_data", {})
+		if str(target_card.get("type", "")) != source_type:
+			continue
+		if _has_meaningful_overlap(Rect2(card_info.get("rect", Rect2())), drop_rect, 0.30):
+			return card_info
+	return {}
 
 func _get_drop_drone_index_for_rect(drop_rect: Rect2) -> int:
 	var slots := _get_table_drone_data(_rect_in_root(map_region))
@@ -912,17 +1591,23 @@ func _place_table_card(store: Dictionary, key, drop_root: Vector2, card_size: Ve
 	var clamped := _clamp_table_position(drop_root - _drag_pickup_offset, card_size, workspace)
 	store[key] = clamped
 	if store == _table_cartridge_positions:
-		GameState.set_workshop_card_position("cartridge_%s" % str(key), clamped)
+		_set_non_state_table_card_position("cartridge", key, clamped)
 	elif store == _table_power_positions:
-		GameState.set_workshop_card_position("power_%d" % int(key), clamped)
+		_set_non_state_table_card_position("power", key, clamped)
 	elif store == _table_blank_positions:
-		GameState.set_workshop_card_position("blank_%d" % int(key), clamped)
+		_set_non_state_table_card_position("blank", key, clamped)
 	elif store == _table_drone_positions:
-		GameState.set_workshop_card_position("drone_%d" % int(key), clamped)
+		_set_non_state_table_card_position("bot", key, clamped)
 	elif store == _table_location_positions:
-		GameState.set_workshop_card_position("location_%s" % str(key), clamped)
+		_set_state_table_card_position("location", str(key), clamped)
 	elif store == _table_enemy_positions:
-		GameState.set_workshop_card_position("enemy_%s" % str(key), clamped)
+		_set_state_table_card_position("enemy", str(key), clamped)
+	elif store == _table_material_positions:
+		_set_state_table_card_position("material", str(key), clamped)
+	elif store == _table_blueprint_positions:
+		_set_state_table_card_position("blueprint", str(key), clamped)
+	elif store == _table_crafted_positions:
+		_set_state_table_card_position("crafted", str(key), clamped)
 
 func _place_generated_location_card(location_id: String, route_rect: Rect2):
 	var workspace := _get_table_workspace_rect(_rect_in_root(map_region))
@@ -931,8 +1616,7 @@ func _place_generated_location_card(location_id: String, route_rect: Rect2):
 		CARD_SIZE,
 		workspace
 	)
-	_table_location_positions[location_id] = generated_position
-	GameState.set_workshop_card_position("location_%s" % location_id, generated_position)
+	_set_state_table_card_position("location", location_id, generated_position)
 
 func _place_generated_enemy_card(enemy_id: String, route_rect: Rect2):
 	var workspace := _get_table_workspace_rect(_rect_in_root(map_region))
@@ -941,8 +1625,34 @@ func _place_generated_enemy_card(enemy_id: String, route_rect: Rect2):
 		CARD_SIZE,
 		workspace
 	)
-	_table_enemy_positions[enemy_id] = generated_position
-	GameState.set_workshop_card_position("enemy_%s" % enemy_id, generated_position)
+	_set_state_table_card_position("enemy", enemy_id, generated_position)
+
+func _place_generated_material_card(material_id: String, source_rect: Rect2):
+	var workspace := _get_table_workspace_rect(_rect_in_root(map_region))
+	var generated_position := _clamp_table_position(
+		source_rect.position + Vector2(source_rect.size.x + 12.0, 12.0),
+		CARD_SIZE,
+		workspace
+	)
+	_set_state_table_card_position("material", material_id, generated_position)
+
+func _place_generated_blueprint_card(blueprint_id: String, source_rect: Rect2):
+	var workspace := _get_table_workspace_rect(_rect_in_root(map_region))
+	var generated_position := _clamp_table_position(
+		source_rect.position + Vector2(source_rect.size.x + 12.0, 32.0),
+		CARD_SIZE,
+		workspace
+	)
+	_set_state_table_card_position("blueprint", blueprint_id, generated_position)
+
+func _place_generated_crafted_card(crafted_id: String, source_rect: Rect2):
+	var workspace := _get_table_workspace_rect(_rect_in_root(map_region))
+	var generated_position := _clamp_table_position(
+		source_rect.position + Vector2(source_rect.size.x + 12.0, 18.0),
+		CARD_SIZE,
+		workspace
+	)
+	_set_state_table_card_position("crafted", crafted_id, generated_position)
 
 func _place_generated_power_card(slot_index: int, charge_rect: Rect2):
 	var workspace := _get_table_workspace_rect(_rect_in_root(map_region))
@@ -951,8 +1661,7 @@ func _place_generated_power_card(slot_index: int, charge_rect: Rect2):
 		CARD_SIZE,
 		workspace
 	)
-	_table_power_positions[slot_index] = generated_position
-	GameState.set_workshop_card_position("power_%d" % slot_index, generated_position)
+	_set_non_state_table_card_position("power", slot_index, generated_position)
 
 func _complete_machine_card_drag(kind: String, drop_root: Vector2, card_size: Vector2):
 	if not _is_point_in_table_workspace(drop_root):
@@ -968,6 +1677,9 @@ func _complete_machine_card_drag(kind: String, drop_root: Vector2, card_size: Ve
 	elif kind == "charge":
 		_table_charge_position = clamped
 		GameState.set_workshop_card_position("machine_charge", clamped)
+	elif kind == "journal":
+		_table_journal_position = clamped
+		GameState.set_workshop_card_position("machine_journal", clamped)
 	elif kind == "trash":
 		_table_trash_position = clamped
 		GameState.set_workshop_card_position("trash_card", clamped)
@@ -987,6 +1699,8 @@ func _draw_map_bay(rect: Rect2):
 				WorkshopArtData.draw_machine_card(self, Rect2(card_info["rect"]), "route", Callable(self, "_draw_route_card_overlay"))
 			"charge_card":
 				WorkshopArtData.draw_machine_card(self, Rect2(card_info["rect"]), "charge")
+			"journal_card":
+				WorkshopArtData.draw_machine_card(self, Rect2(card_info["rect"]), "journal")
 			"operator":
 				WorkshopArtData.draw_operator_card(self, Rect2(card_info["rect"]), GameState.get_operator_state(), str(WORKSHOP_OPERATOR["name"]), str(WORKSHOP_OPERATOR["focus"]), OPERATOR_ID_PHOTO)
 			"cartridge":
@@ -997,6 +1711,12 @@ func _draw_map_bay(rect: Rect2):
 				WorkshopArtData.draw_location_card(self, Rect2(card_info["rect"]), Dictionary(card_info["card_data"]), _location_bunker_texture, _location_cache_texture, _location_pond_texture, _location_crater_texture, _location_tower_texture, _location_surveillance_texture, _location_facility_texture, _location_field_texture, _location_dump_texture, _location_nest_texture, _location_ruin_texture)
 			"enemy":
 				WorkshopArtData.draw_enemy_card(self, Rect2(card_info["rect"]), Dictionary(card_info["card_data"]))
+			"material":
+				WorkshopArtData.draw_material_card(self, Rect2(card_info["rect"]), Dictionary(card_info["card_data"]))
+			"blueprint":
+				WorkshopArtData.draw_blueprint_card(self, Rect2(card_info["rect"]), Dictionary(card_info["card_data"]))
+			"crafted":
+				WorkshopArtData.draw_crafted_card(self, Rect2(card_info["rect"]), Dictionary(card_info["card_data"]))
 			"bot":
 				_draw_table_drone_card(Dictionary(card_info["slot"]))
 			"power":
@@ -1005,6 +1725,8 @@ func _draw_map_bay(rect: Rect2):
 				WorkshopArtData.draw_trash_card(self, Rect2(card_info["rect"]), _active_drag.is_empty() == false and _is_point_in_recycle_zone(_drag_mouse_root))
 	for process_info in _get_active_process_overlays(rect):
 		_draw_process_bar(Rect2(process_info["rect"]), float(process_info["progress"]))
+	if GameState.has_unread_journal_entries():
+		_draw_unread_badge(Rect2(Vector2(_table_journal_position.x + CARD_SIZE.x - 18.0, _table_journal_position.y - 6.0), Vector2(18.0, 18.0)))
 
 func _draw_drag_overlay():
 	if _active_drag.is_empty():
@@ -1059,6 +1781,12 @@ func _draw_drag_overlay():
 		WorkshopArtData.draw_location_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), Dictionary(_active_drag.get("card_data", {})), _location_bunker_texture, _location_cache_texture, _location_pond_texture, _location_crater_texture, _location_tower_texture, _location_surveillance_texture, _location_facility_texture, _location_field_texture, _location_dump_texture, _location_nest_texture, _location_ruin_texture)
 	elif drag_kind == "enemy":
 		WorkshopArtData.draw_enemy_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), Dictionary(_active_drag.get("card_data", {})))
+	elif drag_kind == "material":
+		WorkshopArtData.draw_material_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), Dictionary(_active_drag.get("card_data", {})))
+	elif drag_kind == "blueprint":
+		WorkshopArtData.draw_blueprint_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), Dictionary(_active_drag.get("card_data", {})))
+	elif drag_kind == "crafted":
+		WorkshopArtData.draw_crafted_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), Dictionary(_active_drag.get("card_data", {})))
 	elif drag_kind == "operator":
 		WorkshopArtData.draw_operator_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), GameState.get_operator_state(), str(WORKSHOP_OPERATOR["name"]), str(WORKSHOP_OPERATOR["focus"]), OPERATOR_ID_PHOTO)
 	elif drag_kind == "trash_card":
@@ -1069,29 +1797,17 @@ func _draw_drag_overlay():
 		WorkshopArtData.draw_machine_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), "route", Callable(self, "_draw_route_card_overlay"))
 	elif drag_kind == "charge_card":
 		WorkshopArtData.draw_machine_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), "charge")
+	elif drag_kind == "journal_card":
+		WorkshopArtData.draw_machine_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), "journal")
 
 func _get_active_process_overlays(rect: Rect2) -> Array:
-	_ensure_table_layout(rect)
 	var overlays: Array = []
-	if _is_charge_machine_operating() and _get_first_empty_power_slot_index() != -1:
-		overlays.append({
-			"rect": Rect2(_table_charge_position, CARD_SIZE),
-			"progress": clampf(1.0 - (_charge_production_cooldown / CHARGE_PRODUCTION_INTERVAL), 0.0, 1.0),
-		})
-	if _is_route_scan_operating() and GameState.can_operator_scan_route():
-		overlays.append({
-			"rect": Rect2(_table_route_position, CARD_SIZE),
-			"progress": clampf(1.0 - (_route_scan_cooldown / ROUTE_SCAN_INTERVAL), 0.0, 1.0),
-		})
-	for fight_info in _get_enemy_fight_states(rect):
-		var enemy_id := str(fight_info.get("enemy_id", ""))
-		if enemy_id.is_empty():
-			continue
-		var cooldown := float(_enemy_fight_cooldowns.get(enemy_id, ENEMY_FIGHT_INTERVAL))
-		overlays.append({
-			"rect": Rect2(fight_info.get("rect", Rect2())),
-			"progress": clampf(1.0 - (cooldown / ENEMY_FIGHT_INTERVAL), 0.0, 1.0),
-		})
+	for process_state in _get_active_process_states(rect):
+		overlays.append(WorkshopCardRuntimeData.build_process_overlay(
+			Rect2(process_state.get("rect", Rect2())),
+			float(process_state.get("cooldown", 0.0)),
+			float(process_state.get("duration", 0.001))
+		))
 	return overlays
 
 func _draw_route_card_overlay(display_rect: Rect2):
@@ -1122,6 +1838,45 @@ func _draw_process_bar(card_rect: Rect2, progress: float):
 	if fill_rect.size.x > 0.0:
 		draw_rect(fill_rect, Color(0.94, 0.94, 0.88))
 
+func _get_active_process_states(rect: Rect2) -> Array:
+	_ensure_table_layout(rect)
+	var states: Array = []
+	if _is_charge_machine_operating() and _get_first_empty_power_slot_index() != -1:
+		states.append({
+			"rect": Rect2(_table_charge_position, CARD_SIZE),
+			"cooldown": _charge_production_cooldown,
+			"duration": CHARGE_PRODUCTION_INTERVAL,
+		})
+	if _is_route_scan_operating() and GameState.can_operator_scan_route():
+		states.append({
+			"rect": Rect2(_table_route_position, CARD_SIZE),
+			"cooldown": _route_scan_cooldown,
+			"duration": ROUTE_SCAN_INTERVAL,
+		})
+	if _is_journal_research_operating():
+		states.append({
+			"rect": Rect2(_table_journal_position, CARD_SIZE),
+			"cooldown": _journal_research_cooldown,
+			"duration": JOURNAL_RESEARCH_INTERVAL,
+		})
+	var craft_state := _get_active_blueprint_craft_state(rect)
+	if not craft_state.is_empty():
+		states.append({
+			"rect": Rect2(craft_state.get("machine_rect", Rect2())),
+			"cooldown": _blueprint_craft_cooldown,
+			"duration": BLUEPRINT_CRAFT_INTERVAL,
+		})
+	for fight_info in _get_enemy_fight_states(rect):
+		var enemy_id := str(fight_info.get("enemy_id", ""))
+		if enemy_id.is_empty():
+			continue
+		states.append({
+			"rect": Rect2(fight_info.get("rect", Rect2())),
+			"cooldown": float(_enemy_fight_cooldowns.get(enemy_id, ENEMY_FIGHT_INTERVAL)),
+			"duration": ENEMY_FIGHT_INTERVAL,
+		})
+	return states
+
 func _draw_floating_numbers():
 	for entry in _floating_numbers:
 		var timer := float(entry.get("timer", FLOATING_NUMBER_DURATION))
@@ -1132,7 +1887,41 @@ func _draw_floating_numbers():
 		color.a = clampf(1.0 - progress * 0.8, 0.0, 1.0)
 		var outline := Color(0.08, 0.07, 0.06, color.a)
 		var font_size := maxi(int(round(lerpf(FONT_SIZE_FLOATING_BASE + 2.0, float(FONT_SIZE_FLOATING_BASE), progress))), FONT_SIZE_FLOATING_BASE)
-		_draw_outlined_text(position + Vector2(0.0, 1.0), str(entry.get("value", "")), HORIZONTAL_ALIGNMENT_CENTER, 32.0, font_size, color, outline)
+		_draw_outlined_text(position + Vector2(0.0, 1.0), str(entry.get("value", "")), HORIZONTAL_ALIGNMENT_CENTER, float(entry.get("width", 32.0)), font_size, color, outline)
+
+func _draw_floating_announcements():
+	for entry in _floating_announcements:
+		var timer := float(entry.get("timer", DISCOVERY_BANNER_DURATION))
+		var duration := maxf(float(entry.get("duration", DISCOVERY_BANNER_DURATION)), 0.001)
+		var progress := 1.0 - timer / duration
+		var position := Vector2(entry.get("position", Vector2.ZERO)) + Vector2(0.0, -18.0 * progress)
+		var color := Color(0.90, 0.24, 0.20, clampf(1.0 - progress * 0.9, 0.0, 1.0))
+		var outline := Color(0.12, 0.05, 0.05, color.a)
+		_draw_outlined_text(position, str(entry.get("text", "")), HORIZONTAL_ALIGNMENT_CENTER, 220.0, FONT_SIZE_BANNER + 2, color, outline)
+		var subtext := str(entry.get("subtext", ""))
+		if not subtext.is_empty():
+			_draw_outlined_text(position + Vector2(0.0, 16.0), subtext, HORIZONTAL_ALIGNMENT_CENTER, 220.0, FONT_SIZE_CARD_VALUE + 1, Color(0.95, 0.90, 0.81, color.a), outline)
+
+func _draw_unread_badge(rect: Rect2) -> void:
+	var wobble := sin(Time.get_ticks_msec() * 0.012) * 1.5
+	var badge_rect := Rect2(rect.position + Vector2(wobble, 0.0), rect.size)
+	draw_rect(badge_rect, Color(0.65, 0.14, 0.12))
+	draw_rect(badge_rect.grow(-1.0), Color(0.83, 0.22, 0.18))
+	draw_rect(badge_rect, Color(0.18, 0.08, 0.07), false, 1.0)
+	_draw_outlined_text(badge_rect.position + Vector2(0.0, badge_rect.size.y - 4.0), "!", HORIZONTAL_ALIGNMENT_CENTER, badge_rect.size.x, FONT_SIZE_BANNER + 1, TEXT, Color(0.18, 0.08, 0.07))
+
+func _commit_current_journal_page_read() -> void:
+	if _journal_viewed_subject_key.is_empty():
+		return
+	GameState.mark_journal_entry_read(_journal_viewed_subject_key)
+	_journal_viewed_subject_key = ""
+
+func _get_current_journal_subject_key() -> String:
+	var entries := GameState.get_journal_entries()
+	if entries.is_empty():
+		return ""
+	var page_index := clampi(_journal_page_index, 0, entries.size() - 1)
+	return str(Dictionary(entries[page_index]).get("subject_key", ""))
 
 func _draw_run_end_overlay():
 	var overlay_rect := Rect2(Vector2.ZERO, size)
@@ -1142,6 +1931,170 @@ func _draw_run_end_overlay():
 	draw_rect(plaque_rect.grow(-2.0), Color(0.18, 0.08, 0.08))
 	draw_rect(plaque_rect, PANEL_BORDER, false, 1.0)
 	draw_string(ThemeDB.fallback_font, Vector2(plaque_rect.position.x, plaque_rect.position.y + 20.0), "RUN ENDED", HORIZONTAL_ALIGNMENT_CENTER, plaque_rect.size.x, FONT_SIZE_BANNER, TEXT)
+
+func _get_journal_overlay_rect() -> Rect2:
+	return Rect2(Vector2(size.x * 0.5 - 320.0, size.y * 0.5 - 220.0), Vector2(640.0, 440.0))
+
+func _handle_journal_modal_click(root_point: Vector2):
+	var overlay_rect := _get_journal_overlay_rect()
+	if _journal_close_rect.has_point(root_point) or not overlay_rect.has_point(root_point):
+		_commit_current_journal_page_read()
+		_journal_open = false
+		_journal_recipe_click_rects.clear()
+		return
+	if _journal_prev_rect.has_point(root_point):
+		_commit_current_journal_page_read()
+		_journal_page_index = maxi(_journal_page_index - 1, 0)
+		_journal_viewed_subject_key = _get_current_journal_subject_key()
+		return
+	if _journal_next_rect.has_point(root_point):
+		_commit_current_journal_page_read()
+		_journal_page_index = mini(_journal_page_index + 1, maxi(GameState.get_journal_entries().size() - 1, 0))
+		_journal_viewed_subject_key = _get_current_journal_subject_key()
+		return
+	for click_info in _journal_recipe_click_rects:
+		var recipe_rect := Rect2(click_info.get("rect", Rect2()))
+		if not recipe_rect.has_point(root_point):
+			continue
+		var blueprint := GameState.create_blueprint_card(Dictionary(click_info.get("recipe", {})))
+		var blueprint_id := str(blueprint.get("id", ""))
+		if not blueprint_id.is_empty():
+			_place_generated_blueprint_card(blueprint_id, Rect2(_table_journal_position, CARD_SIZE))
+			EventBus.log_message.emit("%s copied as blueprint" % str(blueprint.get("result", "Blueprint")))
+		return
+
+func _draw_journal_overlay():
+	_journal_recipe_click_rects.clear()
+	_journal_prev_rect = Rect2()
+	_journal_next_rect = Rect2()
+	_journal_close_rect = Rect2()
+	var overlay_rect := Rect2(Vector2.ZERO, size)
+	var page_rect := _get_journal_overlay_rect()
+	draw_rect(overlay_rect, Color(0.02, 0.02, 0.03, 0.42))
+	draw_rect(page_rect, TAPE)
+	draw_rect(page_rect.grow(-6.0), Color(0.90, 0.84, 0.71))
+	draw_rect(page_rect, PANEL_BORDER, false, 2.0)
+	var spine_x := page_rect.position.x + page_rect.size.x * 0.5
+	draw_line(Vector2(spine_x, page_rect.position.y + 18.0), Vector2(spine_x, page_rect.end.y - 18.0), Color(0.67, 0.57, 0.35), 2.0)
+	_journal_close_rect = Rect2(Vector2(page_rect.end.x - 34.0, page_rect.position.y + 12.0), Vector2(20.0, 20.0))
+	draw_rect(_journal_close_rect, Color(0.42, 0.18, 0.16))
+	draw_rect(_journal_close_rect.grow(-1.0), Color(0.31, 0.14, 0.13))
+	_draw_outlined_text(_journal_close_rect.position + Vector2(0.0, 15.0), "X", HORIZONTAL_ALIGNMENT_CENTER, _journal_close_rect.size.x, FONT_SIZE_BANNER, TEXT, Color(0.12, 0.08, 0.06))
+	var entries := GameState.get_journal_entries()
+	if entries.is_empty():
+		_draw_outlined_text(Vector2(page_rect.position.x + 32.0, page_rect.position.y + 42.0), "JOURNAL", HORIZONTAL_ALIGNMENT_LEFT, 180.0, FONT_SIZE_BANNER, STEEL_DARK, Color(0.95, 0.92, 0.84))
+		var empty_lines := _wrap_journal_text("No research notes yet. Place the operator and another card on the journal to start a research attempt.", page_rect.size.x - 64.0, FONT_SIZE_VALUE, 4)
+		for line_index in range(empty_lines.size()):
+			draw_string(ThemeDB.fallback_font, Vector2(page_rect.position.x + 32.0, page_rect.position.y + 94.0 + float(line_index) * 18.0), empty_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, page_rect.size.x - 64.0, FONT_SIZE_VALUE, STEEL_DARK)
+		return
+	_journal_page_index = clampi(_journal_page_index, 0, entries.size() - 1)
+	var entry: Dictionary = entries[_journal_page_index]
+	var left_page := Rect2(page_rect.position + Vector2(20.0, 26.0), Vector2(page_rect.size.x * 0.5 - 32.0, page_rect.size.y - 52.0))
+	var right_page := Rect2(Vector2(spine_x + 12.0, page_rect.position.y + 26.0), Vector2(page_rect.size.x * 0.5 - 32.0, page_rect.size.y - 52.0))
+	_draw_outlined_text(Vector2(left_page.position.x, left_page.position.y + 4.0), str(entry.get("title", "ENTRY")), HORIZONTAL_ALIGNMENT_LEFT, left_page.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
+	if bool(entry.get("unread", false)):
+		_draw_unread_badge(Rect2(Vector2(left_page.end.x - 24.0, left_page.position.y - 4.0), Vector2(18.0, 18.0)))
+	_draw_outlined_text(Vector2(right_page.position.x, right_page.position.y + 4.0), "RECIPES", HORIZONTAL_ALIGNMENT_LEFT, right_page.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
+	var preview_rect := Rect2(left_page.position + Vector2(8.0, 28.0), Vector2(144.0, 176.0))
+	_draw_journal_entry_preview(preview_rect, entry)
+	var description_lines := _wrap_journal_text(str(entry.get("description", "")), left_page.size.x - 170.0, FONT_SIZE_CARD_VALUE, 8)
+	for line_index in range(description_lines.size()):
+		draw_string(
+			ThemeDB.fallback_font,
+			Vector2(left_page.position.x + 170.0, left_page.position.y + 52.0 + float(line_index) * 16.0),
+			description_lines[line_index],
+			HORIZONTAL_ALIGNMENT_LEFT,
+			left_page.size.x - 170.0,
+			FONT_SIZE_CARD_VALUE,
+			STEEL_DARK
+		)
+	draw_string(ThemeDB.fallback_font, Vector2(left_page.position.x + 170.0, left_page.position.y + 188.0), "ATTEMPTS %d" % int(entry.get("attempts", 0)), HORIZONTAL_ALIGNMENT_LEFT, left_page.size.x - 170.0, FONT_SIZE_CARD_META + 2, TAPE_SHADE)
+	var recipes: Array = Array(entry.get("recipes", []))
+	if recipes.is_empty():
+		var no_result_lines := _wrap_journal_text("No stable formula recorded yet. Further research may still fail, but can surface a usable blueprint.", right_page.size.x - 16.0, FONT_SIZE_CARD_VALUE, 6)
+		for line_index in range(no_result_lines.size()):
+			draw_string(ThemeDB.fallback_font, Vector2(right_page.position.x, right_page.position.y + 40.0 + float(line_index) * 16.0), no_result_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, right_page.size.x - 16.0, FONT_SIZE_CARD_VALUE, STEEL_DARK)
+	else:
+		for recipe_index in range(recipes.size()):
+			var recipe: Dictionary = recipes[recipe_index]
+			var recipe_rect := Rect2(Vector2(right_page.position.x, right_page.position.y + 36.0 + float(recipe_index) * 72.0), Vector2(right_page.size.x - 10.0, 60.0))
+			draw_rect(recipe_rect, Color(0.84, 0.78, 0.62))
+			draw_rect(recipe_rect, PANEL_BORDER, false, 1.0)
+			var formula_lines := _wrap_journal_text(str(recipe.get("formula", "")), recipe_rect.size.x - 12.0, FONT_SIZE_CARD_VALUE, 3)
+			for line_index in range(formula_lines.size()):
+				draw_string(ThemeDB.fallback_font, Vector2(recipe_rect.position.x + 6.0, recipe_rect.position.y + 16.0 + float(line_index) * 14.0), formula_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, recipe_rect.size.x - 12.0, FONT_SIZE_CARD_VALUE, STEEL_DARK)
+			draw_string(ThemeDB.fallback_font, Vector2(recipe_rect.position.x + 6.0, recipe_rect.end.y - 6.0), "CLICK TO COPY BLUEPRINT", HORIZONTAL_ALIGNMENT_LEFT, recipe_rect.size.x - 12.0, FONT_SIZE_CARD_META + 1, TAPE_SHADE)
+			if bool(recipe.get("unread", false)):
+				_draw_unread_badge(Rect2(Vector2(recipe_rect.end.x - 18.0, recipe_rect.position.y + 4.0), Vector2(14.0, 14.0)))
+			_journal_recipe_click_rects.append({"rect": recipe_rect, "recipe": recipe})
+	if _journal_page_index > 0:
+		_journal_prev_rect = Rect2(Vector2(page_rect.position.x + 16.0, page_rect.end.y - 34.0), Vector2(24.0, 18.0))
+		draw_rect(_journal_prev_rect, Color(0.79, 0.72, 0.56))
+		draw_rect(_journal_prev_rect, PANEL_BORDER, false, 1.0)
+		draw_string(ThemeDB.fallback_font, Vector2(_journal_prev_rect.position.x, _journal_prev_rect.position.y + 14.0), "<", HORIZONTAL_ALIGNMENT_CENTER, _journal_prev_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
+	if _journal_page_index < entries.size() - 1:
+		_journal_next_rect = Rect2(Vector2(page_rect.end.x - 56.0, page_rect.end.y - 34.0), Vector2(24.0, 18.0))
+		draw_rect(_journal_next_rect, Color(0.79, 0.72, 0.56))
+		draw_rect(_journal_next_rect, PANEL_BORDER, false, 1.0)
+		draw_string(ThemeDB.fallback_font, Vector2(_journal_next_rect.position.x, _journal_next_rect.position.y + 14.0), ">", HORIZONTAL_ALIGNMENT_CENTER, _journal_next_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
+	draw_string(ThemeDB.fallback_font, Vector2(page_rect.position.x, page_rect.end.y - 18.0), "PAGE %d / %d" % [_journal_page_index + 1, entries.size()], HORIZONTAL_ALIGNMENT_CENTER, page_rect.size.x, FONT_SIZE_CARD_META + 2, STEEL_DARK)
+
+func _draw_journal_entry_preview(preview_rect: Rect2, entry: Dictionary):
+	var subject_kind := str(entry.get("subject_kind", ""))
+	var subject_type := str(entry.get("subject_type", ""))
+	match subject_kind:
+		"location":
+			WorkshopArtData.draw_location_card(self, preview_rect, {"type": subject_type, "position": {"x": 0, "y": 0}}, _location_bunker_texture, _location_cache_texture, _location_pond_texture, _location_crater_texture, _location_tower_texture, _location_surveillance_texture, _location_facility_texture, _location_field_texture, _location_dump_texture, _location_nest_texture, _location_ruin_texture)
+		"enemy":
+			WorkshopArtData.draw_enemy_card(self, preview_rect, {"type": subject_type, "display_name": str(entry.get("title", subject_type)).capitalize(), "threat_level": 1, "hp": 1})
+		"material":
+			WorkshopArtData.draw_material_card(self, preview_rect, {"type": subject_type, "quantity": 1})
+		"machine":
+			WorkshopArtData.draw_machine_card(self, preview_rect, subject_type if subject_type != "route" else "route", Callable(self, "_draw_route_card_overlay"))
+		"drone":
+			WorkshopArtData.draw_table_drone_card(self, preview_rect, {
+				"index": 0 if subject_type == "spider" else 1,
+				"rect": preview_rect,
+				"body_hotspot": preview_rect,
+				"loaded_cartridge": {},
+				"power_charge": 0,
+				"power_card_count": 0,
+				"available_in_workshop": true,
+				"outside_status": "cabinet",
+				"tape_badge_rect": Rect2(Vector2(preview_rect.position.x + 14.0, preview_rect.end.y - 48.0), Vector2(48.0, 16.0)),
+			}, false, false)
+		"tape":
+			WorkshopArtData.draw_tape_card(self, preview_rect, subject_type == "programmed", subject_type.to_upper(), false)
+		"resource":
+			WorkshopArtData.draw_power_card(self, preview_rect, GameState.BOT_POWER_CAPACITY, GameState.BOT_POWER_CAPACITY, false)
+		_:
+			draw_rect(preview_rect, TAPE)
+			draw_rect(preview_rect, PANEL_BORDER, false, 1.0)
+
+func _wrap_journal_text(text: String, max_width: float, font_size: int, max_lines: int) -> Array:
+	var font := ThemeDB.fallback_font
+	var words := text.split(" ")
+	var lines: Array = []
+	var current_line := ""
+	for word in words:
+		var proposal := word if current_line.is_empty() else "%s %s" % [current_line, word]
+		if font.get_string_size(proposal, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width:
+			current_line = proposal
+			continue
+		if not current_line.is_empty():
+			lines.append(current_line)
+			if lines.size() >= max_lines:
+				break
+		current_line = word
+	if lines.size() < max_lines and not current_line.is_empty():
+		lines.append(current_line)
+	if lines.size() > max_lines:
+		lines = lines.slice(0, max_lines)
+	if words.size() > 0 and lines.size() == max_lines:
+		var last_index := lines.size() - 1
+		if not str(lines[last_index]).ends_with("..."):
+			lines[last_index] = str(lines[last_index]) + "..."
+	return lines
 
 func _draw_outlined_text(position: Vector2, text: String, alignment: HorizontalAlignment, width: float, font_size: int, fill: Color, outline: Color):
 	var font := ThemeDB.fallback_font
@@ -1164,6 +2117,7 @@ func _get_machine_card_data(rect: Rect2) -> Dictionary:
 		"bench_rect": Rect2(_table_machine_position, CARD_SIZE),
 		"route_rect": Rect2(_table_route_position, CARD_SIZE),
 		"charge_rect": Rect2(_table_charge_position, CARD_SIZE),
+		"journal_rect": Rect2(_table_journal_position, CARD_SIZE),
 	}
 
 func _get_table_visual_cards(rect: Rect2) -> Array:
@@ -1171,22 +2125,36 @@ func _get_table_visual_cards(rect: Rect2) -> Array:
 	var cards: Array = []
 	var machine_cards := _get_machine_card_data(rect)
 	if not _is_dragging_table_card("bench_card", 0):
+		var bench_rect := Rect2(machine_cards["bench_rect"])
+		bench_rect.position += _get_card_feedback_offset("bench_card", 0)
 		cards.append({
 			"kind": "bench_card",
-			"rect": Rect2(machine_cards["bench_rect"]),
-			"z": Rect2(machine_cards["bench_rect"]).end.y,
+			"rect": bench_rect,
+			"z": bench_rect.end.y,
 		})
 	if not _is_dragging_table_card("route_card", 0):
+		var route_rect := Rect2(machine_cards["route_rect"])
+		route_rect.position += _get_card_feedback_offset("route_card", 0)
 		cards.append({
 			"kind": "route_card",
-			"rect": Rect2(machine_cards["route_rect"]),
-			"z": Rect2(machine_cards["route_rect"]).end.y,
+			"rect": route_rect,
+			"z": route_rect.end.y,
 		})
 	if not _is_dragging_table_card("charge_card", 0):
+		var charge_rect := Rect2(machine_cards["charge_rect"])
+		charge_rect.position += _get_card_feedback_offset("charge_card", 0)
 		cards.append({
 			"kind": "charge_card",
-			"rect": Rect2(machine_cards["charge_rect"]),
-			"z": Rect2(machine_cards["charge_rect"]).end.y,
+			"rect": charge_rect,
+			"z": charge_rect.end.y,
+		})
+	if not _is_dragging_table_card("journal_card", 0):
+		var journal_rect := Rect2(machine_cards["journal_rect"])
+		journal_rect.position += _get_card_feedback_offset("journal_card", 0)
+		cards.append({
+			"kind": "journal_card",
+			"rect": journal_rect,
+			"z": journal_rect.end.y,
 		})
 	if not _is_dragging_table_card("operator", 0):
 		var operator_rect := Rect2(_table_operator_position, CARD_SIZE)
@@ -1197,92 +2165,20 @@ func _get_table_visual_cards(rect: Rect2) -> Array:
 			"z": operator_rect.end.y,
 		})
 	if not _is_dragging_table_card("trash_card", 0):
+		var trash_rect := Rect2(_table_trash_position, CARD_SIZE)
+		trash_rect.position += _get_card_feedback_offset("trash_card", 0)
 		cards.append({
 			"kind": "trash_card",
-			"rect": Rect2(_table_trash_position, CARD_SIZE),
-			"z": _table_trash_position.y + CARD_SIZE.y,
+			"rect": trash_rect,
+			"z": trash_rect.end.y,
 		})
-	for location_card in GameState.get_location_cards():
-		var location_id := str(location_card.get("id", ""))
-		if location_id.is_empty() or _is_dragging_table_card("location", location_id):
-			continue
-		var location_pos := Vector2(_table_location_positions.get(location_id, rect.position))
-		cards.append({
-			"kind": "location",
-			"rect": Rect2(location_pos, CARD_SIZE),
-			"location_id": location_id,
-			"card_data": location_card,
-			"z": location_pos.y + CARD_SIZE.y,
-		})
-	for enemy_card in GameState.get_enemy_cards():
-		var enemy_id := str(enemy_card.get("id", ""))
-		if enemy_id.is_empty() or _is_dragging_table_card("enemy", enemy_id):
-			continue
-		var enemy_pos := Vector2(_table_enemy_positions.get(enemy_id, rect.position))
-		enemy_pos += _get_card_feedback_offset("enemy", enemy_id)
-		cards.append({
-			"kind": "enemy",
-			"rect": Rect2(enemy_pos, CARD_SIZE),
-			"enemy_id": enemy_id,
-			"card_data": enemy_card,
-			"z": enemy_pos.y + CARD_SIZE.y,
-		})
+	for kind in WorkshopCardRuntimeData.STATE_TABLE_CARD_KINDS:
+		_append_state_table_visual_cards(cards, kind, rect)
 	var tape_data := _get_tape_hand_data(rect)
-	for slot in tape_data["programmed_slots"]:
-		var cartridge: Dictionary = slot["cartridge"]
-		var cartridge_id := str(cartridge.get("id", ""))
-		if _is_dragging_table_card("cartridge", cartridge_id):
-			continue
-		cards.append({
-			"kind": "cartridge",
-			"rect": Rect2(slot["rect"]),
-			"cartridge_id": cartridge_id,
-			"label": str(cartridge.get("label", "")),
-			"selected": bool(slot["selected"]),
-			"z": Rect2(slot["rect"]).end.y,
-		})
-	for slot in tape_data["blank_slots"]:
-		if not bool(slot["filled"]):
-			continue
-		var blank_index := int(slot["index"])
-		if _is_dragging_table_card("blank", blank_index):
-			continue
-		cards.append({
-			"kind": "blank",
-			"rect": Rect2(slot["rect"]),
-			"blank_index": blank_index,
-			"z": Rect2(slot["rect"]).end.y,
-		})
-	for slot in _get_table_drone_data(rect):
-		var bot_index := int(slot["index"])
-		if _is_dragging_table_card("bot", bot_index):
-			continue
-		var moved_slot: Dictionary = slot.duplicate(true)
-		var fx_offset := _get_card_feedback_offset("bot", bot_index)
-		moved_slot["rect"] = Rect2(Rect2(slot["rect"]).position + fx_offset, Rect2(slot["rect"]).size)
-		moved_slot["body_hotspot"] = Rect2(Rect2(slot["body_hotspot"]).position + fx_offset, Rect2(slot["body_hotspot"]).size)
-		moved_slot["tape_badge_rect"] = Rect2(Rect2(slot["tape_badge_rect"]).position + fx_offset, Rect2(slot["tape_badge_rect"]).size)
-		cards.append({
-			"kind": "bot",
-			"rect": Rect2(moved_slot["rect"]),
-			"bot_index": bot_index,
-			"slot": moved_slot,
-			"z": Rect2(moved_slot["rect"]).end.y,
-		})
-	for card_info in _get_power_stack_data(rect)["visible_cards"]:
-		var slot_index := int(card_info["slot_index"])
-		if _is_dragging_table_card("power", slot_index):
-			continue
-		var power_unit: Dictionary = card_info["power_unit"]
-		cards.append({
-			"kind": "power",
-			"rect": Rect2(card_info["rect"]),
-			"slot_index": slot_index,
-			"charge": int(power_unit.get("charge", 0)),
-			"max_charge": int(power_unit.get("max_charge", 1)),
-			"selected": slot_index == _selected_power_slot_index,
-			"z": Rect2(card_info["rect"]).end.y,
-		})
+	_append_programmed_cartridge_visual_cards(cards, tape_data)
+	_append_blank_visual_cards(cards, tape_data)
+	_append_drone_visual_cards(cards, rect)
+	_append_power_visual_cards(cards, rect)
 	cards.sort_custom(func(a: Dictionary, b: Dictionary): return float(a["z"]) < float(b["z"]))
 	return cards
 
@@ -1309,22 +2205,30 @@ func _is_dragging_table_card(kind: String, identifier) -> bool:
 		return false
 	match kind:
 		"cartridge":
-			return str(_active_drag.get("source", "")) == "table" and str(_active_drag.get("cartridge_id", "")) == str(identifier)
+			return str(_active_drag.get("identifier", _active_drag.get("cartridge_id", ""))) == str(identifier)
 		"power":
-			return int(_active_drag.get("slot_index", -1)) == int(identifier)
+			return int(_active_drag.get("identifier", _active_drag.get("slot_index", -1))) == int(identifier)
 		"blank":
-			return int(_active_drag.get("blank_index", -1)) == int(identifier)
+			return int(_active_drag.get("identifier", _active_drag.get("blank_index", -1))) == int(identifier)
 		"bot":
-			return int(_active_drag.get("bot_index", -1)) == int(identifier)
+			return int(_active_drag.get("identifier", _active_drag.get("bot_index", -1))) == int(identifier)
 		"location":
-			return str(_active_drag.get("location_id", "")) == str(identifier)
+			return str(_active_drag.get("identifier", _active_drag.get("location_id", ""))) == str(identifier)
 		"enemy":
-			return str(_active_drag.get("enemy_id", "")) == str(identifier)
+			return str(_active_drag.get("identifier", _active_drag.get("enemy_id", ""))) == str(identifier)
+		"material":
+			return str(_active_drag.get("identifier", _active_drag.get("material_id", ""))) == str(identifier)
+		"blueprint":
+			return str(_active_drag.get("identifier", _active_drag.get("blueprint_id", ""))) == str(identifier)
+		"crafted":
+			return str(_active_drag.get("identifier", _active_drag.get("crafted_id", ""))) == str(identifier)
 		"operator":
 			return true
 		"bench_card":
 			return true
 		"route_card":
+			return true
+		"journal_card":
 			return true
 		"trash_card":
 			return true

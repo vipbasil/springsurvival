@@ -1,2 +1,3 @@
 res://scripts/ui/WorkshopArt.gd
 res://scripts/workshop_main.gd
+res://scripts/core/GameState.gd
