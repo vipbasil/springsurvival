@@ -197,199 +197,103 @@ static func draw_room_shell(canvas: Control, size: Vector2, wall_dark: Color, wa
 		)
 
 static func draw_location_glyph(canvas: Control, rect: Rect2, location_type: String, image_seed: int, bunker_texture: Texture2D, cache_texture: Texture2D, pond_texture: Texture2D, crater_texture: Texture2D, tower_texture: Texture2D, surveillance_texture: Texture2D, facility_texture: Texture2D, field_texture: Texture2D, dump_texture: Texture2D, nest_texture: Texture2D, ruin_texture: Texture2D) -> void:
-	var horizon_y := rect.position.y + rect.size.y - 12.0
-	if location_type not in ["pond", "crater"]:
-		canvas.draw_line(Vector2(rect.position.x + 4.0, horizon_y), Vector2(rect.end.x - 4.0, horizon_y), Color(0.45, 0.40, 0.26), 1.6)
+	var location_texture := _get_location_texture(location_type, bunker_texture, cache_texture, pond_texture, crater_texture, tower_texture, surveillance_texture, facility_texture, field_texture, dump_texture, nest_texture, ruin_texture)
+	if _draw_texture_fit(canvas, location_texture, rect, 1.0):
+		return
+	_draw_art_label(canvas, rect, location_type)
+
+static func _get_location_texture(location_type: String, bunker_texture: Texture2D, cache_texture: Texture2D, pond_texture: Texture2D, crater_texture: Texture2D, tower_texture: Texture2D, surveillance_texture: Texture2D, facility_texture: Texture2D, field_texture: Texture2D, dump_texture: Texture2D, nest_texture: Texture2D, ruin_texture: Texture2D) -> Texture2D:
 	match location_type:
 		"tower":
-			_draw_location_tower(canvas, rect, horizon_y, false, tower_texture)
+			return tower_texture
 		"surveillance_zone":
-			_draw_location_tower(canvas, rect, horizon_y, true, surveillance_texture)
+			return surveillance_texture
 		"cache":
-			_draw_location_bunker(canvas, rect, horizon_y, true, cache_texture)
+			return cache_texture
 		"bunker":
-			_draw_location_bunker(canvas, rect, horizon_y, false, bunker_texture)
+			return bunker_texture
 		"pond":
-			_draw_location_basin(canvas, rect, horizon_y, true, pond_texture)
+			return pond_texture
 		"crater":
-			_draw_location_basin(canvas, rect, horizon_y, false, crater_texture)
-		"facility", "dump", "field":
-			_draw_location_facility(canvas, rect, horizon_y, location_type, facility_texture, field_texture, dump_texture)
+			return crater_texture
+		"facility":
+			return facility_texture
+		"field":
+			return field_texture
+		"dump":
+			return dump_texture
 		"nest":
-			_draw_location_nest(canvas, rect, horizon_y, nest_texture)
+			return nest_texture
 		"ruin":
-			_draw_location_ruin(canvas, rect, horizon_y, ruin_texture)
+			return ruin_texture
 		_:
-			_draw_location_ruin(canvas, rect, horizon_y, ruin_texture)
+			return null
 
-static func _draw_location_tower(canvas: Control, rect: Rect2, horizon_y: float, surveillance: bool, tower_texture: Texture2D) -> void:
-	if _draw_texture_fit(canvas, tower_texture, rect, 1.0):
-		return
-	var outline := Color(0.10, 0.10, 0.11)
-	var accent := Color(0.76, 0.66, 0.38)
-	var ref_size: Vector2 = Vector2(320.0, 420.0)
-	var fit_scale: float = min(rect.size.x / ref_size.x, rect.size.y / ref_size.y) * 0.90
-	var fit_size: Vector2 = ref_size * fit_scale
-	var fit_origin: Vector2 = rect.get_center() - fit_size * 0.5 + Vector2(0.0, rect.size.y * 0.04)
-	var p := func(x: float, y: float) -> Vector2:
-		return fit_origin + Vector2(x, y) * fit_scale
-	var mast_x := 160.0
-	var ground_y := 356.0
-	var mast_top_y := 92.0
-	var base_poly := PackedVector2Array([
-		p.call(112.0, ground_y),
-		p.call(135.0, 292.0),
-		p.call(185.0, 292.0),
-		p.call(208.0, ground_y),
-	])
-	canvas.draw_colored_polygon(base_poly, Color(0.18, 0.18, 0.20))
-	_draw_poly_outline(canvas, base_poly, outline, 2.0)
-	canvas.draw_line(p.call(mast_x, ground_y), p.call(mast_x, mast_top_y), outline, 4.0)
-	canvas.draw_line(p.call(mast_x, 138.0), p.call(126.0, 238.0), outline, 2.0)
-	canvas.draw_line(p.call(mast_x, 138.0), p.call(194.0, 238.0), outline, 2.0)
-	canvas.draw_line(p.call(140.0, 184.0), p.call(180.0, 184.0), outline, 2.2)
-	canvas.draw_line(p.call(136.0, 228.0), p.call(184.0, 228.0), outline, 2.2)
-	canvas.draw_line(p.call(mast_x, mast_top_y), p.call(mast_x, 64.0), outline, 2.0)
-	if surveillance:
-		var dish_center: Vector2 = p.call(mast_x, 104.0)
-		canvas.draw_arc(dish_center, 26.0 * fit_scale, PI * 0.12, PI * 0.88, 18, outline, 2.6)
-		canvas.draw_line(dish_center, p.call(mast_x, 126.0), outline, 1.8)
-		canvas.draw_arc(dish_center + Vector2(0.0, 2.0 * fit_scale), 18.0 * fit_scale, PI * 0.16, PI * 0.84, 14, accent, 1.6)
-	else:
-		canvas.draw_line(p.call(146.0, 78.0), p.call(174.0, 78.0), outline, 2.4)
-		canvas.draw_line(p.call(152.0, 66.0), p.call(168.0, 66.0), outline, 2.0)
-	var beacon_rect: Rect2 = Rect2(p.call(148.0, 48.0), Vector2(24.0, 10.0) * fit_scale)
-	canvas.draw_rect(beacon_rect, accent)
-	canvas.draw_rect(beacon_rect, outline, false, 1.4)
+static func _draw_art_label(canvas: Control, rect: Rect2, label: String, fill: Variant = null, border: Variant = null, font_size: int = FONT_SIZE_CARD_META, color: Color = STEEL_DARK) -> void:
+	if fill != null:
+		_draw_framed_panel(canvas, rect, 0.0, fill, border if border != null else PANEL_BORDER)
+	_draw_text_token(canvas, rect, label, font_size, color)
 
-static func _draw_location_bunker(canvas: Control, rect: Rect2, horizon_y: float, cache_like: bool, bunker_texture: Texture2D) -> void:
-	var fit_rect := Rect2(rect.position + Vector2(2.0, 4.0), rect.size - Vector2(4.0, 8.0))
-	if not _draw_texture_fit(canvas, bunker_texture, fit_rect):
-		var outline := Color(0.10, 0.10, 0.11)
-		var body_rect := Rect2(Vector2(rect.get_center().x - 18.0, horizon_y - 18.0), Vector2(36.0, 16.0))
-		var fill := TAPE if cache_like else Color(0.58, 0.53, 0.45)
-		if not cache_like:
-			var berm := PackedVector2Array([
-				Vector2(body_rect.position.x - 10.0, horizon_y),
-				Vector2(body_rect.position.x - 3.0, body_rect.position.y + 6.0),
-				Vector2(body_rect.end.x + 3.0, body_rect.position.y + 6.0),
-				Vector2(body_rect.end.x + 10.0, horizon_y),
-			])
-			canvas.draw_colored_polygon(berm, Color(0.54, 0.46, 0.32))
-			_draw_poly_outline(canvas, berm, outline, 1.2)
-		canvas.draw_rect(body_rect, fill)
-		canvas.draw_rect(body_rect, outline, false, 2.0)
-		var door_rect := Rect2(Vector2(body_rect.get_center().x - 6.0, body_rect.position.y + 3.0), Vector2(12.0, 10.0))
-		canvas.draw_rect(door_rect, outline)
-	if cache_like:
-		var outline_tint := Color(0.10, 0.10, 0.11, 0.55)
-		var accent := Color(0.84, 0.78, 0.60, 0.14)
-		canvas.draw_rect(fit_rect, accent)
-		canvas.draw_rect(fit_rect, outline_tint, false, 1.4)
+static func _draw_text_token(canvas: Control, rect: Rect2, label: String, font_size: int = FONT_SIZE_CARD_META, color: Color = STEEL_DARK) -> void:
+	var text := label.strip_edges().replace("_", " ").replace("-", " ").to_upper()
+	if text.is_empty():
+		return
+	var font := ThemeDB.fallback_font
+	var baseline := rect.position.y + (rect.size.y - font.get_height(font_size)) * 0.5 + font.get_ascent(font_size)
+	canvas.draw_string(font, Vector2(rect.position.x, baseline), text, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, font_size, color)
 
-static func _draw_location_basin(canvas: Control, rect: Rect2, horizon_y: float, wet: bool, basin_texture: Texture2D) -> void:
-	var fit_rect := Rect2(rect.position + Vector2(2.0, 6.0), rect.size - Vector2(4.0, 12.0))
-	if _draw_texture_fit(canvas, basin_texture, fit_rect):
-		return
-	if not wet:
-		var center := Vector2(rect.get_center().x, rect.position.y + rect.size.y * 0.62)
-		var outer_rx := 28.0
-		var outer_ry := 13.0
-		var inner_rx := 21.0
-		var inner_ry := 9.0
-		var outline := Color(0.10, 0.10, 0.11)
-		var rim_color := Color(0.58, 0.49, 0.35)
-		var basin_color := Color(0.36, 0.29, 0.20)
-		canvas.draw_ellipse(center, outer_rx, outer_ry, rim_color)
-		canvas.draw_arc(center, outer_rx, 0.0, TAU, 36, outline, 2.0)
-		canvas.draw_ellipse(center + Vector2(0.0, 1.0), inner_rx, inner_ry, basin_color)
-		canvas.draw_arc(center + Vector2(0.0, 1.0), inner_rx, 0.0, TAU, 32, outline, 1.8)
-		var crack_center := center + Vector2(-2.0, 1.0)
-		canvas.draw_line(crack_center + Vector2(-5.0, 0.0), crack_center + Vector2(3.0, 2.0), outline, 1.2)
-		canvas.draw_line(crack_center + Vector2(1.0, 1.0), crack_center + Vector2(-2.0, 5.0), outline, 1.0)
-		canvas.draw_line(crack_center + Vector2(2.0, 1.0), crack_center + Vector2(6.0, -2.0), outline, 1.0)
-	else:
-		var center := Vector2(rect.get_center().x, rect.position.y + rect.size.y * 0.62)
-		var outer_rx := 28.0
-		var outer_ry := 13.0
-		var inner_rx := 21.0
-		var inner_ry := 9.0
-		var outline := Color(0.10, 0.10, 0.11)
-		var rim_color := Color(0.66, 0.57, 0.30)
-		var basin_color := Color(0.30, 0.40, 0.34)
-		canvas.draw_ellipse(center, outer_rx, outer_ry, rim_color)
-		canvas.draw_arc(center, outer_rx, 0.0, TAU, 36, outline, 2.0)
-		canvas.draw_ellipse(center + Vector2(0.0, 1.0), inner_rx, inner_ry, basin_color)
-		canvas.draw_arc(center + Vector2(0.0, 1.0), inner_rx, 0.0, TAU, 32, outline, 1.8)
+static func _get_location_blueprint_token_label(location_type: String) -> String:
+	match location_type:
+		"surveillance_zone":
+			return "SCAN"
+		_:
+			return location_type
 
-static func _draw_location_facility(canvas: Control, rect: Rect2, horizon_y: float, location_type: String, facility_texture: Texture2D = null, field_texture: Texture2D = null, dump_texture: Texture2D = null) -> void:
-	if location_type == "facility" and _draw_texture_fit(canvas, facility_texture, rect, 1.0):
-		return
-	if location_type == "field" and _draw_texture_fit(canvas, field_texture, rect, 1.0):
-		return
-	if location_type == "dump" and _draw_texture_fit(canvas, dump_texture, rect, 1.0):
-		return
-	var outline := Color(0.10, 0.10, 0.11)
-	var base_rect := Rect2(Vector2(rect.get_center().x - 20.0, horizon_y - 18.0), Vector2(40.0, 16.0))
-	if location_type == "field":
-		for furrow in range(4):
-			var y := horizon_y - 3.0 - furrow * 4.0
-			canvas.draw_line(Vector2(base_rect.position.x + 4.0, y), Vector2(base_rect.end.x - 4.0, y), Color(0.73, 0.63, 0.36), 1.8)
-		return
-	canvas.draw_rect(base_rect, Color(0.26, 0.27, 0.30))
-	canvas.draw_rect(base_rect, outline, false, 2.0)
-	var roof_rect := Rect2(Vector2(base_rect.position.x - 3.0, base_rect.position.y - 4.0), Vector2(base_rect.size.x + 6.0, 4.0))
-	canvas.draw_rect(roof_rect, outline)
-	if location_type == "facility":
-		for stack in range(2):
-			var stack_x := base_rect.position.x + 8.0 + float(stack) * 20.0
-			canvas.draw_rect(Rect2(Vector2(stack_x, base_rect.position.y - 12.0), Vector2(4.0, 12.0)), outline)
-		for window_index in range(3):
-			var window_rect := Rect2(Vector2(base_rect.position.x + 6.0 + window_index * 11.0, base_rect.position.y + 5.0), Vector2(6.0, 6.0))
-			canvas.draw_rect(window_rect, TAPE_SHADE)
-	elif location_type == "dump":
-		for pile in range(3):
-			canvas.draw_circle(Vector2(base_rect.position.x + 10.0 + pile * 10.0, horizon_y - 4.0), 4.0 + float(pile), TAPE_SHADE)
-		var crate_rect := Rect2(Vector2(base_rect.position.x + 26.0, horizon_y - 12.0), Vector2(10.0, 8.0))
-		canvas.draw_rect(crate_rect, Color(0.42, 0.36, 0.23))
-		canvas.draw_rect(crate_rect, outline, false, 1.4)
+static func _get_machine_token_label(kind: String) -> String:
+	match kind:
+		"bench":
+			return "BENCH"
+		"route":
+			return "ROUTE"
+		"charge":
+			return "POWER"
+		"journal":
+			return "LOG"
+		"trash":
+			return "TRASH"
+		_:
+			return kind
 
-static func _draw_location_nest(canvas: Control, rect: Rect2, horizon_y: float, nest_texture: Texture2D = null) -> void:
-	if _draw_texture_fit(canvas, nest_texture, rect, 1.0):
-		return
-	var center := Vector2(rect.get_center().x, horizon_y - 10.0)
-	var mound := PackedVector2Array([
-		Vector2(center.x - 24.0, horizon_y),
-		Vector2(center.x - 16.0, horizon_y - 14.0),
-		Vector2(center.x + 16.0, horizon_y - 14.0),
-		Vector2(center.x + 24.0, horizon_y),
-	])
-	canvas.draw_colored_polygon(mound, TAPE_SHADE)
-	_draw_poly_outline(canvas, mound, Color(0.10, 0.10, 0.11), 1.6)
-	for hole in range(3):
-		var hole_rect := Rect2(Vector2(center.x - 16.0 + hole * 12.0, horizon_y - 10.0), Vector2(8.0, 6.0))
-		canvas.draw_rect(hole_rect, STEEL_DARK)
-	for spike in range(4):
-		var spike_x := center.x - 15.0 + spike * 10.0
-		canvas.draw_line(Vector2(spike_x, horizon_y - 14.0), Vector2(spike_x, horizon_y - 23.0), Color(0.10, 0.10, 0.11), 1.4)
+static func _get_drone_token_label(drone_type: String) -> String:
+	match drone_type:
+		"spider":
+			return "SPIDER"
+		"butterfly":
+			return "WING"
+		_:
+			return drone_type
 
-static func _draw_location_ruin(canvas: Control, rect: Rect2, horizon_y: float, ruin_texture: Texture2D = null) -> void:
-	if _draw_texture_fit(canvas, ruin_texture, rect, 1.0):
-		return
-	var outline := Color(0.10, 0.10, 0.11)
-	var body := PackedVector2Array([
-		Vector2(rect.get_center().x - 22.0, horizon_y),
-		Vector2(rect.get_center().x - 22.0, horizon_y - 18.0),
-		Vector2(rect.get_center().x - 9.0, horizon_y - 26.0),
-		Vector2(rect.get_center().x + 1.0, horizon_y - 18.0),
-		Vector2(rect.get_center().x + 10.0, horizon_y - 24.0),
-		Vector2(rect.get_center().x + 22.0, horizon_y - 24.0),
-		Vector2(rect.get_center().x + 22.0, horizon_y),
-	])
-	canvas.draw_colored_polygon(body, Color(0.57, 0.52, 0.43))
-	_draw_poly_outline(canvas, body, outline, 1.8)
-	var door_rect := Rect2(Vector2(rect.get_center().x - 7.0, horizon_y - 12.0), Vector2(14.0, 12.0))
-	canvas.draw_rect(door_rect, outline)
+static func _get_blueprint_token_text(token_name: String) -> String:
+	var spec := _get_blueprint_token_spec(token_name)
+	match str(spec.get("kind", "")):
+		"operator":
+			return "OP"
+		"machine":
+			return _get_machine_token_label(str(spec.get("value", "")))
+		"material":
+			return str(spec.get("value", ""))
+		"tape":
+			return "TAPE" if bool(spec.get("value", false)) else "BLANK"
+		"power":
+			return "PWR"
+		"drone":
+			return _get_drone_token_label(str(spec.get("value", "")))
+		"enemy":
+			return str(spec.get("value", ""))
+		"location":
+			return _get_location_blueprint_token_label(str(spec.get("value", "")))
+		_:
+			return token_name
 
 static func _draw_poly_outline(canvas: Control, points: PackedVector2Array, color: Color, width: float) -> void:
 	if points.size() < 2:
@@ -421,13 +325,6 @@ static func _draw_framed_panel(canvas: Control, rect: Rect2, inset: float, fill:
 	canvas.draw_rect(panel_rect, fill)
 	canvas.draw_rect(panel_rect, border, false, 1.0)
 	return panel_rect
-
-static func _draw_machine_panel(canvas: Control, rect: Rect2, outer_fill: Color, inner_fill: Variant = null, border: Color = STEEL_LIGHT, inner_inset: float = 2.0) -> Rect2:
-	canvas.draw_rect(rect, outer_fill)
-	if inner_fill != null:
-		canvas.draw_rect(rect.grow(-inner_inset), inner_fill)
-	canvas.draw_rect(rect, border, false, 1.0)
-	return rect.grow(-inner_inset)
 
 static func _get_machine_texture(kind: String) -> Texture2D:
 	match kind:
@@ -556,7 +453,7 @@ static func draw_tape_card(canvas: Control, rect: Rect2, programmed: bool, label
 	if _tape_device_art == null:
 		_tape_device_art = load_svg_texture("res://assets/cards/device_pixelperfect_fixed.svg")
 	if not _draw_texture_fit(canvas, _tape_device_art, suit_rect):
-		_draw_tape_suit(canvas, suit_rect, programmed)
+		_draw_art_label(canvas, art_rect, "programmed tape" if programmed else "blank tape")
 	if programmed and not label.is_empty():
 		var short_label := _trim_card_label(label, 10).to_upper()
 		_draw_card_text(canvas, label_rect, short_label, "title_center", STEEL_DARK)
@@ -578,7 +475,8 @@ static func draw_power_card(canvas: Control, rect: Rect2, charge: int, max_charg
 	var suit_rect := _fit_rect(art_rect, 8.0)
 	var meter_rect := Rect2(Vector2(info_rect.position.x, info_rect.end.y - 2.0), Vector2(info_rect.size.x, 3.0))
 	var fill_rect := Rect2(meter_rect.position, Vector2(meter_rect.size.x * fill_ratio, meter_rect.size.y))
-	_draw_power_suit(canvas, suit_rect, charge > 0)
+	if not _draw_texture_fit(canvas, _get_material_texture("spring"), suit_rect):
+		_draw_art_label(canvas, art_rect, "power unit")
 	_draw_card_text(canvas, _get_info_slot(info_rect, "value"), number_text, "value_right", STEEL_DARK)
 	if fill_rect.size.x > 0.0:
 		canvas.draw_rect(fill_rect, ACCENT)
@@ -658,86 +556,97 @@ static func draw_blueprint_card(canvas: Control, rect: Rect2, card_data: Diction
 	_draw_blueprint_formula(canvas, page_rect.grow(-6.0), Array(card_data.get("formula_parts", [])))
 
 static func _draw_blueprint_formula(canvas: Control, rect: Rect2, formula_parts: Array) -> void:
+	var tokens: Array = _parse_blueprint_formula_tokens(formula_parts)
+	if tokens.is_empty():
+		return
+	var grid_size: int = 2 if tokens.size() <= 4 else 3
+	var visible_count: int = mini(tokens.size(), grid_size * grid_size)
+	var gap: float = 4.0 if grid_size == 2 else 3.0
+	var cell_side: float = floor(minf(
+		(rect.size.x - gap * float(grid_size - 1)) / float(grid_size),
+		(rect.size.y - gap * float(grid_size - 1)) / float(grid_size)
+	))
+	if cell_side <= 8.0:
+		return
+	var grid_pixel_size: float = cell_side * float(grid_size) + gap * float(grid_size - 1)
+	var grid_origin: Vector2 = rect.position + (rect.size - Vector2(grid_pixel_size, grid_pixel_size)) * 0.5
+	for cell_index in range(grid_size * grid_size):
+		var column: int = cell_index % grid_size
+		var row: int = cell_index / grid_size
+		var cell_rect: Rect2 = Rect2(
+			grid_origin + Vector2(float(column) * (cell_side + gap), float(row) * (cell_side + gap)),
+			Vector2.ONE * cell_side
+		)
+		if cell_index >= visible_count:
+			canvas.draw_rect(cell_rect, Color(0.89, 0.83, 0.69, 0.18))
+			canvas.draw_rect(cell_rect, Color(0.55, 0.49, 0.33, 0.35), false, 1.0)
+			continue
+		_draw_blueprint_formula_cell(canvas, cell_rect, Dictionary(tokens[cell_index]))
+
+static func _parse_blueprint_formula_tokens(formula_parts: Array) -> Array:
 	var tokens: Array = []
 	for part_variant in formula_parts:
 		var part := str(part_variant).strip_edges().to_upper()
 		if part == "BLUEPRINT" or part.is_empty():
 			continue
-		tokens.append(part)
-	if tokens.is_empty():
-		return
-	var plus_gap := 5.0
-	var qty_width := 16.0
-	var icon_side := minf(rect.size.y - 4.0, 18.0)
-	if icon_side <= 0.0:
-		return
-	var plus_width := 6.0
-	var token_width := qty_width + 4.0 + icon_side
-	var total_width := float(tokens.size()) * token_width
-	if tokens.size() > 1:
-		total_width += float(tokens.size() - 1) * (plus_width + plus_gap * 2.0)
-	if total_width > rect.size.x:
-		icon_side = maxf(12.0, minf(icon_side, (rect.size.x - float(tokens.size()) * (qty_width + 4.0) - float(tokens.size() - 1) * (plus_width + plus_gap * 2.0)) / float(tokens.size())))
-		token_width = qty_width + 4.0 + icon_side
-		total_width = float(tokens.size()) * token_width
-		if tokens.size() > 1:
-			total_width += float(tokens.size() - 1) * (plus_width + plus_gap * 2.0)
-	var start_x := rect.position.x + (rect.size.x - total_width) * 0.5
-	var baseline_y := rect.position.y + rect.size.y * 0.5
-	for token_index in range(tokens.size()):
 		var quantity := 1
-		var token_name := str(tokens[token_index])
+		var token_name := part
 		if token_name.contains(" X"):
 			var pieces := token_name.split(" X")
 			if pieces.size() == 2:
 				token_name = str(pieces[0]).strip_edges()
 				quantity = maxi(int(str(pieces[1]).to_int()), 1)
-		var token_x := start_x
-		for prev_index in range(token_index):
-			token_x += token_width
-			if prev_index < token_index:
-				token_x += plus_gap + plus_width + plus_gap
-		var qty_rect := Rect2(Vector2(token_x, baseline_y - 7.0), Vector2(qty_width, 14.0))
-		_draw_card_text(canvas, qty_rect, "%dx" % quantity, "value_right", STEEL_DARK)
-		var icon_rect := Rect2(Vector2(token_x + qty_width + 4.0, baseline_y - icon_side * 0.5), Vector2(icon_side, icon_side))
-		_draw_blueprint_token_icon(canvas, icon_rect, token_name)
-		if token_index < tokens.size() - 1:
-			var plus_x := token_x + token_width + plus_gap
-			_draw_card_text(canvas, Rect2(Vector2(plus_x, baseline_y - 7.0), Vector2(plus_width, 14.0)), "+", "title_center", TAPE_SHADE)
+		tokens.append({
+			"name": token_name,
+			"quantity": quantity,
+		})
+	return tokens
+
+static func _draw_blueprint_formula_cell(canvas: Control, cell_rect: Rect2, token: Dictionary) -> void:
+	canvas.draw_rect(cell_rect, Color(0.90, 0.84, 0.70))
+	canvas.draw_rect(cell_rect.grow(-1.0), Color(0.94, 0.89, 0.76))
+	canvas.draw_rect(cell_rect, PANEL_BORDER, false, 1.0)
+	var quantity := maxi(int(token.get("quantity", 1)), 1)
+	var qty_height := clampf(cell_rect.size.y * 0.24, 10.0, 15.0)
+	var qty_rect := Rect2(cell_rect.position + Vector2(3.0, 2.0), Vector2(cell_rect.size.x - 6.0, qty_height))
+	var qty_font_size := mini(FONT_SIZE_CARD_VALUE + 1, maxi(FONT_SIZE_CARD_META + 1, int(round(cell_rect.size.y * 0.16))))
+	_draw_text_token(canvas, qty_rect, "%dx" % quantity, qty_font_size, STEEL_DARK)
+	var icon_inset := maxf(4.0, floor(cell_rect.size.x * 0.10))
+	var icon_rect := Rect2(
+		Vector2(cell_rect.position.x + icon_inset, cell_rect.position.y + qty_height + 2.0),
+		Vector2(cell_rect.size.x - icon_inset * 2.0, cell_rect.size.y - qty_height - 6.0)
+	)
+	_draw_blueprint_token_icon(canvas, icon_rect, str(token.get("name", "")))
 
 static func _draw_blueprint_token_icon(canvas: Control, rect: Rect2, token_name: String) -> void:
 	var spec := _get_blueprint_token_spec(token_name)
 	var kind := str(spec.get("kind", ""))
 	match kind:
 		"operator":
-			_draw_blueprint_operator_icon(canvas, rect)
+			_draw_text_token(canvas, rect, "OP", FONT_SIZE_CARD_META, STEEL_DARK)
 			return
 		"machine":
-			_draw_blueprint_machine_icon(canvas, rect, str(spec.get("value", "")))
+			_draw_text_token(canvas, rect, _get_machine_token_label(str(spec.get("value", ""))), FONT_SIZE_CARD_META, STEEL_DARK)
 			return
 		"material":
 			_draw_material_glyph(canvas, rect, str(spec.get("value", "")))
 			return
 		"tape":
-			_draw_blueprint_tape_icon(canvas, rect, bool(spec.get("value", false)))
+			_draw_text_token(canvas, rect, "TAPE" if bool(spec.get("value", false)) else "BLANK", FONT_SIZE_CARD_META, STEEL_DARK)
 			return
 		"power":
-			_draw_power_suit(canvas, _fit_rect(rect, 8.0), true, 2.0)
+			_draw_text_token(canvas, rect, "PWR", FONT_SIZE_CARD_META, STEEL_DARK)
 			return
 		"drone":
-			var drone_type := str(spec.get("value", ""))
-			if drone_type == "spider":
-				_draw_spider_drone_art(canvas, _fit_rect(rect, 2.0))
-			elif drone_type == "butterfly":
-				_draw_butterfly_drone_art(canvas, _fit_rect(rect, 2.0))
+			_draw_text_token(canvas, rect, _get_drone_token_label(str(spec.get("value", ""))), FONT_SIZE_CARD_META, STEEL_DARK)
 			return
 		"enemy":
 			_draw_enemy_glyph(canvas, _fit_rect(rect, 2.0), str(spec.get("value", "")))
 			return
 		"location":
-			_draw_blueprint_location_icon(canvas, rect, str(spec.get("value", "")))
+			_draw_text_token(canvas, rect, _get_location_blueprint_token_label(str(spec.get("value", ""))), FONT_SIZE_CARD_META, STEEL_DARK)
 			return
-	_draw_framed_panel(canvas, rect, 8.0, STEEL)
+	_draw_text_token(canvas, rect, _get_blueprint_token_text(token_name), FONT_SIZE_CARD_META, STEEL_DARK)
 
 static func _get_blueprint_token_spec(token_name: String) -> Dictionary:
 	if BLUEPRINT_SPECIAL_TOKENS.has(token_name):
@@ -751,84 +660,6 @@ static func _get_blueprint_token_spec(token_name: String) -> Dictionary:
 	if BLUEPRINT_LOCATION_TOKENS.has(token_name):
 		return {"kind": "location", "value": str(BLUEPRINT_LOCATION_TOKENS[token_name])}
 	return {}
-
-static func _draw_blueprint_location_icon(canvas: Control, rect: Rect2, location_type: String) -> void:
-	match location_type:
-		"pond":
-			_draw_location_basin(canvas, rect, rect.end.y - 8.0, true, null)
-		"crater":
-			_draw_location_basin(canvas, rect, rect.end.y - 8.0, false, null)
-		"tower":
-			_draw_location_tower(canvas, rect, rect.end.y - 8.0, false, null)
-		"surveillance_zone":
-			_draw_location_tower(canvas, rect, rect.end.y - 8.0, true, null)
-		"facility", "field", "dump":
-			_draw_location_facility(canvas, rect, rect.end.y - 8.0, location_type, null, null, null)
-		"bunker":
-			_draw_location_bunker(canvas, rect, rect.end.y - 8.0, false, null)
-		"cache":
-			_draw_location_bunker(canvas, rect, rect.end.y - 8.0, true, null)
-		"nest":
-			_draw_location_nest(canvas, rect, rect.end.y - 8.0, null)
-		"ruin":
-			_draw_location_ruin(canvas, rect, rect.end.y - 8.0, null)
-		_:
-			_draw_framed_panel(canvas, rect, 8.0, STEEL)
-
-static func _draw_blueprint_operator_icon(canvas: Control, rect: Rect2) -> void:
-	var head_center := rect.position + Vector2(rect.size.x * 0.5, rect.size.y * 0.34)
-	canvas.draw_circle(head_center, 7.0, STEEL_DARK)
-	var bust := PackedVector2Array([
-		rect.position + Vector2(rect.size.x * 0.28, rect.size.y * 0.92),
-		rect.position + Vector2(rect.size.x * 0.36, rect.size.y * 0.66),
-		rect.position + Vector2(rect.size.x * 0.64, rect.size.y * 0.66),
-		rect.position + Vector2(rect.size.x * 0.72, rect.size.y * 0.92),
-	])
-	canvas.draw_colored_polygon(bust, STEEL_DARK)
-	_draw_poly_outline(canvas, bust, PANEL_BORDER, 1.0)
-
-static func _draw_blueprint_machine_icon(canvas: Control, rect: Rect2, kind: String) -> void:
-	var inset := rect.grow(-8.0)
-	match kind:
-		"bench":
-			canvas.draw_rect(Rect2(Vector2(inset.position.x + 6.0, inset.position.y + 8.0), Vector2(inset.size.x - 12.0, 8.0)), STEEL)
-			canvas.draw_rect(Rect2(Vector2(inset.position.x + 14.0, inset.position.y + 4.0), Vector2(inset.size.x - 28.0, 6.0)), TAPE)
-			canvas.draw_line(Vector2(inset.position.x + 12.0, inset.end.y - 6.0), Vector2(inset.position.x + 16.0, inset.position.y + 16.0), PANEL_BORDER, 1.4)
-			canvas.draw_line(Vector2(inset.end.x - 12.0, inset.end.y - 6.0), Vector2(inset.end.x - 16.0, inset.position.y + 16.0), PANEL_BORDER, 1.4)
-		"route":
-			canvas.draw_rect(inset, STEEL_DARK)
-			canvas.draw_rect(inset.grow(-2.0), PANEL_INNER)
-			for dot_y in range(3):
-				for dot_x in range(3):
-					canvas.draw_circle(inset.position + Vector2(10.0 + float(dot_x) * 12.0, 10.0 + float(dot_y) * 10.0), 1.2, TAPE_SHADE)
-			canvas.draw_circle(inset.get_center(), 2.4, ACCENT)
-		"charge":
-			canvas.draw_rect(inset, STEEL)
-			canvas.draw_rect(inset.grow(-2.0), STEEL_DARK)
-			_draw_power_suit(canvas, inset.grow(-8.0), true, 2.0)
-		"journal":
-			canvas.draw_rect(inset, TAPE)
-			canvas.draw_rect(inset.grow(-2.0), Color(0.91, 0.85, 0.72))
-			canvas.draw_line(Vector2(inset.position.x + 6.0, inset.position.y + 10.0), Vector2(inset.position.x + 6.0, inset.end.y - 6.0), PANEL_BORDER, 1.6)
-			for line_index in range(3):
-				var line_y := inset.position.y + 10.0 + float(line_index) * 8.0
-				canvas.draw_line(Vector2(inset.position.x + 12.0, line_y), Vector2(inset.end.x - 6.0, line_y), TAPE_SHADE, 1.2)
-		"trash":
-			var bin_rect := Rect2(Vector2(inset.position.x + 10.0, inset.position.y + 10.0), Vector2(inset.size.x - 20.0, inset.size.y - 16.0))
-			var lid_rect := Rect2(Vector2(bin_rect.position.x - 2.0, bin_rect.position.y - 6.0), Vector2(bin_rect.size.x + 4.0, 5.0))
-			canvas.draw_rect(bin_rect, STEEL_DARK)
-			canvas.draw_rect(bin_rect.grow(-2.0), STEEL)
-			canvas.draw_rect(lid_rect, STEEL_DARK)
-			canvas.draw_rect(Rect2(Vector2(bin_rect.position.x + bin_rect.size.x * 0.5 - 4.0, lid_rect.position.y - 3.0), Vector2(8.0, 2.0)), STEEL_DARK)
-
-static func _draw_blueprint_tape_icon(canvas: Control, rect: Rect2, programmed: bool) -> void:
-	if _tape_device_art == null:
-		_tape_device_art = load_svg_texture("res://assets/cards/device_pixelperfect_fixed.svg")
-	if not _draw_texture_fit(canvas, _tape_device_art, rect, 6.0):
-		_draw_framed_panel(canvas, rect, 10.0, STEEL)
-	if programmed:
-		for hole_index in range(3):
-			canvas.draw_circle(rect.position + Vector2(12.0 + float(hole_index) * 10.0, rect.end.y - 12.0), 1.4, TAPE_HOLE)
 
 static func draw_crafted_card(canvas: Control, rect: Rect2, card_data: Dictionary) -> void:
 	var shell := _draw_card_variant(canvas, rect, "crafted")
@@ -971,24 +802,7 @@ static func _get_card_class_colors(card_class: String) -> Dictionary:
 static func _draw_programming_bench_art(canvas: Control, rect: Rect2) -> void:
 	if _draw_texture_fit(canvas, _get_machine_texture("bench"), rect):
 		return
-	var body_rect := Rect2(Vector2(rect.position.x + 8.0, rect.position.y + 12.0), Vector2(rect.size.x - 16.0, 30.0))
-	var tape_rect := Rect2(Vector2(body_rect.position.x + 12.0, body_rect.position.y + 9.0), Vector2(body_rect.size.x - 24.0, 12.0))
-	var left_roller := Rect2(Vector2(tape_rect.position.x - 10.0, tape_rect.position.y - 4.0), Vector2(6.0, tape_rect.size.y + 8.0))
-	var right_roller := Rect2(Vector2(tape_rect.end.x + 4.0, tape_rect.position.y - 4.0), Vector2(6.0, tape_rect.size.y + 8.0))
-	var punch_rect := Rect2(Vector2(tape_rect.get_center().x - 7.0, tape_rect.position.y - 10.0), Vector2(14.0, 28.0))
-	var deck_rect := Rect2(Vector2(body_rect.position.x + 8.0, body_rect.end.y + 10.0), Vector2(body_rect.size.x - 16.0, 10.0))
-	_draw_machine_panel(canvas, body_rect, Color(0.14, 0.15, 0.18), null, PANEL_BORDER, 0.0)
-	canvas.draw_rect(Rect2(Vector2(body_rect.position.x + 12.0, body_rect.position.y + 8.0), Vector2(body_rect.size.x - 24.0, 3.0)), ACCENT_DIM)
-	_draw_machine_panel(canvas, left_roller, STEEL_DARK, STEEL)
-	_draw_machine_panel(canvas, right_roller, STEEL_DARK, STEEL)
-	_draw_preview_tape(canvas, tape_rect, 6, 1)
-	_draw_machine_panel(canvas, punch_rect, Color(0.61, 0.54, 0.40), Color(0.71, 0.65, 0.49), PANEL_BORDER)
-	_draw_machine_panel(canvas, deck_rect, Color(0.12, 0.13, 0.15), null, PANEL_BORDER, 0.0)
-	var key_origin := deck_rect.position + Vector2(16.0, 3.0)
-	for column in range(4):
-		var key_center := key_origin + Vector2(column * 13.0, 2.0)
-		canvas.draw_circle(key_center, 1.6, STEEL_DARK)
-		canvas.draw_circle(key_center, 1.0, Color(0.17, 0.18, 0.20))
+	_draw_art_label(canvas, rect, "bench")
 
 static func _draw_route_table_card_art(canvas: Control, rect: Rect2, route_overlay: Callable) -> void:
 	var outer_size := minf(rect.size.x - 2.0, rect.size.y - 2.0)
@@ -1002,42 +816,17 @@ static func _draw_route_table_card_art(canvas: Control, rect: Rect2, route_overl
 static func _draw_journal_machine_art(canvas: Control, rect: Rect2) -> void:
 	if _draw_texture_fit(canvas, _get_machine_texture("journal"), rect):
 		return
-	var cover_rect := rect.grow(-10.0)
-	canvas.draw_rect(cover_rect, TAPE)
-	canvas.draw_rect(cover_rect, PANEL_BORDER, false, 1.0)
+	_draw_art_label(canvas, rect, "journal")
 
 static func _draw_trash_machine_art(canvas: Control, rect: Rect2) -> void:
 	if _draw_texture_fit(canvas, _get_machine_texture("trash"), rect):
 		return
-	var inner_rect := rect.grow(-4.0)
-	var bin_color := Color(0.28, 0.29, 0.31)
-	var body_rect := Rect2(Vector2(inner_rect.position.x + 16.0, inner_rect.position.y + 16.0), Vector2(inner_rect.size.x - 32.0, 36.0))
-	var lid_rect := Rect2(Vector2(body_rect.position.x - 5.0, body_rect.position.y - 8.0), Vector2(body_rect.size.x + 10.0, 8.0))
-	var slot_rect := Rect2(Vector2(body_rect.position.x + 12.0, body_rect.position.y - 2.0), Vector2(body_rect.size.x - 24.0, 2.0))
-	var paper_rect := Rect2(Vector2(inner_rect.position.x + inner_rect.size.x * 0.5 - 10.0, inner_rect.position.y + 8.0), Vector2(20.0, 14.0))
-	_draw_machine_panel(canvas, lid_rect, bin_color, Color(0.20, 0.21, 0.23))
-	_draw_machine_panel(canvas, body_rect, bin_color, Color(0.18, 0.19, 0.20))
-	canvas.draw_rect(slot_rect, Color(0.09, 0.10, 0.12))
-	canvas.draw_rect(paper_rect, TAPE)
-	canvas.draw_rect(paper_rect, Color(0.60, 0.52, 0.31), false, 1.0)
-	canvas.draw_line(paper_rect.position + Vector2(4.0, 4.0), paper_rect.end - Vector2(4.0, 4.0), Color(0.46, 0.16, 0.13), 1.2)
-	canvas.draw_line(Vector2(body_rect.position.x + 12.0, body_rect.position.y + 4.0), Vector2(body_rect.position.x + 8.0, body_rect.end.y - 6.0), STEEL_LIGHT, 1.0)
-	canvas.draw_line(Vector2(body_rect.end.x - 12.0, body_rect.position.y + 4.0), Vector2(body_rect.end.x - 8.0, body_rect.end.y - 6.0), STEEL_LIGHT, 1.0)
+	_draw_art_label(canvas, rect, "trash")
 
 static func _draw_charge_machine_art(canvas: Control, rect: Rect2) -> void:
 	if _draw_texture_fit(canvas, _get_machine_texture("charge"), rect):
 		return
-	var inner_rect := rect.grow(-4.0)
-	var drum_rect := Rect2(Vector2(inner_rect.position.x + 12.0, inner_rect.position.y + 16.0), Vector2(inner_rect.size.x - 24.0, 28.0))
-	var tray_rect := Rect2(Vector2(inner_rect.position.x + 16.0, inner_rect.end.y - 28.0), Vector2(inner_rect.size.x - 32.0, 14.0))
-	var crank_center := Vector2(drum_rect.end.x - 12.0, drum_rect.get_center().y)
-	_draw_machine_panel(canvas, drum_rect, Color(0.24, 0.25, 0.28), Color(0.17, 0.18, 0.20))
-	_draw_power_suit(canvas, Rect2(drum_rect.position + Vector2(10.0, 8.0), Vector2(drum_rect.size.x - 32.0, 10.0)), true, 1.3)
-	canvas.draw_line(crank_center + Vector2(-8.0, 0.0), crank_center + Vector2(3.0, 0.0), TAPE, 1.5)
-	canvas.draw_line(crank_center + Vector2(3.0, 0.0), crank_center + Vector2(8.0, -6.0), TAPE, 1.5)
-	canvas.draw_circle(crank_center + Vector2(8.0, -6.0), 2.0, TAPE)
-	_draw_machine_panel(canvas, tray_rect, TAPE, null, TAPE_SHADE, 0.0)
-	canvas.draw_rect(Rect2(tray_rect.position + Vector2(10.0, 3.0), Vector2(tray_rect.size.x - 20.0, 8.0)), Color(0.88, 0.82, 0.66))
+	_draw_art_label(canvas, rect, "power")
 
 static func _draw_preview_tape(canvas: Control, rect: Rect2, visible_rows: int, active_row: int) -> void:
 	canvas.draw_rect(rect, TAPE_SHADE)
@@ -1057,34 +846,15 @@ static func _draw_preview_tape(canvas: Control, rect: Rect2, visible_rows: int, 
 		canvas.draw_rect(highlight_rect, Color(0.85, 0.68, 0.28, 0.18))
 		canvas.draw_rect(highlight_rect, ACCENT, false, 1.0)
 
-static func _draw_tape_suit(canvas: Control, rect: Rect2, programmed: bool) -> void:
-	var strip_rect := Rect2(rect.position + Vector2(0.0, 2.0), Vector2(rect.size.x, rect.size.y - 4.0))
-	canvas.draw_rect(strip_rect, TAPE_SHADE if programmed else Color(0.70, 0.70, 0.72))
-	canvas.draw_rect(strip_rect, Color(0.56, 0.48, 0.28), false, 1.0)
-	for hole_index in range(5):
-		var hole_center := Vector2(strip_rect.position.x + 5.0 + float(hole_index) * ((strip_rect.size.x - 10.0) / 4.0), strip_rect.position.y + strip_rect.size.y * 0.5)
-		canvas.draw_circle(hole_center, 0.9, TAPE_HOLE if programmed else STEEL_LIGHT)
-
 static func _draw_enemy_glyph(canvas: Control, rect: Rect2, enemy_type: String) -> void:
 	if _draw_texture_fit(canvas, _get_enemy_texture(enemy_type), rect):
 		return
-	match enemy_type:
-		"swarm":
-			for point in [Vector2(24, 18), Vector2(42, 28), Vector2(32, 42), Vector2(54, 46)]:
-				canvas.draw_circle(rect.position + point, 4.0, TAPE)
-		"raider":
-			var triangle := PackedVector2Array([rect.position + Vector2(rect.size.x * 0.5, 16.0), rect.position + Vector2(24.0, rect.size.y - 18.0), rect.position + Vector2(rect.size.x - 24.0, rect.size.y - 18.0)])
-			canvas.draw_colored_polygon(triangle, TAPE)
-			_draw_poly_outline(canvas, triangle, STEEL_DARK, 1.0)
-		_:
-			var body := rect.get_center()
-			canvas.draw_circle(body + Vector2(0.0, -6.0), 8.0, TAPE)
-			canvas.draw_line(body + Vector2(-10.0, 6.0), body + Vector2(10.0, 6.0), TAPE, 2.0)
+	_draw_text_token(canvas, rect, enemy_type, FONT_SIZE_CARD_META, STEEL_DARK)
 
 static func _draw_material_glyph(canvas: Control, rect: Rect2, material_type: String) -> void:
 	if _draw_texture_fit(canvas, _get_material_texture(material_type), rect):
 		return
-	_draw_framed_panel(canvas, rect, 12.0, STEEL)
+	_draw_text_token(canvas, rect, material_type, FONT_SIZE_CARD_META, STEEL_DARK)
 
 static func _draw_empty_drone_card_face(canvas: Control, window_rect: Rect2, outside_status: String) -> void:
 	canvas.draw_rect(window_rect.grow(-10.0), Color(0.10, 0.11, 0.12))
@@ -1122,139 +892,20 @@ static func _draw_drone_power_badge(canvas: Control, rect: Rect2, power_charge: 
 	_draw_power_suit(canvas, suit_rect, power_charge > 0, 1.0)
 	_draw_card_text(canvas, Rect2(Vector2(rect.position.x + 12.0, rect.position.y + 1.0), Vector2(rect.size.x - 12.0, rect.size.y - 2.0)), value_text, "badge_value_right", TAPE)
 
-static func _draw_drone_silhouette(canvas: Control, rect: Rect2) -> void:
-	var chassis_rect := Rect2(Vector2(rect.position.x + rect.size.x * 0.5 - 19.0, rect.position.y + 36.0), Vector2(38.0, 18.0))
-	var chassis_top := Rect2(Vector2(chassis_rect.position.x + 4.0, chassis_rect.position.y + 2.0), Vector2(chassis_rect.size.x - 8.0, 4.0))
-	var optic_pod := Rect2(Vector2(chassis_rect.position.x + 6.0, chassis_rect.position.y + 2.0), Vector2(11.0, 11.0))
-	var service_hatch := Rect2(Vector2(chassis_rect.end.x - 12.0, chassis_rect.position.y + 4.0), Vector2(8.0, 8.0))
-	var spring_gauge := Rect2(Vector2(chassis_rect.position.x + 20.0, chassis_rect.position.y + 4.0), Vector2(9.0, 4.0))
-	var belly_plate := Rect2(Vector2(chassis_rect.position.x + 10.0, chassis_rect.end.y - 2.0), Vector2(chassis_rect.size.x - 20.0, 3.0))
-	canvas.draw_rect(chassis_rect, STEEL_DARK)
-	canvas.draw_rect(chassis_rect.grow(-2.0), Color(0.17, 0.18, 0.20))
-	canvas.draw_rect(chassis_top, STEEL_LIGHT)
-	canvas.draw_rect(optic_pod, STEEL)
-	canvas.draw_rect(service_hatch, Color(0.15, 0.15, 0.17))
-	canvas.draw_rect(spring_gauge, Color(0.10, 0.10, 0.11))
-	canvas.draw_rect(Rect2(spring_gauge.position + Vector2(1.0, 1.0), Vector2(5.0, spring_gauge.size.y - 2.0)), ACCENT_DIM)
-	canvas.draw_rect(belly_plate, ACCENT_DIM)
-	canvas.draw_rect(chassis_rect, PANEL_BORDER, false, 2.0)
-	canvas.draw_rect(optic_pod, PANEL_BORDER, false, 1.0)
-	canvas.draw_rect(service_hatch, PANEL_BORDER, false, 1.0)
-	var sensor_center := optic_pod.position + optic_pod.size * 0.5
-	canvas.draw_circle(sensor_center, 4.0, STEEL_DARK)
-	canvas.draw_circle(sensor_center, 2.7, STEEL)
-	canvas.draw_circle(sensor_center, 1.3, TEXT)
-	canvas.draw_circle(sensor_center + Vector2(-0.6, -0.6), 0.7, ACCENT)
-	for bolt in [chassis_rect.position + Vector2(6.0, chassis_rect.size.y - 5.0), chassis_rect.position + Vector2(chassis_rect.size.x - 6.0, chassis_rect.size.y - 5.0)]:
-		canvas.draw_circle(bolt, 1.3, STEEL_LIGHT)
-	var key_center := Vector2(chassis_rect.position.x + chassis_rect.size.x * 0.5 + 6.0, chassis_rect.position.y - 2.0)
-	canvas.draw_line(key_center + Vector2(-2.2, 0.0), key_center + Vector2(-2.2, -7.0), STEEL_DARK, 2.0)
-	canvas.draw_line(key_center + Vector2(2.2, 0.0), key_center + Vector2(2.2, -7.0), STEEL_DARK, 2.0)
-	canvas.draw_arc(key_center + Vector2(-2.2, -8.5), 3.0, 0.0, TAU, 12, STEEL_DARK, 1.8)
-	canvas.draw_arc(key_center + Vector2(2.2, -8.5), 3.0, 0.0, TAU, 12, STEEL_DARK, 1.8)
-	var left_anchors := [Vector2(0.0, 3.0), Vector2(0.0, 7.0), Vector2(0.0, 11.0), Vector2(0.0, 15.0)]
-	var right_anchors := [Vector2(chassis_rect.size.x, 3.0), Vector2(chassis_rect.size.x, 7.0), Vector2(chassis_rect.size.x, 11.0), Vector2(chassis_rect.size.x, 15.0)]
-	var left_knees := [Vector2(-8.0, -1.0), Vector2(-12.0, 2.0), Vector2(-13.0, 7.0), Vector2(-10.0, 12.0)]
-	var right_knees := [Vector2(8.0, -1.0), Vector2(12.0, 2.0), Vector2(13.0, 7.0), Vector2(10.0, 12.0)]
-	for leg_index in range(4):
-		var left_anchor: Vector2 = chassis_rect.position + left_anchors[leg_index]
-		var right_anchor: Vector2 = chassis_rect.position + right_anchors[leg_index]
-		_draw_spider_leg(canvas, left_anchor, left_knees[leg_index], true)
-		_draw_spider_leg(canvas, right_anchor, right_knees[leg_index], false)
-
 static func _draw_spider_drone_art(canvas: Control, rect: Rect2) -> void:
 	if _draw_texture_fit(canvas, _get_drone_texture("spider"), rect):
 		return
-	_draw_drone_silhouette(canvas, rect)
-
-static func _draw_spider_leg(canvas: Control, anchor: Vector2, knee_offset: Vector2, is_left: bool) -> void:
-	var knee := anchor + knee_offset
-	var shin := knee + Vector2(-10.0 if is_left else 10.0, 8.0)
-	var foot := shin + Vector2(-5.0 if is_left else 5.0, 12.0)
-	_draw_leg_segment(canvas, anchor, knee, shin, foot)
-
-static func _draw_butterfly_drone(canvas: Control, rect: Rect2) -> void:
-	var body_center := rect.position + Vector2(rect.size.x * 0.5, 42.0)
-	var head_center := body_center + Vector2(0.0, -18.0)
-	var thorax_rect := Rect2(Vector2(body_center.x - 6.0, body_center.y - 10.0), Vector2(12.0, 18.0))
-	var spring_rect := Rect2(Vector2(body_center.x - 3.5, body_center.y - 2.0), Vector2(7.0, 34.0))
-	var key_axle_rect := Rect2(Vector2(body_center.x - 2.0, body_center.y - 4.0), Vector2(4.0, 14.0))
-	var key_bar_y := body_center.y + 3.0
-	var lower_tail := PackedVector2Array([body_center + Vector2(-5.0, 28.0), body_center + Vector2(0.0, 36.0), body_center + Vector2(5.0, 28.0), body_center + Vector2(0.0, 20.0)])
-	canvas.draw_circle(head_center, 4.0, STEEL_DARK)
-	canvas.draw_rect(thorax_rect, STEEL_DARK)
-	canvas.draw_rect(thorax_rect.grow(-1.0), ACCENT_DIM)
-	canvas.draw_rect(spring_rect, STEEL_DARK)
-	canvas.draw_rect(spring_rect.grow(-1.0), TAPE)
-	canvas.draw_rect(key_axle_rect, STEEL_DARK)
-	canvas.draw_line(Vector2(body_center.x - 8.0, key_bar_y), Vector2(body_center.x + 8.0, key_bar_y), STEEL_DARK, 2.0)
-	canvas.draw_arc(Vector2(body_center.x - 8.0, key_bar_y - 3.0), 3.0, 0.0, TAU, 12, STEEL_DARK, 1.8)
-	canvas.draw_arc(Vector2(body_center.x + 8.0, key_bar_y - 3.0), 3.0, 0.0, TAU, 12, STEEL_DARK, 1.8)
-	canvas.draw_circle(Vector2(body_center.x, key_bar_y), 2.0, STEEL_LIGHT)
-	canvas.draw_line(spring_rect.position + Vector2(0.0, 4.0), spring_rect.position + Vector2(spring_rect.size.x, 4.0), PANEL_BORDER, 1.0)
-	canvas.draw_line(spring_rect.position + Vector2(0.0, 10.0), spring_rect.position + Vector2(spring_rect.size.x, 10.0), PANEL_BORDER, 1.0)
-	canvas.draw_line(spring_rect.position + Vector2(0.0, 16.0), spring_rect.position + Vector2(spring_rect.size.x, 16.0), PANEL_BORDER, 1.0)
-	canvas.draw_colored_polygon(lower_tail, STEEL_DARK)
-	var upper_left := PackedVector2Array([body_center + Vector2(-5.0, -10.0), body_center + Vector2(-24.0, -26.0), body_center + Vector2(-39.0, -20.0), body_center + Vector2(-33.0, -3.0), body_center + Vector2(-12.0, -1.0), body_center + Vector2(-6.0, -4.0)])
-	var upper_right := PackedVector2Array([body_center + Vector2(5.0, -10.0), body_center + Vector2(24.0, -26.0), body_center + Vector2(39.0, -20.0), body_center + Vector2(33.0, -3.0), body_center + Vector2(12.0, -1.0), body_center + Vector2(6.0, -4.0)])
-	var lower_left := PackedVector2Array([body_center + Vector2(-4.0, 6.0), body_center + Vector2(-16.0, 13.0), body_center + Vector2(-26.0, 24.0), body_center + Vector2(-24.0, 37.0), body_center + Vector2(-13.0, 44.0), body_center + Vector2(-5.0, 34.0), body_center + Vector2(-2.0, 18.0)])
-	var lower_right := PackedVector2Array([body_center + Vector2(4.0, 6.0), body_center + Vector2(16.0, 13.0), body_center + Vector2(26.0, 24.0), body_center + Vector2(24.0, 37.0), body_center + Vector2(13.0, 44.0), body_center + Vector2(5.0, 34.0), body_center + Vector2(2.0, 18.0)])
-	_draw_butterfly_wing(canvas, upper_left, 4)
-	_draw_butterfly_wing(canvas, upper_right, 4)
-	_draw_butterfly_wing(canvas, lower_left, 5)
-	_draw_butterfly_wing(canvas, lower_right, 5)
-	canvas.draw_line(head_center + Vector2(-1.0, -2.0), head_center + Vector2(-7.0, -10.0), ACCENT_DIM, 1.4)
-	canvas.draw_line(head_center + Vector2(1.0, -2.0), head_center + Vector2(7.0, -10.0), ACCENT_DIM, 1.4)
-	canvas.draw_arc(head_center + Vector2(-7.0, -12.0), 2.5, 0.0, TAU, 10, STEEL_DARK, 1.1)
-	canvas.draw_arc(head_center + Vector2(7.0, -12.0), 2.5, 0.0, TAU, 10, STEEL_DARK, 1.1)
+	_draw_text_token(canvas, rect, "spider", FONT_SIZE_CARD_META, STEEL_DARK)
 
 static func _draw_butterfly_drone_art(canvas: Control, rect: Rect2) -> void:
 	if _draw_texture_fit(canvas, _get_drone_texture("butterfly"), rect):
 		return
-	_draw_butterfly_drone(canvas, rect)
-
-static func _draw_butterfly_wing(canvas: Control, points: PackedVector2Array, rib_count: int) -> void:
-	canvas.draw_colored_polygon(points, TAPE)
-	for point_index in range(points.size()):
-		var next_index: int = (point_index + 1) % points.size()
-		canvas.draw_line(points[point_index], points[next_index], STEEL_DARK, 2.4)
-	var root := points[points.size() - 1]
-	var tip := points[0]
-	canvas.draw_line(root, tip, Color(0.58, 0.52, 0.37), 1.1)
-	for rib_index in range(1, mini(rib_count + 1, points.size() - 1)):
-		canvas.draw_line(root, points[rib_index], Color(0.58, 0.52, 0.37), 1.0)
-
-static func _draw_leg_segment(canvas: Control, anchor: Vector2, joint_a: Vector2, joint_b: Vector2, foot: Vector2) -> void:
-	canvas.draw_line(anchor, joint_a, STEEL_DARK, 4.0)
-	canvas.draw_line(joint_a, joint_b, STEEL_DARK, 4.0)
-	canvas.draw_line(joint_b, foot, STEEL_DARK, 4.0)
-	canvas.draw_line(anchor, joint_a, ACCENT_DIM, 1.8)
-	canvas.draw_line(joint_a, joint_b, ACCENT_DIM, 1.8)
-	canvas.draw_line(joint_b, foot, ACCENT_DIM, 1.8)
-	for point in [anchor, joint_a, joint_b]:
-		canvas.draw_circle(point, 2.2, STEEL_DARK)
-		canvas.draw_circle(point, 1.1, STEEL_LIGHT)
+	_draw_text_token(canvas, rect, "butterfly", FONT_SIZE_CARD_META, STEEL_DARK)
 
 static func _draw_power_suit(canvas: Control, rect: Rect2, charged: bool, line_width: float = 1.5) -> void:
 	if _draw_texture_fit(canvas, _get_material_texture("spring"), rect):
 		return
-	var color := ACCENT if charged else STEEL_LIGHT
-	var left := rect.position.x + 1.0
-	var right := rect.end.x - 1.0
-	var cy := rect.get_center().y
-	var amp := rect.size.y * 0.32
-	var pts := PackedVector2Array()
-	for step in range(9):
-		var t := float(step) / 8.0
-		var x := lerpf(left + 2.0, right - 2.0, t)
-		var y := cy
-		if step > 0 and step < 8:
-			y += amp if step % 2 == 0 else -amp
-		pts.append(Vector2(x, y))
-	canvas.draw_line(Vector2(left, cy), pts[0], color, line_width)
-	for i in range(pts.size() - 1):
-		canvas.draw_line(pts[i], pts[i + 1], color, line_width)
-	canvas.draw_line(pts[-1], Vector2(right, cy), color, line_width)
+	_draw_text_token(canvas, rect, "power", FONT_SIZE_CARD_META, ACCENT if charged else STEEL_LIGHT)
 
 static func _draw_disabled_hatch(canvas: Control, rect: Rect2) -> void:
 	var x := rect.position.x - rect.size.y

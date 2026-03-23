@@ -23,6 +23,7 @@ const OPCODE_LABELS := {
 	13: "JNZ",
 	15: "JMP",
 	17: "DIE",
+	18: "ATK",
 }
 
 const DEFAULT_LABELS := {
@@ -40,6 +41,7 @@ const DEFAULT_LABELS := {
 	13: "JNZ",
 	15: "JMP",
 	17: "DIE",
+	18: "ATK",
 }
 
 const EXAMPLE_INDEXES := [11, 3, 8, 10, 13, 1, 17]

@@ -1,0 +1,309 @@
+{
+  "version": 1,
+  "generated_from_current_game_state": true,
+  "operator": {
+    "id": "operator",
+    "label": "Operator",
+    "max_energy": 12,
+    "max_hp": 6,
+    "role": "field researcher and crafter"
+  },
+  "machines": [
+    {
+      "id": "bench",
+      "label": "Programming Bench",
+      "card_kind": "machine",
+      "role": "punch/program media and bench-based crafting"
+    },
+    {
+      "id": "route",
+      "label": "Route Table",
+      "card_kind": "machine",
+      "role": "launch drones, scan, map plotting, route-based crafting"
+    },
+    {
+      "id": "charge",
+      "label": "Charge Machine",
+      "card_kind": "machine",
+      "role": "generate and refill power units, charge-based crafting"
+    },
+    {
+      "id": "journal",
+      "label": "Journal",
+      "card_kind": "machine",
+      "role": "research, recipe discovery, blueprint generation"
+    },
+    {
+      "id": "trash",
+      "label": "Trash",
+      "card_kind": "machine",
+      "role": "discard cards and trash-based crafting"
+    }
+  ],
+  "drones": [
+    {
+      "id": "spider",
+      "label": "Spider Drone",
+      "card_kind": "drone",
+      "role": "ground travel, salvage, close terrain work"
+    },
+    {
+      "id": "butterfly",
+      "label": "Butterfly Drone",
+      "card_kind": "drone",
+      "role": "scouting, light retrieval, aerial delivery"
+    }
+  ],
+  "tapes": [
+    {
+      "id": "programmed",
+      "label": "Programmed Tape",
+      "card_kind": "tape",
+      "role": "contains executable drone instructions"
+    },
+    {
+      "id": "blank",
+      "label": "Blank Tape",
+      "card_kind": "tape",
+      "role": "empty media for new programs"
+    }
+  ],
+  "resources": [
+    {
+      "id": "spring_charge",
+      "label": "Power Unit",
+      "card_kind": "resource",
+      "role": "portable wound charge"
+    }
+  ],
+  "materials": [
+    {
+      "id": "metal",
+      "label": "Metal",
+      "card_kind": "material",
+      "role": "structural stock"
+    },
+    {
+      "id": "spring",
+      "label": "Spring",
+      "card_kind": "material",
+      "role": "tension stock"
+    },
+    {
+      "id": "paper",
+      "label": "Paper",
+      "card_kind": "material",
+      "role": "recording and wrapping stock"
+    },
+    {
+      "id": "biomass",
+      "label": "Biomass",
+      "card_kind": "material",
+      "role": "wet organic stock"
+    },
+    {
+      "id": "hide",
+      "label": "Hide",
+      "card_kind": "material",
+      "role": "flexible organic sheet stock"
+    },
+    {
+      "id": "bone",
+      "label": "Bone",
+      "card_kind": "material",
+      "role": "hard organic stock"
+    }
+  ],
+  "locations": [
+    {
+      "id": "cache",
+      "label": "Cache",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "crater",
+      "label": "Crater",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "tower",
+      "label": "Tower",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "surveillance_zone",
+      "label": "Surveillance Zone",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "facility",
+      "label": "Facility",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "pond",
+      "label": "Pond",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "bunker",
+      "label": "Bunker",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "field",
+      "label": "Field",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "dump",
+      "label": "Dump",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "nest",
+      "label": "Nest",
+      "card_kind": "location",
+      "generated_by_scan": true
+    },
+    {
+      "id": "ruin",
+      "label": "Ruin",
+      "card_kind": "location",
+      "generated_by_scan": false
+    }
+  ],
+  "enemies": [
+    {
+      "id": "surveillance_drone",
+      "label": "Surveillance Drone",
+      "card_kind": "enemy",
+      "attack": 1,
+      "hp": 3,
+      "threat_level": 1,
+      "loot_key": "surveillance_drone"
+    },
+    {
+      "id": "stalker",
+      "label": "Stalker",
+      "card_kind": "enemy",
+      "attack": 2,
+      "hp": 4,
+      "threat_level": 2,
+      "loot_key": "stalker"
+    },
+    {
+      "id": "wolf_pack",
+      "label": "Wolf Pack",
+      "card_kind": "enemy",
+      "attack": 2,
+      "hp": 4,
+      "threat_level": 2,
+      "loot_key": "wolf_pack"
+    },
+    {
+      "id": "infantry_drone",
+      "label": "Infantry Drone",
+      "card_kind": "enemy",
+      "attack": 3,
+      "hp": 5,
+      "threat_level": 3,
+      "loot_key": "infantry_drone"
+    },
+    {
+      "id": "grizzly",
+      "label": "Grizzly",
+      "card_kind": "enemy",
+      "attack": 4,
+      "hp": 7,
+      "threat_level": 4,
+      "loot_key": "grizzly"
+    }
+  ],
+  "crafted_results": [
+    "SCRAP FRAME",
+    "ROUTE PIN",
+    "WOUND CORE",
+    "TRIP LATCH",
+    "MEDIA STOCK",
+    "FIELD DOSSIER",
+    "ENERGY BAR",
+    "MEDICINE",
+    "BAIT PASTE",
+    "GROWTH MEDIUM",
+    "PADDED WRAP",
+    "HIDE SATCHEL",
+    "BONE NEEDLE",
+    "BONE CHARM",
+    "REED FILTER",
+    "BAIT BROTH",
+    "DUST SIEVE",
+    "IMPACT BRACE",
+    "SIGNAL MAST",
+    "WATCH GLASS",
+    "BLIND BANNER",
+    "SCRAMBLE KITE",
+    "PRESS FRAME",
+    "TOOL CHEST",
+    "SEALED LOCKER",
+    "HATCH BRACE",
+    "DRY RATIONS",
+    "FIBER BUNDLE",
+    "SCRAP BUNDLE",
+    "SORT BIN",
+    "ARCHIVE SATCHEL",
+    "SUPPLY WRAP",
+    "REPELLENT PASTE",
+    "BROOD CAGE",
+    "MASON BRACE",
+    "ARCHIVE SHELF",
+    "BLIND LENS",
+    "SIGNAL SCRAMBLER",
+    "ARMOR PATCH",
+    "SPRING BOLT",
+    "TRAIL NOTES",
+    "QUIET HARNESS",
+    "HIDE MANTLE",
+    "BONE HOOK",
+    "HIDE LEASH",
+    "PACK CALLER",
+    "CODE STRIP",
+    "ARCHIVE COPY",
+    "SURVEY MAP",
+    "ROUTE SLIP",
+    "WOUND PACK",
+    "RESERVE CHARGE",
+    "PULP SHEET",
+    "SCRAP SORTER",
+    "TRIP RIG",
+    "CLAW BRACE",
+    "GLIDE VANE",
+    "SCOUT SAIL",
+    "LOOP STRIP",
+    "ARCHIVE STRIP",
+    "FRESH TAPE",
+    "CLEAN STRIP",
+    "WOUND SPRING"
+  ],
+  "card_classes": [
+    "machine",
+    "drone",
+    "tape",
+    "resource",
+    "material",
+    "location",
+    "enemy",
+    "blueprint",
+    "crafted",
+    "operator"
+  ]
+}

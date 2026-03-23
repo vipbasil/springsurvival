@@ -1,0 +1,26 @@
+{
+  "surveillance_drone": [
+    {"kind": "power", "weight": 65},
+    {"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 2}
+  ],
+  "infantry_drone": [
+    {"kind": "material", "type": "metal", "weight": 65, "quantity_min": 1, "quantity_max": 3},
+    {"kind": "power", "weight": 35}
+  ],
+  "stalker": [
+    {"kind": "material", "type": "biomass", "weight": 40, "quantity_min": 1, "quantity_max": 2},
+    {"kind": "material", "type": "paper", "weight": 25, "quantity_min": 1, "quantity_max": 3},
+    {"kind": "material", "type": "metal", "weight": 20, "quantity_min": 1, "quantity_max": 2},
+    {"kind": "power", "weight": 15}
+  ],
+  "grizzly": [
+    {"kind": "material", "type": "hide", "weight": 50, "quantity_min": 1, "quantity_max": 2},
+    {"kind": "material", "type": "biomass", "weight": 35, "quantity_min": 2, "quantity_max": 4},
+    {"kind": "material", "type": "bone", "weight": 15, "quantity_min": 1, "quantity_max": 2}
+  ],
+  "wolf_pack": [
+    {"kind": "material", "type": "hide", "weight": 45, "quantity_min": 1, "quantity_max": 2},
+    {"kind": "material", "type": "biomass", "weight": 40, "quantity_min": 1, "quantity_max": 3},
+    {"kind": "material", "type": "bone", "weight": 15, "quantity_min": 1, "quantity_max": 1}
+  ]
+}

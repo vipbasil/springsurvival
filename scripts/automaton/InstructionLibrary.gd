@@ -8,6 +8,7 @@ const INSTRUCTIONS = {
     "SCN": {"type": "scn", "args": 0},
     "PCK": {"type": "pck", "args": 0},
     "DRP": {"type": "drp", "args": 0},
+    "ATK": {"type": "atk", "args": 0},
     "CHG": {"type": "chg", "args": 0},
     "JMP": {"type": "jmp", "args": 1},
     "JNZ": {"type": "jnz", "args": 1},

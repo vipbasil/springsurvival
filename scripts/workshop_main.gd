@@ -2,6 +2,7 @@ extends Control
 
 const WorkshopArtData := preload("res://scripts/ui/WorkshopArt.gd")
 const WorkshopCardRuntimeData := preload("res://scripts/ui/WorkshopCardRuntime.gd")
+const WorkshopTableControllerData := preload("res://scripts/ui/WorkshopTableController.gd")
 const PROGRAMMING_SCENE_PATH := "res://scenes/main/ProgrammingMain.tscn"
 const MACHINE_CAPACITY := 48.0
 const OUTSIDE_STEP_INTERVAL := 0.55
@@ -10,12 +11,17 @@ const ROUTE_SCAN_INTERVAL := 6.0
 const JOURNAL_RESEARCH_INTERVAL := 9.5
 const BLUEPRINT_CRAFT_INTERVAL := 6.5
 const ENEMY_FIGHT_INTERVAL := 2.2
+const BOT_RECOVERY_BASE_INTERVAL := 4.2
+const BOT_RECOVERY_PER_TILE_INTERVAL := 0.75
+const BOT_RECOVERY_ENCOUNTER_INTERVAL := 3.4
 const ATTACK_FEEDBACK_DURATION := 0.22
 const DAMAGE_FEEDBACK_DURATION := 0.30
 const RESEARCH_FEEDBACK_DURATION := 0.72
 const MERGE_FEEDBACK_DURATION := 0.40
 const FLOATING_NUMBER_DURATION := 0.60
 const DISCOVERY_BANNER_DURATION := 1.8
+const BOT_LOG_PAGE_SIZE := 12
+const TARGET_MARKER_FEEDBACK_DURATION := 1.6
 
 const WALL_DARK := Color(0.08, 0.09, 0.11)
 const WALL_MID := Color(0.11, 0.12, 0.15)
@@ -77,6 +83,7 @@ var _route_scan_cooldown := ROUTE_SCAN_INTERVAL
 var _journal_research_cooldown := JOURNAL_RESEARCH_INTERVAL
 var _blueprint_craft_cooldown := BLUEPRINT_CRAFT_INTERVAL
 var _enemy_fight_cooldowns := {}
+var _bot_recovery_process := {}
 var _selected_bot_index := 0
 var _selected_power_slot_index := -1
 var _drag_candidate := {}
@@ -101,6 +108,7 @@ var _table_material_positions := {}
 var _table_blueprint_positions := {}
 var _table_crafted_positions := {}
 var _combat_card_fx := {}
+var _location_marker_fx := {}
 var _floating_numbers := []
 var _floating_announcements := []
 var _journal_open := false
@@ -110,6 +118,12 @@ var _journal_prev_rect := Rect2()
 var _journal_next_rect := Rect2()
 var _journal_close_rect := Rect2()
 var _journal_viewed_subject_key := ""
+var _bot_log_open := false
+var _bot_log_bot_index := 0
+var _bot_log_page_index := 0
+var _bot_log_prev_rect := Rect2()
+var _bot_log_next_rect := Rect2()
+var _bot_log_close_rect := Rect2()
 var _location_bunker_texture: Texture2D
 var _location_cache_texture: Texture2D
 var _location_pond_texture: Texture2D
@@ -410,6 +424,7 @@ func _process(delta: float):
 	_tick_route_scan(delta)
 	_tick_journal_research(delta)
 	_tick_blueprint_crafting(delta)
+	_tick_bot_recovery(delta)
 	_tick_enemy_fights(delta)
 	_outside_step_cooldown -= delta
 	if _outside_step_cooldown > 0.0:
@@ -530,6 +545,88 @@ func _tick_blueprint_crafting(delta: float):
 		EventBus.log_message.emit("%s crafted" % str(crafted_card.get("result", "Item")))
 	queue_redraw()
 
+func _tick_bot_recovery(delta: float):
+	if not is_instance_valid(map_region):
+		return
+	var rect := _rect_in_root(map_region)
+	_ensure_table_layout(rect)
+	var candidate := _get_active_bot_recovery_candidate(rect)
+	if candidate.is_empty():
+		_bot_recovery_process.clear()
+		return
+	var bot_index := int(candidate.get("bot_index", -1))
+	if bot_index == -1:
+		_bot_recovery_process.clear()
+		return
+	if int(_bot_recovery_process.get("bot_index", -999)) != bot_index:
+		var duration := float(candidate.get("duration", BOT_RECOVERY_BASE_INTERVAL))
+		_bot_recovery_process = {
+			"bot_index": bot_index,
+			"rect": Rect2(candidate.get("rect", Rect2())),
+			"duration": duration,
+			"cooldown": duration,
+			"energy_cost": int(candidate.get("energy_cost", 1)),
+			"distance": int(candidate.get("distance", 0)),
+			"encounter_interval": BOT_RECOVERY_ENCOUNTER_INTERVAL,
+			"encounter_cooldown": minf(BOT_RECOVERY_ENCOUNTER_INTERVAL, maxf(duration * 0.5, 1.6)),
+			"encounter_rolls": 0,
+		}
+		EventBus.log_message.emit("Recovery started: %s" % _bot_display_name(bot_index))
+		queue_redraw()
+	var remaining_cooldown := maxf(float(_bot_recovery_process.get("cooldown", 0.0)) - delta, 0.0)
+	var remaining_encounter := maxf(float(_bot_recovery_process.get("encounter_cooldown", BOT_RECOVERY_ENCOUNTER_INTERVAL)) - delta, 0.0)
+	_bot_recovery_process["cooldown"] = remaining_cooldown
+	_bot_recovery_process["encounter_cooldown"] = remaining_encounter
+	queue_redraw()
+	if remaining_cooldown > 0.0 and remaining_encounter <= 0.0:
+		_bot_recovery_process["encounter_cooldown"] = float(_bot_recovery_process.get("encounter_interval", BOT_RECOVERY_ENCOUNTER_INTERVAL))
+		var encounter_rolls := int(_bot_recovery_process.get("encounter_rolls", 0))
+		_bot_recovery_process["encounter_rolls"] = encounter_rolls + 1
+		var encounter_chance := clampf(0.18 + float(int(_bot_recovery_process.get("distance", 0))) * 0.04 + float(encounter_rolls) * 0.08, 0.0, 0.68)
+		if randf() <= encounter_chance:
+			var enemy_card := GameState.spawn_random_enemy_card("bot_recovery")
+			var enemy_id := str(enemy_card.get("id", ""))
+			if not enemy_id.is_empty():
+				_place_generated_enemy_card(enemy_id, Rect2(candidate.get("rect", Rect2())))
+				_trigger_research_failure_card_feedback("operator", 0)
+				_trigger_research_failure_card_feedback("bot", bot_index)
+				_floating_announcements.append({
+					"position": Rect2(candidate.get("rect", Rect2())).get_center() + Vector2(0.0, -30.0),
+					"text": "HOSTILE CONTACT",
+					"subtext": str(enemy_card.get("display_name", "Hostile")),
+					"timer": DISCOVERY_BANNER_DURATION,
+					"duration": DISCOVERY_BANNER_DURATION,
+				})
+				EventBus.log_message.emit("Recovery encounter: %s" % str(enemy_card.get("display_name", "Hostile")))
+	if remaining_cooldown > 0.0:
+		return
+	var result := GameState.resolve_bot_recovery(bot_index)
+	_bot_recovery_process.clear()
+	if result.is_empty() or not bool(result.get("ok", false)):
+		EventBus.log_message.emit(str(result.get("message", "Recovery failed")))
+		return
+	_trigger_research_card_feedback("operator", 0)
+	_trigger_research_card_feedback("bot", bot_index)
+	var operator_center := Rect2(_table_operator_position, CARD_SIZE).get_center()
+	var energy_loss := int(result.get("energy_loss", 0))
+	var hp_loss := int(result.get("hp_loss", 0))
+	if energy_loss > 0:
+		_spawn_floating_feedback(operator_center + Vector2(-16.0, -18.0), "-%d EN" % energy_loss, Color(0.89, 0.71, 0.29), 68.0)
+	if hp_loss > 0:
+		_spawn_floating_feedback(operator_center + Vector2(14.0, -6.0), "-%d HP" % hp_loss, Color(0.93, 0.42, 0.34), 68.0)
+	var recovery_text := "DRONE RECOVERED"
+	if bool(result.get("collapsed", false)):
+		recovery_text = "RECOVERED - COLLAPSE"
+	_floating_announcements.append({
+		"position": Rect2(candidate.get("rect", Rect2())).get_center() + Vector2(0.0, -28.0),
+		"text": recovery_text,
+		"subtext": str(result.get("bot_name", "Drone")),
+		"timer": DISCOVERY_BANNER_DURATION,
+		"duration": DISCOVERY_BANNER_DURATION,
+	})
+	EventBus.log_message.emit(str(result.get("summary", "%s recovered" % _bot_display_name(bot_index))))
+	queue_redraw()
+
 func _tick_enemy_fights(delta: float):
 	if not is_instance_valid(map_region):
 		return
@@ -584,13 +681,21 @@ func _tick_combat_feedback(delta: float):
 		else:
 			_floating_numbers[index] = entry
 			active = true
-	for index in range(_floating_announcements.size() - 1, -1, -1):
-		var announcement: Dictionary = _floating_announcements[index]
+	for announcement_index in range(_floating_announcements.size() - 1, -1, -1):
+		var announcement: Dictionary = _floating_announcements[announcement_index]
 		announcement["timer"] = maxf(float(announcement.get("timer", DISCOVERY_BANNER_DURATION)) - delta, 0.0)
 		if float(announcement.get("timer", 0.0)) <= 0.0:
-			_floating_announcements.remove_at(index)
+			_floating_announcements.remove_at(announcement_index)
 		else:
-			_floating_announcements[index] = announcement
+			_floating_announcements[announcement_index] = announcement
+			active = true
+	for location_id in _location_marker_fx.keys():
+		var marker_entry: Dictionary = Dictionary(_location_marker_fx[location_id])
+		marker_entry["timer"] = maxf(float(marker_entry.get("timer", TARGET_MARKER_FEEDBACK_DURATION)) - delta, 0.0)
+		if float(marker_entry.get("timer", 0.0)) <= 0.0:
+			_location_marker_fx.erase(location_id)
+		else:
+			_location_marker_fx[location_id] = marker_entry
 			active = true
 	if active:
 		queue_redraw()
@@ -721,6 +826,16 @@ func _spawn_floating_feedback(position: Vector2, value: String, color: Color, wi
 		"width": width,
 	})
 
+func _trigger_location_target_feedback(location_id: String) -> void:
+	if location_id.is_empty():
+		return
+	_location_marker_fx[location_id] = {
+		"timer": TARGET_MARKER_FEEDBACK_DURATION,
+		"duration": TARGET_MARKER_FEEDBACK_DURATION,
+		"seed": float(location_id.hash() % 97),
+	}
+	_trigger_research_card_feedback("location", location_id)
+
 func _get_card_fx_key(kind: String, identifier) -> String:
 	return "%s:%s" % [kind, str(identifier)]
 
@@ -801,6 +916,33 @@ func _is_journal_research_operating() -> bool:
 		var journal_rect := Rect2(_table_journal_position, CARD_SIZE)
 		return _has_meaningful_overlap(journal_rect, operator_rect, 0.30)
 	return false
+
+func _get_active_bot_recovery_candidate(rect: Rect2) -> Dictionary:
+	_ensure_table_layout(rect)
+	var operator_rect := Rect2(_table_operator_position, CARD_SIZE)
+	for slot in _get_table_drone_data(rect):
+		var bot_index := int(slot.get("index", -1))
+		if bot_index == -1:
+			continue
+		if bool(slot.get("available_in_workshop", false)):
+			continue
+		if not GameState.can_recover_bot(bot_index):
+			continue
+		var drone_rect := Rect2(slot.get("rect", Rect2()))
+		if not _has_meaningful_overlap(drone_rect, operator_rect, 0.30):
+			continue
+		var distance := GameState.get_bot_recovery_distance(bot_index)
+		return {
+			"bot_index": bot_index,
+			"rect": drone_rect,
+			"distance": distance,
+			"energy_cost": GameState.get_bot_recovery_energy_cost(bot_index),
+			"duration": _get_bot_recovery_duration(distance),
+		}
+	return {}
+
+func _get_bot_recovery_duration(distance: int) -> float:
+	return BOT_RECOVERY_BASE_INTERVAL + float(maxi(distance, 1)) * BOT_RECOVERY_PER_TILE_INTERVAL
 
 func _get_journal_research_subject(rect: Rect2) -> Dictionary:
 	_ensure_table_layout(rect)
@@ -1060,6 +1202,12 @@ func _input(event: InputEvent):
 			_handle_journal_modal_click(modal_click.position)
 			queue_redraw()
 		return
+	if _bot_log_open:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			var log_click: InputEventMouseButton = event
+			_handle_bot_log_modal_click(log_click.position)
+			queue_redraw()
+		return
 	if not GameState.is_run_active():
 		return
 	if event is InputEventMouseMotion:
@@ -1099,6 +1247,8 @@ func _draw():
 	_draw_floating_announcements()
 	if _journal_open:
 		_draw_journal_overlay()
+	if _bot_log_open:
+		_draw_bot_log_overlay()
 	if not GameState.is_run_active():
 		_draw_run_end_overlay()
 
@@ -1189,119 +1339,43 @@ func _on_map_gui_input(event: InputEvent):
 		_ensure_table_layout(_rect_in_root(map_region))
 		var tape_data := _get_tape_hand_data(_rect_in_root(map_region))
 		var drone_data := _get_table_drone_data(_rect_in_root(map_region))
-		var badge_hit := _get_top_tape_badge_at_point(drone_data, root_point)
+		var badge_hit := WorkshopTableControllerData.get_top_tape_badge_at_point(drone_data, root_point)
 		if not badge_hit.is_empty():
-			var bot_index := int(badge_hit["index"])
-			var loaded_cartridge: Dictionary = badge_hit["loaded_cartridge"]
-			if not loaded_cartridge.is_empty():
-				_selected_bot_index = bot_index
-				var badge_rect := Rect2(badge_hit["tape_badge_rect"])
-				_begin_drag_candidate(root_point, badge_rect, "cartridge", {
-					"source": "bot",
-					"identifier": str(loaded_cartridge.get("id", "")),
-					"bot_index": bot_index,
-					"cartridge_id": str(loaded_cartridge.get("id", "")),
-				})
-				_drag_pickup_offset = Vector2(18.0, 24.0)
+			var badge_drag_state := WorkshopTableControllerData.build_badge_drag_state(root_point, badge_hit)
+			if not badge_drag_state.is_empty():
+				_selected_bot_index = int(badge_hit["index"])
+				_drag_start_root = Vector2(badge_drag_state.get("drag_start_root", root_point))
+				_drag_pickup_offset = Vector2(badge_drag_state.get("drag_pickup_offset", Vector2(18.0, 24.0)))
+				_drag_candidate = badge_drag_state
 			return
-		var top_card := _get_top_table_card_at_point(_rect_in_root(map_region), root_point)
+		var top_card := WorkshopTableControllerData.get_top_table_card_at_point(_get_table_visual_cards(_rect_in_root(map_region)), root_point)
 		if not top_card.is_empty():
-			var top_rect := Rect2(top_card["rect"])
-			match str(top_card.get("kind", "")):
-				"bench_card":
-					_begin_drag_candidate(root_point, top_rect, "bench_card")
-					return
-				"route_card":
-					_begin_drag_candidate(root_point, top_rect, "route_card")
-					return
-				"charge_card":
-					_begin_drag_candidate(root_point, top_rect, "charge_card")
-					return
-				"journal_card":
-					_begin_drag_candidate(root_point, top_rect, "journal_card")
-					return
-				"cartridge":
-					var cartridge_id := str(top_card.get("cartridge_id", ""))
-					if not cartridge_id.is_empty():
-						_begin_drag_candidate(root_point, top_rect, "cartridge", {
-							"source": "table",
-							"identifier": cartridge_id,
-							"cartridge_id": cartridge_id,
-						})
+			var top_drag_state := WorkshopTableControllerData.build_top_card_drag_state(root_point, top_card)
+			if not top_drag_state.is_empty():
+				match str(top_card.get("kind", "")):
+					"cartridge":
 						_selected_power_slot_index = -1
-						GameState.select_programmed_cartridge(cartridge_id)
-					return
-				"blank":
-					_begin_drag_candidate(root_point, top_rect, "blank", {
-						"identifier": int(top_card.get("blank_index", -1)),
-						"blank_index": int(top_card.get("blank_index", -1)),
-					})
-					return
-				"power":
-					var slot_index := int(top_card.get("slot_index", -1))
-					_begin_drag_candidate(root_point, top_rect, "power", {
-						"source": "table",
-						"identifier": slot_index,
-						"slot_index": slot_index,
-					})
-					_selected_power_slot_index = slot_index
-					return
-				"location":
-					_begin_drag_candidate(root_point, top_rect, "location", {
-						"identifier": str(top_card.get("location_id", "")),
-						"location_id": str(top_card.get("location_id", "")),
-						"card_data": Dictionary(top_card.get("card_data", {})),
-					})
-					return
-				"enemy":
-					_begin_drag_candidate(root_point, top_rect, "enemy", {
-						"identifier": str(top_card.get("enemy_id", "")),
-						"enemy_id": str(top_card.get("enemy_id", "")),
-						"card_data": Dictionary(top_card.get("card_data", {})),
-					})
-					return
-				"material":
-					_begin_drag_candidate(root_point, top_rect, "material", {
-						"identifier": str(top_card.get("material_id", "")),
-						"material_id": str(top_card.get("material_id", "")),
-						"card_data": Dictionary(top_card.get("card_data", {})),
-					})
-					return
-				"blueprint":
-					_begin_drag_candidate(root_point, top_rect, "blueprint", {
-						"identifier": str(top_card.get("blueprint_id", "")),
-						"blueprint_id": str(top_card.get("blueprint_id", "")),
-						"card_data": Dictionary(top_card.get("card_data", {})),
-					})
-					return
-				"crafted":
-					_begin_drag_candidate(root_point, top_rect, "crafted", {
-						"identifier": str(top_card.get("crafted_id", "")),
-						"crafted_id": str(top_card.get("crafted_id", "")),
-						"card_data": Dictionary(top_card.get("card_data", {})),
-					})
-					return
-				"bot":
-					_selected_bot_index = int(top_card.get("bot_index", 0))
-					_begin_drag_candidate(root_point, top_rect, "bot", {
-						"identifier": _selected_bot_index,
-						"bot_index": _selected_bot_index,
-					})
-					return
-				"operator":
-					_begin_drag_candidate(root_point, top_rect, "operator")
-					return
-				"trash_card":
-					_begin_drag_candidate(root_point, top_rect, "trash_card")
-					return
+						GameState.select_programmed_cartridge(str(top_card.get("cartridge_id", "")))
+					"power":
+						_selected_power_slot_index = int(top_card.get("slot_index", -1))
+					"bot":
+						_selected_bot_index = int(top_card.get("bot_index", 0))
+				_drag_start_root = Vector2(top_drag_state.get("drag_start_root", root_point))
+				_drag_pickup_offset = Vector2(top_drag_state.get("drag_pickup_offset", root_point - Rect2(top_card["rect"]).position))
+				_drag_candidate = top_drag_state
+				return
 
 func _complete_click_candidate(candidate: Dictionary):
 	match str(candidate.get("kind", "")):
 		"bot":
 			_selected_bot_index = int(candidate.get("bot_index", 0))
+			_bot_log_bot_index = _selected_bot_index
+			_bot_log_page_index = _get_latest_bot_log_page_index(_bot_log_bot_index)
+			_bot_log_open = true
 		"bench_card":
 			_open_programming_scene()
 		"journal_card":
+			_bot_log_open = false
 			_journal_open = true
 			_journal_page_index = clampi(_journal_page_index, 0, maxi(GameState.get_journal_entries().size() - 1, 0))
 			_journal_viewed_subject_key = _get_current_journal_subject_key()
@@ -1366,20 +1440,15 @@ func _cursor_shape_for_point(root_point: Vector2) -> int:
 
 func _is_valid_drop_target(root_point: Vector2) -> bool:
 	var drop_rect := _get_drop_rect(root_point)
-	match str(_active_drag.get("kind", "")):
-		"cartridge":
-			return _get_drop_drone_index_for_rect(drop_rect) != -1 or _is_rect_in_tape_hand(drop_rect) or _is_rect_in_recycle_zone(drop_rect)
-		"power":
-			return _get_drop_drone_index_for_rect(drop_rect) != -1 or _is_rect_in_charge_machine(drop_rect) or _is_rect_in_table_workspace(drop_rect) or _is_rect_in_recycle_zone(drop_rect)
-		"location", "material", "blueprint":
-			return _is_rect_in_table_workspace(drop_rect) or _is_rect_in_recycle_zone(drop_rect)
-		"crafted":
-			return _is_rect_in_table_workspace(drop_rect) or _is_rect_in_recycle_zone(drop_rect) or _has_meaningful_overlap(Rect2(_table_operator_position, CARD_SIZE), drop_rect, 0.30)
-		"bot", "blank", "operator", "enemy":
-			return _is_rect_in_table_workspace(drop_rect) or _is_rect_in_route_machine(drop_rect)
-		"bench_card", "route_card", "charge_card", "trash_card":
-			return _is_rect_in_table_workspace(drop_rect)
-	return false
+	return WorkshopTableControllerData.is_valid_drop_target(_active_drag, drop_rect, {
+		"has_drop_drone": _get_drop_drone_index_for_rect(drop_rect) != -1,
+		"in_tape_hand": _is_rect_in_tape_hand(drop_rect),
+		"in_recycle_zone": _is_rect_in_recycle_zone(drop_rect),
+		"in_table_workspace": _is_rect_in_table_workspace(drop_rect),
+		"in_route_machine": _is_rect_in_route_machine(drop_rect),
+		"in_charge_machine": _is_rect_in_charge_machine(drop_rect),
+		"overlaps_operator": _has_meaningful_overlap(Rect2(_table_operator_position, CARD_SIZE), drop_rect, 0.30),
+	})
 
 func _complete_cartridge_drag(drop_root: Vector2):
 	var cartridge_id := str(_active_drag.get("cartridge_id", ""))
@@ -1441,11 +1510,24 @@ func _complete_power_drag(drop_root: Vector2):
 func _complete_bot_drag(drop_root: Vector2):
 	var bot_index := int(_active_drag.get("bot_index", -1))
 	var drop_rect := _get_drop_rect(drop_root)
+	var target_location := _get_drop_location_target_for_rect(drop_rect)
+	if not target_location.is_empty():
+		_selected_bot_index = bot_index
+		var location_id := str(target_location.get("location_id", ""))
+		var location_card: Dictionary = target_location.get("card_data", {})
+		var location_title := str(location_card.get("type", "site")).replace("_", " ").to_upper()
+		var blocker := GameState.get_bot_launch_blocker(bot_index)
+		if blocker.is_empty():
+			if GameState.launch_bot_to_location(bot_index, location_id):
+				_trigger_location_target_feedback(location_id)
+				EventBus.log_message.emit("%s dispatched to %s" % [_bot_display_name(bot_index), location_title])
+		else:
+			EventBus.log_message.emit("%s" % blocker)
+		return
 	if _is_rect_in_route_machine(drop_rect):
 		_selected_bot_index = bot_index
 		if GameState.can_recover_bot(bot_index):
-			if not GameState.recover_bot(bot_index):
-				EventBus.log_message.emit("Recovery failed")
+			EventBus.log_message.emit("Place operator on the empty drone card to attempt recovery")
 			return
 		var blocker: String = GameState.get_bot_launch_blocker(bot_index)
 		if blocker.is_empty():
@@ -1528,6 +1610,15 @@ func _get_material_merge_target(source_material_id: String, source_type: String,
 			continue
 		var target_card: Dictionary = card_info.get("card_data", {})
 		if str(target_card.get("type", "")) != source_type:
+			continue
+		if _has_meaningful_overlap(Rect2(card_info.get("rect", Rect2())), drop_rect, 0.30):
+			return card_info
+	return {}
+
+func _get_drop_location_target_for_rect(drop_rect: Rect2) -> Dictionary:
+	var table_rect := _rect_in_root(map_region)
+	for card_info in _get_table_visual_cards(table_rect):
+		if str(card_info.get("kind", "")) != "location":
 			continue
 		if _has_meaningful_overlap(Rect2(card_info.get("rect", Rect2())), drop_rect, 0.30):
 			return card_info
@@ -1859,6 +1950,12 @@ func _get_active_process_states(rect: Rect2) -> Array:
 			"cooldown": _journal_research_cooldown,
 			"duration": JOURNAL_RESEARCH_INTERVAL,
 		})
+	if not _bot_recovery_process.is_empty():
+		states.append({
+			"rect": Rect2(_bot_recovery_process.get("rect", Rect2())),
+			"cooldown": float(_bot_recovery_process.get("cooldown", 0.0)),
+			"duration": float(_bot_recovery_process.get("duration", BOT_RECOVERY_BASE_INTERVAL)),
+		})
 	var craft_state := _get_active_blueprint_craft_state(rect)
 	if not craft_state.is_empty():
 		states.append({
@@ -1935,6 +2032,15 @@ func _draw_run_end_overlay():
 func _get_journal_overlay_rect() -> Rect2:
 	return Rect2(Vector2(size.x * 0.5 - 320.0, size.y * 0.5 - 220.0), Vector2(640.0, 440.0))
 
+func _get_bot_log_overlay_rect() -> Rect2:
+	return Rect2(Vector2(size.x * 0.5 - 320.0, size.y * 0.5 - 220.0), Vector2(640.0, 440.0))
+
+func _get_latest_bot_log_page_index(bot_index: int) -> int:
+	var entries := GameState.get_bot_activity_log(bot_index)
+	if entries.is_empty():
+		return 0
+	return maxi(int(ceili(float(entries.size()) / float(BOT_LOG_PAGE_SIZE))) - 1, 0)
+
 func _handle_journal_modal_click(root_point: Vector2):
 	var overlay_rect := _get_journal_overlay_rect()
 	if _journal_close_rect.has_point(root_point) or not overlay_rect.has_point(root_point):
@@ -1961,6 +2067,18 @@ func _handle_journal_modal_click(root_point: Vector2):
 		if not blueprint_id.is_empty():
 			_place_generated_blueprint_card(blueprint_id, Rect2(_table_journal_position, CARD_SIZE))
 			EventBus.log_message.emit("%s copied as blueprint" % str(blueprint.get("result", "Blueprint")))
+		return
+
+func _handle_bot_log_modal_click(root_point: Vector2):
+	var overlay_rect := _get_bot_log_overlay_rect()
+	if _bot_log_close_rect.has_point(root_point) or not overlay_rect.has_point(root_point):
+		_bot_log_open = false
+		return
+	if _bot_log_prev_rect.has_point(root_point):
+		_bot_log_page_index = maxi(_bot_log_page_index - 1, 0)
+		return
+	if _bot_log_next_rect.has_point(root_point):
+		_bot_log_page_index = mini(_bot_log_page_index + 1, _get_latest_bot_log_page_index(_bot_log_bot_index))
 		return
 
 func _draw_journal_overlay():
@@ -2038,6 +2156,71 @@ func _draw_journal_overlay():
 		draw_rect(_journal_next_rect, PANEL_BORDER, false, 1.0)
 		draw_string(ThemeDB.fallback_font, Vector2(_journal_next_rect.position.x, _journal_next_rect.position.y + 14.0), ">", HORIZONTAL_ALIGNMENT_CENTER, _journal_next_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
 	draw_string(ThemeDB.fallback_font, Vector2(page_rect.position.x, page_rect.end.y - 18.0), "PAGE %d / %d" % [_journal_page_index + 1, entries.size()], HORIZONTAL_ALIGNMENT_CENTER, page_rect.size.x, FONT_SIZE_CARD_META + 2, STEEL_DARK)
+
+func _draw_bot_log_overlay():
+	_bot_log_prev_rect = Rect2()
+	_bot_log_next_rect = Rect2()
+	_bot_log_close_rect = Rect2()
+	var overlay_rect := Rect2(Vector2.ZERO, size)
+	var page_rect := _get_bot_log_overlay_rect()
+	draw_rect(overlay_rect, Color(0.02, 0.02, 0.03, 0.42))
+	draw_rect(page_rect, TAPE)
+	draw_rect(page_rect.grow(-6.0), Color(0.90, 0.84, 0.71))
+	draw_rect(page_rect, PANEL_BORDER, false, 2.0)
+	_bot_log_close_rect = Rect2(Vector2(page_rect.end.x - 34.0, page_rect.position.y + 12.0), Vector2(20.0, 20.0))
+	draw_rect(_bot_log_close_rect, Color(0.42, 0.18, 0.16))
+	draw_rect(_bot_log_close_rect.grow(-1.0), Color(0.31, 0.14, 0.13))
+	_draw_outlined_text(_bot_log_close_rect.position + Vector2(0.0, 15.0), "X", HORIZONTAL_ALIGNMENT_CENTER, _bot_log_close_rect.size.x, FONT_SIZE_BANNER, TEXT, Color(0.12, 0.08, 0.06))
+	var bot_name := _bot_display_name(_bot_log_bot_index).to_upper()
+	_draw_outlined_text(Vector2(page_rect.position.x + 28.0, page_rect.position.y + 34.0), "%s LOG" % bot_name, HORIZONTAL_ALIGNMENT_LEFT, page_rect.size.x - 56.0, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
+	var entries := GameState.get_bot_activity_log(_bot_log_bot_index)
+	if entries.is_empty():
+		var empty_lines := _wrap_journal_text("No bot activity recorded yet. Load a tape, launch the drone, or run recovery to populate the log.", page_rect.size.x - 56.0, FONT_SIZE_VALUE, 5)
+		for line_index in range(empty_lines.size()):
+			draw_string(ThemeDB.fallback_font, Vector2(page_rect.position.x + 28.0, page_rect.position.y + 86.0 + float(line_index) * 18.0), empty_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, page_rect.size.x - 56.0, FONT_SIZE_VALUE, STEEL_DARK)
+		return
+	var page_count := maxi(int(ceili(float(entries.size()) / float(BOT_LOG_PAGE_SIZE))), 1)
+	_bot_log_page_index = clampi(_bot_log_page_index, 0, page_count - 1)
+	var start_index := _bot_log_page_index * BOT_LOG_PAGE_SIZE
+	var end_index := mini(start_index + BOT_LOG_PAGE_SIZE, entries.size())
+	var list_rect := Rect2(page_rect.position + Vector2(24.0, 58.0), Vector2(page_rect.size.x - 48.0, page_rect.size.y - 100.0))
+	draw_rect(list_rect, Color(0.86, 0.80, 0.66))
+	draw_rect(list_rect, PANEL_BORDER, false, 1.0)
+	var row_y := list_rect.position.y + 18.0
+	for entry_index in range(start_index, end_index):
+		var entry: Dictionary = entries[entry_index]
+		var position := Vector2.ZERO
+		if typeof(entry.get("position", {})) == TYPE_DICTIONARY:
+			var position_data: Dictionary = Dictionary(entry.get("position", {}))
+			position = Vector2(int(position_data.get("x", 0)), int(position_data.get("y", 0)))
+		var line := "#%03d [%d,%d] EN %d ACC %d %s" % [
+			maxi(int(entry.get("tick", 0)), 0),
+			int(position.x),
+			int(position.y),
+			int(entry.get("power_charge", 0)),
+			int(entry.get("acc", 0)),
+			str(entry.get("message", "")),
+		]
+		var wrapped_lines := _wrap_journal_text(line, list_rect.size.x - 16.0, FONT_SIZE_CARD_VALUE, 3)
+		draw_string(ThemeDB.fallback_font, Vector2(list_rect.position.x + 8.0, row_y), wrapped_lines[0], HORIZONTAL_ALIGNMENT_LEFT, list_rect.size.x - 16.0, FONT_SIZE_CARD_VALUE, STEEL_DARK)
+		for wrap_index in range(1, wrapped_lines.size()):
+			row_y += 14.0
+			draw_string(ThemeDB.fallback_font, Vector2(list_rect.position.x + 16.0, row_y), wrapped_lines[wrap_index], HORIZONTAL_ALIGNMENT_LEFT, list_rect.size.x - 24.0, FONT_SIZE_CARD_VALUE, TAPE_HOLE)
+		row_y += 12.0
+		if entry_index < end_index - 1:
+			draw_line(Vector2(list_rect.position.x + 8.0, row_y), Vector2(list_rect.end.x - 8.0, row_y), Color(0.67, 0.57, 0.35, 0.65), 1.0)
+			row_y += 16.0
+	if _bot_log_page_index > 0:
+		_bot_log_prev_rect = Rect2(Vector2(page_rect.position.x + 16.0, page_rect.end.y - 34.0), Vector2(24.0, 18.0))
+		draw_rect(_bot_log_prev_rect, Color(0.79, 0.72, 0.56))
+		draw_rect(_bot_log_prev_rect, PANEL_BORDER, false, 1.0)
+		draw_string(ThemeDB.fallback_font, Vector2(_bot_log_prev_rect.position.x, _bot_log_prev_rect.position.y + 14.0), "<", HORIZONTAL_ALIGNMENT_CENTER, _bot_log_prev_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
+	if _bot_log_page_index < page_count - 1:
+		_bot_log_next_rect = Rect2(Vector2(page_rect.end.x - 56.0, page_rect.end.y - 34.0), Vector2(24.0, 18.0))
+		draw_rect(_bot_log_next_rect, Color(0.79, 0.72, 0.56))
+		draw_rect(_bot_log_next_rect, PANEL_BORDER, false, 1.0)
+		draw_string(ThemeDB.fallback_font, Vector2(_bot_log_next_rect.position.x, _bot_log_next_rect.position.y + 14.0), ">", HORIZONTAL_ALIGNMENT_CENTER, _bot_log_next_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
+	draw_string(ThemeDB.fallback_font, Vector2(page_rect.position.x, page_rect.end.y - 18.0), "PAGE %d / %d" % [_bot_log_page_index + 1, page_count], HORIZONTAL_ALIGNMENT_CENTER, page_rect.size.x, FONT_SIZE_CARD_META + 2, STEEL_DARK)
 
 func _draw_journal_entry_preview(preview_rect: Rect2, entry: Dictionary):
 	var subject_kind := str(entry.get("subject_kind", ""))
@@ -2183,58 +2366,13 @@ func _get_table_visual_cards(rect: Rect2) -> Array:
 	return cards
 
 func _get_top_tape_badge_at_point(drone_slots: Array, root_point: Vector2) -> Dictionary:
-	var sorted_slots := drone_slots.duplicate()
-	sorted_slots.sort_custom(func(a: Dictionary, b: Dictionary): return Rect2(a["rect"]).end.y > Rect2(b["rect"]).end.y)
-	for slot in sorted_slots:
-		if Rect2(slot["tape_badge_rect"]).has_point(root_point) and not Dictionary(slot["loaded_cartridge"]).is_empty():
-			return slot
-	return {}
+	return WorkshopTableControllerData.get_top_tape_badge_at_point(drone_slots, root_point)
 
 func _get_top_table_card_at_point(rect: Rect2, root_point: Vector2) -> Dictionary:
-	var cards := _get_table_visual_cards(rect)
-	for card_index in range(cards.size() - 1, -1, -1):
-		var card_info: Dictionary = cards[card_index]
-		if Rect2(card_info["rect"]).has_point(root_point):
-			return card_info
-	return {}
+	return WorkshopTableControllerData.get_top_table_card_at_point(_get_table_visual_cards(rect), root_point)
 
 func _is_dragging_table_card(kind: String, identifier) -> bool:
-	if _active_drag.is_empty():
-		return false
-	if str(_active_drag.get("kind", "")) != kind:
-		return false
-	match kind:
-		"cartridge":
-			return str(_active_drag.get("identifier", _active_drag.get("cartridge_id", ""))) == str(identifier)
-		"power":
-			return int(_active_drag.get("identifier", _active_drag.get("slot_index", -1))) == int(identifier)
-		"blank":
-			return int(_active_drag.get("identifier", _active_drag.get("blank_index", -1))) == int(identifier)
-		"bot":
-			return int(_active_drag.get("identifier", _active_drag.get("bot_index", -1))) == int(identifier)
-		"location":
-			return str(_active_drag.get("identifier", _active_drag.get("location_id", ""))) == str(identifier)
-		"enemy":
-			return str(_active_drag.get("identifier", _active_drag.get("enemy_id", ""))) == str(identifier)
-		"material":
-			return str(_active_drag.get("identifier", _active_drag.get("material_id", ""))) == str(identifier)
-		"blueprint":
-			return str(_active_drag.get("identifier", _active_drag.get("blueprint_id", ""))) == str(identifier)
-		"crafted":
-			return str(_active_drag.get("identifier", _active_drag.get("crafted_id", ""))) == str(identifier)
-		"operator":
-			return true
-		"bench_card":
-			return true
-		"route_card":
-			return true
-		"journal_card":
-			return true
-		"trash_card":
-			return true
-		"charge_card":
-			return true
-	return false
+	return WorkshopTableControllerData.is_dragging_table_card(_active_drag, kind, identifier)
 
 func _draw_table_drone_card(slot: Dictionary):
 	var card_index: int = int(slot["index"])
@@ -2376,7 +2514,15 @@ func _draw_shelter_marker(origin: Vector2, cell_size: float):
 func _draw_discovery_markers(origin: Vector2, cell_size: float):
 	for object_entry in GameState.get_discovered_outside_objects():
 		var position := Vector2(object_entry.get("position", Vector2.ZERO))
+		var location_id := str(object_entry.get("id", ""))
 		var center := origin + (position + Vector2.ONE * 0.5) * cell_size
+		var feedback_entry: Dictionary = Dictionary(_location_marker_fx.get(location_id, {}))
+		if not feedback_entry.is_empty():
+			var duration := maxf(float(feedback_entry.get("duration", TARGET_MARKER_FEEDBACK_DURATION)), 0.001)
+			var progress := 1.0 - float(feedback_entry.get("timer", TARGET_MARKER_FEEDBACK_DURATION)) / duration
+			var pulse_radius := (cell_size * 0.30) + sin(progress * TAU * 3.0) * (cell_size * 0.06)
+			draw_circle(center, pulse_radius, Color(0.93, 0.78, 0.31, 0.18))
+			draw_arc(center, pulse_radius + 1.8, 0.0, TAU, 24, Color(0.96, 0.84, 0.48, 0.72), 1.4)
 		var object_type := str(object_entry.get("type", ""))
 		match object_type:
 			"resource", "cache", "field", "pond", "facility", "dump", "bunker":

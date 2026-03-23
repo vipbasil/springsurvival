@@ -1,0 +1,128 @@
+{
+  "material_metal": [
+    {"id": "metal_scrap_frame", "result": "SCRAP FRAME", "parts": ["BLUEPRINT", "OPERATOR", "METAL x2", "SPRING x1"]},
+    {"id": "metal_route_pin", "result": "ROUTE PIN", "parts": ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "METAL x1", "PAPER x1"]}
+  ],
+  "material_spring": [
+    {"id": "spring_wound_core", "result": "WOUND CORE", "parts": ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "METAL x2", "SPRING x1"]},
+    {"id": "spring_trip_latch", "result": "TRIP LATCH", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "SPRING x2", "METAL x1"]}
+  ],
+  "material_paper": [
+    {"id": "paper_media_stock", "result": "MEDIA STOCK", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2"]},
+    {"id": "paper_field_dossier", "result": "FIELD DOSSIER", "parts": ["BLUEPRINT", "OPERATOR", "PAPER x2", "HIDE x1"]}
+  ],
+  "material_biomass": [
+    {"id": "biomass_energy_bar", "result": "ENERGY BAR", "parts": ["BLUEPRINT", "OPERATOR", "BIOMASS x2"]},
+    {"id": "biomass_medicine", "result": "MEDICINE", "parts": ["BLUEPRINT", "OPERATOR", "BIOMASS x2", "PAPER x1", "BONE x1"]},
+    {"id": "biomass_bait_paste", "result": "BAIT PASTE", "parts": ["BLUEPRINT", "OPERATOR", "BIOMASS x2", "BONE x1"]},
+    {"id": "biomass_growth_medium", "result": "GROWTH MEDIUM", "parts": ["BLUEPRINT", "OPERATOR", "BIOMASS x3", "PAPER x1"]}
+  ],
+  "material_hide": [
+    {"id": "hide_padded_wrap", "result": "PADDED WRAP", "parts": ["BLUEPRINT", "OPERATOR", "HIDE x2", "PAPER x1"]},
+    {"id": "hide_satchel", "result": "HIDE SATCHEL", "parts": ["BLUEPRINT", "OPERATOR", "HIDE x2", "BONE x1"]}
+  ],
+  "material_bone": [
+    {"id": "bone_needle", "result": "BONE NEEDLE", "parts": ["BLUEPRINT", "OPERATOR", "BONE x2", "HIDE x1"]},
+    {"id": "bone_charm", "result": "BONE CHARM", "parts": ["BLUEPRINT", "OPERATOR", "BONE x1", "PAPER x1"]}
+  ],
+  "location_pond": [
+    {"id": "pond_reed_filter", "result": "REED FILTER", "parts": ["BLUEPRINT", "OPERATOR", "POND", "PAPER x1", "BIOMASS x1"]},
+    {"id": "pond_bait_broth", "result": "BAIT BROTH", "parts": ["BLUEPRINT", "OPERATOR", "POND", "BIOMASS x2", "BONE x1"]}
+  ],
+  "location_crater": [
+    {"id": "crater_dust_sieve", "result": "DUST SIEVE", "parts": ["BLUEPRINT", "OPERATOR", "CRATER", "METAL x1", "PAPER x1"]},
+    {"id": "crater_impact_brace", "result": "IMPACT BRACE", "parts": ["BLUEPRINT", "OPERATOR", "CRATER", "METAL x2", "BONE x1"]}
+  ],
+  "location_tower": [
+    {"id": "tower_signal_mast", "result": "SIGNAL MAST", "parts": ["BLUEPRINT", "OPERATOR", "TOWER", "METAL x2", "SPRING x1"]},
+    {"id": "tower_watch_glass", "result": "WATCH GLASS", "parts": ["BLUEPRINT", "OPERATOR", "TOWER", "PAPER x1", "METAL x1"]}
+  ],
+  "location_surveillance_zone": [
+    {"id": "surveillance_blind_banner", "result": "BLIND BANNER", "parts": ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "SURVEILLANCE ZONE", "PAPER x2", "METAL x1"]},
+    {"id": "surveillance_scramble_kite", "result": "SCRAMBLE KITE", "parts": ["BLUEPRINT", "OPERATOR", "SURVEILLANCE ZONE", "PAPER x1", "SPRING x1"]}
+  ],
+  "location_facility": [
+    {"id": "facility_press_frame", "result": "PRESS FRAME", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "FACILITY", "METAL x2"]},
+    {"id": "facility_tool_chest", "result": "TOOL CHEST", "parts": ["BLUEPRINT", "OPERATOR", "FACILITY", "METAL x1", "HIDE x1"]}
+  ],
+  "location_bunker": [
+    {"id": "bunker_sealed_locker", "result": "SEALED LOCKER", "parts": ["BLUEPRINT", "OPERATOR", "BUNKER", "METAL x2", "PAPER x1"]},
+    {"id": "bunker_hatch_brace", "result": "HATCH BRACE", "parts": ["BLUEPRINT", "OPERATOR", "BUNKER", "METAL x1", "SPRING x1"]}
+  ],
+  "location_field": [
+    {"id": "field_dry_rations", "result": "DRY RATIONS", "parts": ["BLUEPRINT", "OPERATOR", "FIELD", "BIOMASS x2"]},
+    {"id": "field_fiber_bundle", "result": "FIBER BUNDLE", "parts": ["BLUEPRINT", "OPERATOR", "FIELD", "HIDE x1", "PAPER x1"]}
+  ],
+  "location_dump": [
+    {"id": "dump_scrap_bundle", "result": "SCRAP BUNDLE", "parts": ["BLUEPRINT", "TRASH", "OPERATOR", "DUMP", "METAL x2"]},
+    {"id": "dump_sort_bin", "result": "SORT BIN", "parts": ["BLUEPRINT", "TRASH", "OPERATOR", "DUMP", "METAL x1", "PAPER x1"]}
+  ],
+  "location_cache": [
+    {"id": "cache_archive_satchel", "result": "ARCHIVE SATCHEL", "parts": ["BLUEPRINT", "OPERATOR", "CACHE", "HIDE x1", "PAPER x2"]},
+    {"id": "cache_supply_wrap", "result": "SUPPLY WRAP", "parts": ["BLUEPRINT", "OPERATOR", "CACHE", "PAPER x1", "HIDE x1"]}
+  ],
+  "location_nest": [
+    {"id": "nest_repellent_paste", "result": "REPELLENT PASTE", "parts": ["BLUEPRINT", "OPERATOR", "NEST", "BIOMASS x2", "BONE x1"]},
+    {"id": "nest_brood_cage", "result": "BROOD CAGE", "parts": ["BLUEPRINT", "OPERATOR", "NEST", "METAL x1", "HIDE x1"]}
+  ],
+  "location_ruin": [
+    {"id": "ruin_mason_brace", "result": "MASON BRACE", "parts": ["BLUEPRINT", "OPERATOR", "RUIN", "METAL x1", "BONE x1"]},
+    {"id": "ruin_archive_shelf", "result": "ARCHIVE SHELF", "parts": ["BLUEPRINT", "OPERATOR", "RUIN", "METAL x1", "PAPER x2"]}
+  ],
+  "enemy_surveillance_drone": [
+    {"id": "surveillance_blind_lens", "result": "BLIND LENS", "parts": ["BLUEPRINT", "OPERATOR", "SURVEILLANCE DRONE", "METAL x1", "SPRING x1"]},
+    {"id": "surveillance_signal_scrambler", "result": "SIGNAL SCRAMBLER", "parts": ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "SURVEILLANCE DRONE", "SPRING x1", "PAPER x1"]}
+  ],
+  "enemy_infantry_drone": [
+    {"id": "infantry_armor_patch", "result": "ARMOR PATCH", "parts": ["BLUEPRINT", "OPERATOR", "INFANTRY DRONE", "METAL x2"]},
+    {"id": "infantry_spring_bolt", "result": "SPRING BOLT", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "INFANTRY DRONE", "SPRING x1", "METAL x1"]}
+  ],
+  "enemy_stalker": [
+    {"id": "stalker_trail_notes", "result": "TRAIL NOTES", "parts": ["BLUEPRINT", "OPERATOR", "STALKER", "PAPER x2"]},
+    {"id": "stalker_quiet_harness", "result": "QUIET HARNESS", "parts": ["BLUEPRINT", "OPERATOR", "STALKER", "HIDE x1", "SPRING x1"]}
+  ],
+  "enemy_grizzly": [
+    {"id": "grizzly_hide_mantle", "result": "HIDE MANTLE", "parts": ["BLUEPRINT", "OPERATOR", "GRIZZLY", "HIDE x2", "BONE x1"]},
+    {"id": "grizzly_bone_hook", "result": "BONE HOOK", "parts": ["BLUEPRINT", "OPERATOR", "GRIZZLY", "BONE x2", "METAL x1"]}
+  ],
+  "enemy_wolf_pack": [
+    {"id": "wolf_hide_leash", "result": "HIDE LEASH", "parts": ["BLUEPRINT", "OPERATOR", "WOLF PACK", "HIDE x1", "BONE x1"]},
+    {"id": "wolf_pack_caller", "result": "PACK CALLER", "parts": ["BLUEPRINT", "OPERATOR", "WOLF PACK", "BONE x1", "PAPER x1"]}
+  ],
+  "machine_bench": [
+    {"id": "bench_code_strip", "result": "CODE STRIP", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2", "SPRING x1"]},
+    {"id": "bench_archive_copy", "result": "ARCHIVE COPY", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2"]}
+  ],
+  "machine_route": [
+    {"id": "route_survey_map", "result": "SURVEY MAP", "parts": ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "PAPER x2", "METAL x1"]},
+    {"id": "route_route_slip", "result": "ROUTE SLIP", "parts": ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "PAPER x1"]}
+  ],
+  "machine_charge": [
+    {"id": "charge_wound_pack", "result": "WOUND PACK", "parts": ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "SPRING x2", "METAL x1"]},
+    {"id": "charge_reserve_charge", "result": "RESERVE CHARGE", "parts": ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "SPRING x1", "PAPER x1"]}
+  ],
+  "machine_trash": [
+    {"id": "trash_pulp_sheet", "result": "PULP SHEET", "parts": ["BLUEPRINT", "TRASH", "OPERATOR", "PAPER x2"]},
+    {"id": "trash_scrap_sorter", "result": "SCRAP SORTER", "parts": ["BLUEPRINT", "TRASH", "OPERATOR", "METAL x1", "PAPER x1"]}
+  ],
+  "drone_spider": [
+    {"id": "spider_trip_rig", "result": "TRIP RIG", "parts": ["BLUEPRINT", "OPERATOR", "SPIDER DRONE", "METAL x1", "SPRING x1"]},
+    {"id": "spider_claw_brace", "result": "CLAW BRACE", "parts": ["BLUEPRINT", "OPERATOR", "SPIDER DRONE", "METAL x2"]}
+  ],
+  "drone_butterfly": [
+    {"id": "butterfly_glide_vane", "result": "GLIDE VANE", "parts": ["BLUEPRINT", "OPERATOR", "BUTTERFLY DRONE", "PAPER x1", "SPRING x1"]},
+    {"id": "butterfly_scout_sail", "result": "SCOUT SAIL", "parts": ["BLUEPRINT", "OPERATOR", "BUTTERFLY DRONE", "PAPER x2", "METAL x1"]}
+  ],
+  "tape_programmed": [
+    {"id": "tape_loop_strip", "result": "LOOP STRIP", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2", "SPRING x1"]},
+    {"id": "tape_archive_strip", "result": "ARCHIVE STRIP", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x3"]}
+  ],
+  "tape_blank": [
+    {"id": "blank_fresh_tape", "result": "FRESH TAPE", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2"]},
+    {"id": "blank_clean_strip", "result": "CLEAN STRIP", "parts": ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x1"]}
+  ],
+  "resource_spring_charge": [
+    {"id": "resource_wound_spring", "result": "WOUND SPRING", "parts": ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "SPRING x2"]},
+    {"id": "resource_reserve_charge", "result": "RESERVE CHARGE", "parts": ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "SPRING x1", "METAL x1"]}
+  ]
+}

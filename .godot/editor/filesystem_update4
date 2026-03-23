@@ -1,3 +1,6 @@
 res://scripts/ui/WorkshopArt.gd
 res://scripts/workshop_main.gd
 res://scripts/core/GameState.gd
+res://scripts/automaton/InstructionLibrary.gd
+res://scripts/data/InstructionLibrary.gd
+res://scripts/data/PunchEncoding.gd

@@ -3,6 +3,8 @@ extends Node
 const PunchEncodingData = preload("res://scripts/data/PunchEncoding.gd")
 const TapeDecoderData = preload("res://scripts/data/TapeDecoder.gd")
 
+const RECIPE_CATALOG_PATH := "res://resources/instructions/recipes.json"
+const ENEMY_LOOT_CATALOG_PATH := "res://resources/instructions/enemy_loot.json"
 const START_POSITION := Vector2(5, 5)
 const START_FACING := "north"
 const SHELTER_MARKER := "shelter"
@@ -10,7 +12,7 @@ const CARTRIDGE_STORAGE_PATH := "user://programmed_cartridges.json"
 const PROGRAMMED_CARTRIDGE_CAPACITY := 8
 const BLANK_CARTRIDGE_SLOT_COUNT := 4
 const BOT_CABINET_CAPACITY := 2
-const BOT_POWER_CAPACITY := 10
+const BOT_POWER_CAPACITY := 50
 const OPERATOR_MAX_ENERGY := 12
 const OPERATOR_MAX_HP := 6
 const CHARGE_WORK_COST := 2
@@ -70,31 +72,90 @@ const ENEMY_TYPE_DEFS := {
 		"threat_level": 2,
 	},
 }
-const ENEMY_DROP_TABLES := {
-	"surveillance_drone": [
-		{"kind": "power", "weight": 65},
+const LOCATION_SCAVENGE_TABLES := {
+	"pond": [
+		{"kind": "material", "type": "biomass", "weight": 70, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "paper", "weight": 30, "quantity_min": 1, "quantity_max": 1},
+	],
+	"crater": [
+		{"kind": "material", "type": "metal", "weight": 45, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "bone", "weight": 30, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "biomass", "weight": 25, "quantity_min": 1, "quantity_max": 1},
+	],
+	"tower": [
+		{"kind": "material", "type": "metal", "weight": 45, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "paper", "weight": 35, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "power", "weight": 20},
+	],
+	"surveillance_zone": [
+		{"kind": "material", "type": "paper", "weight": 45, "quantity_min": 1, "quantity_max": 2},
 		{"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "power", "weight": 20},
 	],
-	"infantry_drone": [
-		{"kind": "material", "type": "metal", "weight": 65, "quantity_min": 1, "quantity_max": 3},
-		{"kind": "power", "weight": 35},
+	"facility": [
+		{"kind": "material", "type": "metal", "weight": 45, "quantity_min": 1, "quantity_max": 3},
+		{"kind": "material", "type": "paper", "weight": 25, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "power", "weight": 30},
 	],
-	"stalker": [
-		{"kind": "material", "type": "biomass", "weight": 40, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "paper", "weight": 25, "quantity_min": 1, "quantity_max": 3},
-		{"kind": "material", "type": "metal", "weight": 20, "quantity_min": 1, "quantity_max": 2},
+	"bunker": [
+		{"kind": "material", "type": "paper", "weight": 40, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "power", "weight": 25},
+	],
+	"field": [
+		{"kind": "material", "type": "biomass", "weight": 55, "quantity_min": 1, "quantity_max": 3},
+		{"kind": "material", "type": "paper", "weight": 25, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "hide", "weight": 20, "quantity_min": 1, "quantity_max": 1},
+	],
+	"dump": [
+		{"kind": "material", "type": "metal", "weight": 40, "quantity_min": 1, "quantity_max": 3},
+		{"kind": "material", "type": "paper", "weight": 25, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "bone", "weight": 20, "quantity_min": 1, "quantity_max": 2},
 		{"kind": "power", "weight": 15},
 	],
-	"grizzly": [
-		{"kind": "material", "type": "hide", "weight": 50, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "biomass", "weight": 35, "quantity_min": 2, "quantity_max": 4},
-		{"kind": "material", "type": "bone", "weight": 15, "quantity_min": 1, "quantity_max": 2},
+	"cache": [
+		{"kind": "material", "type": "paper", "weight": 35, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "metal", "weight": 25, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "biomass", "weight": 20, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "hide", "weight": 20, "quantity_min": 1, "quantity_max": 1},
 	],
-	"wolf_pack": [
-		{"kind": "material", "type": "hide", "weight": 45, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "biomass", "weight": 40, "quantity_min": 1, "quantity_max": 3},
-		{"kind": "material", "type": "bone", "weight": 15, "quantity_min": 1, "quantity_max": 1},
+	"nest": [
+		{"kind": "material", "type": "biomass", "weight": 50, "quantity_min": 1, "quantity_max": 3},
+		{"kind": "material", "type": "bone", "weight": 30, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "hide", "weight": 20, "quantity_min": 1, "quantity_max": 1},
 	],
+	"ruin": [
+		{"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "paper", "weight": 30, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "bone", "weight": 20, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "biomass", "weight": 15, "quantity_min": 1, "quantity_max": 1},
+	],
+}
+const LOCATION_SCAVENGE_CHANCES := {
+	"pond": 0.75,
+	"crater": 0.75,
+	"tower": 0.75,
+	"surveillance_zone": 0.75,
+	"facility": 0.78,
+	"bunker": 0.75,
+	"field": 0.80,
+	"dump": 0.78,
+	"cache": 0.82,
+	"nest": 0.78,
+	"ruin": 0.75,
+}
+const LOCATION_ENCOUNTER_TABLES := {
+	"pond": {"chance": 0.20, "types": [{"type": "stalker", "weight": 45}, {"type": "wolf_pack", "weight": 35}, {"type": "grizzly", "weight": 20}]},
+	"crater": {"chance": 0.22, "types": [{"type": "stalker", "weight": 45}, {"type": "wolf_pack", "weight": 35}, {"type": "surveillance_drone", "weight": 20}]},
+	"tower": {"chance": 0.30, "types": [{"type": "surveillance_drone", "weight": 45}, {"type": "infantry_drone", "weight": 30}, {"type": "stalker", "weight": 25}]},
+	"surveillance_zone": {"chance": 0.38, "types": [{"type": "surveillance_drone", "weight": 50}, {"type": "infantry_drone", "weight": 30}, {"type": "stalker", "weight": 20}]},
+	"facility": {"chance": 0.34, "types": [{"type": "infantry_drone", "weight": 40}, {"type": "surveillance_drone", "weight": 30}, {"type": "stalker", "weight": 30}]},
+	"bunker": {"chance": 0.32, "types": [{"type": "stalker", "weight": 40}, {"type": "infantry_drone", "weight": 35}, {"type": "grizzly", "weight": 25}]},
+	"field": {"chance": 0.22, "types": [{"type": "wolf_pack", "weight": 40}, {"type": "grizzly", "weight": 30}, {"type": "stalker", "weight": 30}]},
+	"dump": {"chance": 0.28, "types": [{"type": "stalker", "weight": 40}, {"type": "grizzly", "weight": 30}, {"type": "surveillance_drone", "weight": 30}]},
+	"cache": {"chance": 0.24, "types": [{"type": "stalker", "weight": 45}, {"type": "wolf_pack", "weight": 35}, {"type": "surveillance_drone", "weight": 20}]},
+	"nest": {"chance": 0.36, "types": [{"type": "grizzly", "weight": 35}, {"type": "wolf_pack", "weight": 35}, {"type": "stalker", "weight": 30}]},
+	"ruin": {"chance": 0.26, "types": [{"type": "stalker", "weight": 45}, {"type": "wolf_pack", "weight": 30}, {"type": "surveillance_drone", "weight": 25}]},
 }
 const ENEMY_NAME_CORPUS := [
 	"stalker",
@@ -146,8 +207,18 @@ var crafted_cards: Array = []
 var journal_entries: Array = []
 var workshop_layout: Dictionary = {}
 var operator_state: Dictionary = {}
+var recipe_catalog: Dictionary = {}
+var enemy_loot_catalog: Dictionary = {}
+
+const DRONE_ACTION_COMMANDS := {
+	"spider": ["mov", "rot", "scn", "pck", "drp", "atk"],
+	"butterfly": ["mov", "rot", "scn"],
+}
+const DRONE_SHARED_COMMANDS := ["nop", "jmp", "jnz", "dec", "inc", "set", "die"]
 
 func _ready():
+	_load_recipe_catalog()
+	_load_enemy_loot_catalog()
 	load_programmed_cartridges()
 
 func set_automaton_position(new_position: Vector2):
@@ -404,6 +475,8 @@ func load_cartridge_into_bot(bot_index: int, cartridge_id: String) -> bool:
 	programmed_cartridges[selected_index]["location"] = "bot:%d" % bot_index
 	programmed_cartridges[selected_index]["use_count"] = int(programmed_cartridges[selected_index].get("use_count", 0)) + 1
 	bot_loadouts[bot_index]["loaded_cartridge_id"] = cartridge_id
+	bot_loadouts[bot_index]["combat_ptr"] = 0
+	_append_bot_log_entry(bot_loadouts[bot_index], "load", "Loaded tape %s" % str(selected.get("label", cartridge_id)))
 	if selected_cartridge_id == cartridge_id:
 		selected_cartridge_id = ""
 	_refresh_bot_predictions()
@@ -428,6 +501,8 @@ func unload_bot_cartridge(bot_index: int) -> bool:
 
 	programmed_cartridges[loaded_index]["location"] = "shelf"
 	bot_loadouts[bot_index]["loaded_cartridge_id"] = ""
+	bot_loadouts[bot_index]["combat_ptr"] = 0
+	_append_bot_log_entry(bot_loadouts[bot_index], "unload", "Unloaded tape %s" % str(loaded.get("label", "")))
 	_refresh_bot_predictions()
 	save_programmed_cartridges()
 	EventBus.cartridges_changed.emit(programmed_cartridges)
@@ -512,6 +587,14 @@ func get_bot_launch_blocker(bot_index: int) -> String:
 		return "No power unit installed"
 	return ""
 
+func get_location_card_by_id(location_id: String) -> Dictionary:
+	if location_id.is_empty():
+		return {}
+	for location_card in location_cards:
+		if str(location_card.get("id", "")) == location_id:
+			return Dictionary(location_card).duplicate(true)
+	return {}
+
 func launch_bot(bot_index: int) -> bool:
 	var blocker := get_bot_launch_blocker(bot_index)
 	if not blocker.is_empty():
@@ -523,14 +606,78 @@ func launch_bot(bot_index: int) -> bool:
 	bot_loadouts[bot_index]["outside_facing"] = START_FACING
 	bot_loadouts[bot_index]["outside_acc"] = 0
 	bot_loadouts[bot_index]["outside_ptr"] = 0
+	bot_loadouts[bot_index]["combat_ptr"] = 0
 	bot_loadouts[bot_index]["outside_trail"] = [shelter]
 	bot_loadouts[bot_index]["pending_discovery_ids"] = []
+	bot_loadouts[bot_index]["pending_salvage_drops"] = []
 	bot_loadouts[bot_index]["last_mission_summary"] = ""
+	bot_loadouts[bot_index]["mission_location_id"] = ""
+	bot_loadouts[bot_index]["mission_location_type"] = ""
+	bot_loadouts[bot_index]["mission_location_position"] = shelter
+	bot_loadouts[bot_index]["mission_pickups"] = 0
+	bot_loadouts[bot_index]["mission_pickup_attempts"] = 0
+	bot_loadouts[bot_index]["mission_encounters"] = 0
+	_append_bot_log_entry(bot_loadouts[bot_index], "launch", "Launched from shelter")
 	_refresh_bot_predictions()
 	save_programmed_cartridges()
 	EventBus.bot_loadouts_changed.emit(bot_loadouts)
 	EventBus.outside_world_changed.emit()
 	return true
+
+func launch_bot_to_location(bot_index: int, location_id: String) -> bool:
+	var location_card := get_location_card_by_id(location_id)
+	if location_card.is_empty():
+		return false
+	if not launch_bot(bot_index):
+		return false
+	bot_loadouts[bot_index]["mission_location_id"] = location_id
+	bot_loadouts[bot_index]["mission_location_type"] = str(location_card.get("type", ""))
+	bot_loadouts[bot_index]["mission_location_position"] = _vector_from_variant(location_card.get("position", {}), get_shelter_position())
+	bot_loadouts[bot_index]["mission_pickups"] = 0
+	bot_loadouts[bot_index]["mission_pickup_attempts"] = 0
+	bot_loadouts[bot_index]["mission_encounters"] = 0
+	_append_bot_log_entry(bot_loadouts[bot_index], "target", "Assigned location target %s at (%d,%d)" % [
+		str(location_card.get("type", "site")).to_upper(),
+		int(Vector2(bot_loadouts[bot_index]["mission_location_position"]).x),
+		int(Vector2(bot_loadouts[bot_index]["mission_location_position"]).y),
+	])
+	save_programmed_cartridges()
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	EventBus.outside_world_changed.emit()
+	return true
+
+func _clear_bot_mission_state(bot_state: Dictionary) -> void:
+	bot_state["mission_location_id"] = ""
+	bot_state["mission_location_type"] = ""
+	bot_state["mission_location_position"] = get_shelter_position()
+	bot_state["pending_salvage_drops"] = []
+	bot_state["mission_pickups"] = 0
+	bot_state["mission_pickup_attempts"] = 0
+	bot_state["mission_encounters"] = 0
+
+func get_bot_activity_log(bot_index: int) -> Array:
+	if bot_index < 0 or bot_index >= bot_loadouts.size():
+		return []
+	return Array(bot_loadouts[bot_index].get("activity_log", [])).duplicate(true)
+
+func _append_bot_log_entry(bot_state: Dictionary, kind: String, message: String, count_as_tick: bool = false) -> void:
+	var log_entries: Array = Array(bot_state.get("activity_log", [])).duplicate(true)
+	var activity_tick := maxi(int(bot_state.get("activity_tick", 0)), 0)
+	if count_as_tick:
+		activity_tick += 1
+		bot_state["activity_tick"] = activity_tick
+	log_entries.append({
+		"tick": activity_tick,
+		"kind": kind,
+		"position": _serialize_vector(Vector2(bot_state.get("outside_position", get_shelter_position()))),
+		"power_charge": int(bot_state.get("power_charge", 0)),
+		"acc": int(bot_state.get("outside_acc", 0)),
+		"ptr": int(bot_state.get("outside_ptr", 0)),
+		"message": message,
+	})
+	while log_entries.size() > 128:
+		log_entries.pop_front()
+	bot_state["activity_log"] = log_entries
 
 func tick_active_bots() -> bool:
 	var changed := false
@@ -557,6 +704,50 @@ func can_recover_bot(bot_index: int) -> bool:
 	var status := str(bot_loadouts[bot_index].get("outside_status", "cabinet"))
 	return status == "halted" or status == "stranded"
 
+func get_bot_recovery_distance(bot_index: int) -> int:
+	if not can_recover_bot(bot_index):
+		return 0
+	var bot_state: Dictionary = bot_loadouts[bot_index]
+	var bot_position := Vector2(bot_state.get("outside_position", get_shelter_position()))
+	var shelter := get_shelter_position()
+	return absi(int(bot_position.x - shelter.x)) + absi(int(bot_position.y - shelter.y))
+
+func get_bot_recovery_energy_cost(bot_index: int) -> int:
+	var distance := maxi(get_bot_recovery_distance(bot_index), 1)
+	return maxi(1, int(ceil(float(distance) / 2.0)) + 1)
+
+func resolve_bot_recovery(bot_index: int) -> Dictionary:
+	if not can_recover_bot(bot_index):
+		return {"ok": false, "message": "Recovery unavailable"}
+	var bot_name := _bot_display_name(bot_index)
+	var energy_before := int(operator_state.get("energy", 0))
+	var hp_before := int(operator_state.get("hp", 0))
+	var energy_cost := get_bot_recovery_energy_cost(bot_index)
+	_apply_operator_loss(energy_cost)
+	var bot_state: Dictionary = bot_loadouts[bot_index]
+	bot_state["outside_position"] = get_shelter_position()
+	var trail: Array = bot_state.get("outside_trail", []).duplicate()
+	if trail.is_empty() or trail[-1] != get_shelter_position():
+		trail.append(get_shelter_position())
+	bot_state["outside_trail"] = trail
+	_set_terminal_status(bot_state, "halted")
+	bot_loadouts[bot_index] = bot_state
+	_refresh_bot_predictions()
+	save_programmed_cartridges()
+	EventBus.operator_state_changed.emit(get_operator_state())
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	EventBus.outside_world_changed.emit()
+	return {
+		"ok": true,
+		"bot_index": bot_index,
+		"bot_name": bot_name,
+		"energy_cost": energy_cost,
+		"energy_loss": maxi(energy_before - int(operator_state.get("energy", 0)), 0),
+		"hp_loss": maxi(hp_before - int(operator_state.get("hp", 0)), 0),
+		"collapsed": str(operator_state.get("status", "")) == "dead",
+		"summary": str(bot_state.get("last_mission_summary", "%s recovered" % bot_name)),
+	}
+
 func recover_bot(bot_index: int) -> bool:
 	if not can_recover_bot(bot_index):
 		return false
@@ -574,6 +765,13 @@ func recover_bot(bot_index: int) -> bool:
 	EventBus.outside_world_changed.emit()
 	EventBus.log_message.emit("Dangerous recovery completed: %s" % str(bot_state.get("last_mission_summary", _bot_display_name(bot_index))))
 	return true
+
+func spawn_random_enemy_card(source: String = "operator_scan") -> Dictionary:
+	var enemy_card := _build_enemy_scan_card(source)
+	enemy_cards.append(enemy_card)
+	save_programmed_cartridges()
+	EventBus.outside_world_changed.emit()
+	return enemy_card.duplicate(true)
 
 func get_active_or_away_bots() -> Array:
 	var bots: Array = []
@@ -977,6 +1175,7 @@ func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Arra
 	var operator_damage := 0
 	var bot_damage_events: Array = []
 	var bot_attack_events: Array = []
+	var combat_participants: Array = []
 	if use_operator and is_run_active():
 		operator_attack = 2
 		total_attack += operator_attack
@@ -987,22 +1186,22 @@ func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Arra
 		var bot_state: Dictionary = bot_loadouts[bot_index]
 		if int(bot_state.get("power_charge", 0)) <= 0:
 			continue
-		var bot_attack := 3 if str(bot_state.get("drone_type", "spider")) == "spider" else 2
-		total_attack += bot_attack
-		bot_attack_events.append({
-			"bot_index": bot_index,
-			"attack": bot_attack,
-		})
-	if total_attack <= 0:
+		var instruction_type := _get_bot_combat_instruction_type(bot_index)
+		combat_participants.append(bot_index)
+		if instruction_type == "atk":
+			var bot_attack := 3 if str(bot_state.get("drone_type", "spider")) == "spider" else 2
+			total_attack += bot_attack
+			bot_attack_events.append({
+				"bot_index": bot_index,
+				"attack": bot_attack,
+			})
+	if not use_operator and combat_participants.is_empty():
 		return {}
 	enemy_hp -= total_attack
 	if use_operator and is_run_active():
 		operator_damage = enemy_attack
 		_apply_operator_loss(enemy_attack)
-	for bot_index_variant in bot_indices:
-		var bot_index := int(bot_index_variant)
-		if bot_index < 0 or bot_index >= bot_loadouts.size():
-			continue
+	for bot_index in combat_participants:
 		var bot_state: Dictionary = bot_loadouts[bot_index]
 		if int(bot_state.get("power_charge", 0)) <= 0:
 			continue
@@ -1199,7 +1398,11 @@ func load_programmed_cartridges():
 				selected_cartridge_id = str(cartridge.get("id", ""))
 				break
 
+	var normalized_bot_states := _normalize_loaded_bot_states()
+
 	_refresh_bot_predictions()
+	if normalized_bot_states:
+		save_programmed_cartridges()
 	EventBus.operator_state_changed.emit(get_operator_state())
 
 func save_programmed_cartridges():
@@ -1255,6 +1458,7 @@ func _default_bot_state(bot_index: int) -> Dictionary:
 		"id": "cabinet_a%d" % [bot_index + 1],
 		"drone_type": "spider" if bot_index == 0 else "butterfly",
 		"loaded_cartridge_id": "",
+		"combat_ptr": 0,
 		"power_charge": 0,
 		"power_card_count": 0,
 		"max_power_charge": BOT_POWER_CAPACITY,
@@ -1267,6 +1471,16 @@ func _default_bot_state(bot_index: int) -> Dictionary:
 		"outside_trail": [],
 		"predicted_trail": [],
 		"pending_discovery_ids": [],
+		"pending_location_cards": [],
+		"mission_location_id": "",
+		"mission_location_type": "",
+		"mission_location_position": get_shelter_position(),
+		"pending_salvage_drops": [],
+		"mission_pickups": 0,
+		"mission_pickup_attempts": 0,
+		"mission_encounters": 0,
+		"activity_tick": 0,
+		"activity_log": [],
 		"last_mission_summary": "",
 	}
 
@@ -1312,22 +1526,13 @@ func _build_random_operator_location_card() -> Dictionary:
 		"source": "operator_scan",
 	}
 
-func _build_enemy_scan_card() -> Dictionary:
+func _build_enemy_scan_card(source: String = "operator_scan") -> Dictionary:
 	var enemy_types: Array = ["surveillance_drone", "stalker", "infantry_drone", "grizzly", "wolf_pack"]
 	var enemy_type: String = str(enemy_types[randi() % enemy_types.size()])
-	var enemy_def := _get_enemy_type_definition(enemy_type)
-	return {
-		"id": "enemy_%d_%d" % [int(Time.get_unix_time_from_system()), enemy_cards.size()],
-		"type": enemy_type,
-		"display_name": str(enemy_def.get("label", _default_enemy_display_name(enemy_type))),
-		"threat_level": int(enemy_def.get("threat_level", 1)),
-		"attack": int(enemy_def.get("attack", 1)),
-		"hp": int(enemy_def.get("hp", 3)),
-		"source": "operator_scan",
-	}
+	return _build_enemy_card_for_type(enemy_type, source)
 
 func _build_enemy_drop_card(enemy_type: String) -> Dictionary:
-	var drop_table: Array = ENEMY_DROP_TABLES.get(enemy_type, [])
+	var drop_table: Array = _get_loaded_enemy_loot_table(enemy_type)
 	if drop_table.is_empty():
 		return {}
 	var drop_entry := _roll_weighted_material_drop_entry(drop_table)
@@ -1492,6 +1697,18 @@ func _decode_program_from_rows(rows: Array) -> Array:
 	var decoder = TapeDecoderData.new()
 	return decoder.decode_tape("\n".join(program_lines))
 
+func _get_bot_combat_instruction_type(bot_index: int) -> String:
+	if bot_index < 0 or bot_index >= bot_loadouts.size():
+		return ""
+	var program := _decode_program_from_rows(get_bot_loaded_cartridge(bot_index).get("rows", []))
+	if program.is_empty():
+		bot_loadouts[bot_index]["combat_ptr"] = 0
+		return ""
+	var combat_ptr := posmod(int(bot_loadouts[bot_index].get("combat_ptr", 0)), program.size())
+	var instruction: Dictionary = program[combat_ptr]
+	bot_loadouts[bot_index]["combat_ptr"] = posmod(combat_ptr + 1, program.size())
+	return str(instruction.get("type", ""))
+
 func _step_active_bot(bot_index: int) -> bool:
 	var program := _decode_program_from_rows(get_bot_loaded_cartridge(bot_index).get("rows", []))
 	if program.is_empty():
@@ -1507,85 +1724,159 @@ func _step_active_bot(bot_index: int) -> bool:
 	bot_loadouts[bot_index] = execution_result["state"]
 	return bool(execution_result["changed"])
 
-func _execute_instruction_on_state(source_state: Dictionary, program: Array, discover_objects: bool) -> Dictionary:
+func _execute_instruction_on_state(source_state: Dictionary, program: Array, discover_objects: bool, allow_world_side_effects: bool = true) -> Dictionary:
 	var state: Dictionary = source_state.duplicate(true)
 	var changed := false
+	var start_position := Vector2(state.get("outside_position", get_shelter_position()))
 	var pointer := int(state.get("outside_ptr", 0))
 	if pointer < 0 or pointer >= program.size():
-		_set_terminal_status(state, "halted")
+		_set_terminal_status(state, "halted", allow_world_side_effects)
 		return {"state": state, "changed": true}
 
 	var instruction: Dictionary = program[pointer]
 	var instruction_type := str(instruction.get("type", ""))
 	var instruction_arg := int(instruction.get("arg", 0))
+	var action_result := ""
 	state["outside_ptr"] = pointer + 1
 	changed = true
+	var drone_type := str(state.get("drone_type", "spider"))
+	if int(state.get("power_charge", 0)) <= 0:
+		_set_terminal_status(state, "halted", allow_world_side_effects)
+		action_result = "NO POWER -> halt"
+		if allow_world_side_effects:
+			_append_bot_log_entry(state, "tick", "[%d,%d] %s -> %s" % [int(start_position.x), int(start_position.y), instruction_type.to_upper(), action_result], true)
+		return {"state": state, "changed": true}
+	if not _is_drone_command_supported(drone_type, instruction_type):
+		_set_terminal_status(state, "halted", allow_world_side_effects)
+		var bot_index := _get_bot_index_from_state(state)
+		var bot_name := _bot_display_name(bot_index) if bot_index >= 0 else drone_type.capitalize()
+		state["last_mission_summary"] = "%s halted: %s unsupported" % [bot_name, instruction_type.to_upper()]
+		return {"state": state, "changed": true}
+	var remaining_energy := int(state.get("power_charge", 0)) - 1
+	state["power_charge"] = remaining_energy
+	_sync_power_card_count(state)
 
 	match instruction_type:
 		"nop":
-			pass
+			action_result = "NOP, power %d" % remaining_energy
 		"mov":
-			var remaining_energy := int(state.get("power_charge", 0))
-			if remaining_energy <= 0:
-				_set_terminal_status(state, "stranded")
+			var direction := _get_direction_vector(str(state.get("outside_facing", START_FACING)))
+			var new_position := Vector2(state.get("outside_position", get_shelter_position())) + direction
+			if _is_inside_grid(new_position):
+				state["outside_position"] = new_position
+				var trail: Array = state.get("outside_trail", []).duplicate()
+				if trail.is_empty() or trail[-1] != new_position:
+					trail.append(new_position)
+				state["outside_trail"] = trail
+				action_result = "MOV to (%d,%d), power %d" % [int(new_position.x), int(new_position.y), remaining_energy]
 			else:
-				remaining_energy -= 1
-				state["power_charge"] = remaining_energy
-				_sync_power_card_count(state)
-				var direction := _get_direction_vector(str(state.get("outside_facing", START_FACING)))
-				var new_position := Vector2(state.get("outside_position", get_shelter_position())) + direction
-				if _is_inside_grid(new_position):
-					state["outside_position"] = new_position
-					var trail: Array = state.get("outside_trail", []).duplicate()
-					if trail.is_empty() or trail[-1] != new_position:
-						trail.append(new_position)
-					state["outside_trail"] = trail
-				if remaining_energy <= 0:
-					_set_terminal_status(state, "stranded")
+				action_result = "MOV blocked at edge, power %d" % remaining_energy
 		"scn":
 			if discover_objects:
-				_queue_discovery_for_state(state, Vector2(state.get("outside_position", get_shelter_position())) + _get_direction_vector(str(state.get("outside_facing", START_FACING))))
+				if drone_type == "butterfly":
+					var pending_before := Array(state.get("pending_location_cards", [])).size()
+					_queue_butterfly_scan_findings(state)
+					var pending_after := Array(state.get("pending_location_cards", [])).size()
+					action_result = "SCN radius 4 -> %d new pending finds, power %d" % [maxi(pending_after - pending_before, 0), remaining_energy]
+				else:
+					var pending_ids_before := Array(state.get("pending_discovery_ids", [])).size()
+					_queue_discovery_for_state(state, Vector2(state.get("outside_position", get_shelter_position())) + _get_direction_vector(str(state.get("outside_facing", START_FACING))))
+					var pending_ids_after := Array(state.get("pending_discovery_ids", [])).size()
+					action_result = "SCN forward -> %d pending discoveries, power %d" % [maxi(pending_ids_after - pending_ids_before, 0), remaining_energy]
+			else:
+				action_result = "SCN prediction only, power %d" % remaining_energy
 		"pck":
-			pass
+			if allow_world_side_effects:
+				action_result = "%s, power %d" % [_attempt_location_pickup(state), remaining_energy]
+			else:
+				action_result = "PCK prediction only, power %d" % remaining_energy
 		"drp":
-			pass
+			action_result = "DRP no field effect, power %d" % remaining_energy
+		"atk":
+			action_result = "ATK armed, power %d" % remaining_energy
 		"chg":
-			state["power_charge"] = mini(int(state.get("power_charge", 0)) + 1, int(state.get("max_power_charge", BOT_POWER_CAPACITY)))
+			state["power_charge"] = mini(remaining_energy + 1, int(state.get("max_power_charge", BOT_POWER_CAPACITY)))
 			_sync_power_card_count(state)
+			action_result = "CHG -> power %d" % int(state.get("power_charge", 0))
 		"jmp":
 			state["outside_ptr"] = instruction_arg
+			action_result = "JMP -> %d, power %d" % [instruction_arg, remaining_energy]
 		"jnz":
 			if int(state.get("outside_acc", 0)) != 0:
 				state["outside_ptr"] = instruction_arg
+				action_result = "JNZ taken -> %d, power %d" % [instruction_arg, remaining_energy]
+			else:
+				action_result = "JNZ skipped, power %d" % remaining_energy
 		"dec":
 			state["outside_acc"] = int(state.get("outside_acc", 0)) - 1
+			action_result = "DEC -> ACC %d, power %d" % [int(state.get("outside_acc", 0)), remaining_energy]
 		"inc":
 			state["outside_acc"] = int(state.get("outside_acc", 0)) + 1
+			action_result = "INC -> ACC %d, power %d" % [int(state.get("outside_acc", 0)), remaining_energy]
 		"set":
 			state["outside_acc"] = instruction_arg
+			action_result = "SET -> ACC %d, power %d" % [instruction_arg, remaining_energy]
 		"out":
-			pass
+			action_result = "OUT no field effect, power %d" % remaining_energy
 		"die":
-			_set_terminal_status(state, "halted")
+			_set_terminal_status(state, "halted", allow_world_side_effects)
+			action_result = "DIE -> halt, power %d" % remaining_energy
 		"rot":
 			state["outside_facing"] = _rotate_facing(str(state.get("outside_facing", START_FACING)), instruction_arg)
+			action_result = "ROT -> %s, power %d" % [str(state.get("outside_facing", START_FACING)).to_upper(), remaining_energy]
 		_:
-			_set_terminal_status(state, "halted")
+			_set_terminal_status(state, "halted", allow_world_side_effects)
+			action_result = "%s unsupported, power %d" % [instruction_type.to_upper(), remaining_energy]
+
+	if _should_complete_location_mission(state):
+		_set_terminal_status(state, "halted", allow_world_side_effects)
+		action_result = "%s; mission returned to shelter" % action_result if not action_result.is_empty() else "Mission returned to shelter"
+		if allow_world_side_effects:
+			_append_bot_log_entry(state, "tick", "[%d,%d] %s -> %s" % [int(start_position.x), int(start_position.y), instruction_type.to_upper(), action_result], true)
+		return {"state": state, "changed": true}
 
 	if str(state.get("outside_status", "active")) == "active" and int(state.get("outside_ptr", 0)) >= program.size():
-		_set_terminal_status(state, "halted")
+		_set_terminal_status(state, "halted", allow_world_side_effects)
+	elif str(state.get("outside_status", "active")) == "active" and int(state.get("power_charge", 0)) <= 0:
+		_set_terminal_status(state, "halted", allow_world_side_effects)
+		action_result = "%s; no power -> halt" % action_result if not action_result.is_empty() else "NO POWER -> halt"
+
+	if allow_world_side_effects:
+		if action_result.is_empty():
+			action_result = "%s executed" % instruction_type.to_upper()
+		_append_bot_log_entry(state, "tick", "[%d,%d] %s -> %s" % [int(start_position.x), int(start_position.y), instruction_type.to_upper(), action_result], true)
 
 	return {"state": state, "changed": changed}
 
-func _set_terminal_status(state: Dictionary, terminal_status: String):
+func _should_complete_location_mission(state: Dictionary) -> bool:
+	if str(state.get("outside_status", "active")) != "active":
+		return false
+	if str(state.get("mission_location_id", "")).is_empty():
+		return false
+	if Vector2(state.get("outside_position", get_shelter_position())) != get_shelter_position():
+		return false
+	var trail: Array = Array(state.get("outside_trail", []))
+	var did_progress := trail.size() > 1 or int(state.get("mission_pickup_attempts", 0)) > 0 or int(state.get("mission_pickups", 0)) > 0
+	return did_progress
+
+func _set_terminal_status(state: Dictionary, terminal_status: String, commit_world_side_effects: bool = true):
 	var position := Vector2(state.get("outside_position", get_shelter_position()))
 	if terminal_status != "stranded" and position == get_shelter_position():
-		var discoveries := _commit_pending_discoveries(state)
+		var discoveries := 0
+		var salvage := {}
+		if commit_world_side_effects:
+			discoveries = _commit_pending_discoveries(state)
+			salvage = _commit_pending_salvage(state)
 		state["outside_status"] = "returned"
-		state["last_mission_summary"] = _build_mission_summary(state, "returned", discoveries)
+		_clear_bot_mission_state(state)
+		state["last_mission_summary"] = _build_mission_summary(state, "returned", discoveries, salvage)
+		if commit_world_side_effects:
+			_append_bot_log_entry(state, "status", str(state.get("last_mission_summary", "Returned to shelter")))
 	else:
 		state["outside_status"] = terminal_status
 		state["last_mission_summary"] = _build_mission_summary(state, terminal_status, 0)
+		if commit_world_side_effects:
+			_append_bot_log_entry(state, "status", str(state.get("last_mission_summary", "Status updated")))
 
 func _bot_display_name(bot_index: int) -> String:
 	match bot_index:
@@ -1620,7 +1911,7 @@ func _predict_bot_trail(bot_index: int) -> Array:
 
 	var starting_trail: Array = simulation_state.get("outside_trail", []).duplicate()
 	for _step_index in range(MAX_PREDICTION_STEPS):
-		var result := _execute_instruction_on_state(simulation_state, program, false)
+		var result := _execute_instruction_on_state(simulation_state, program, false, false)
 		simulation_state = result["state"]
 		if str(simulation_state.get("outside_status", "active")) != "active":
 			break
@@ -1691,6 +1982,167 @@ func _queue_discovery_for_state(state: Dictionary, position: Vector2):
 		state["pending_discovery_ids"] = pending_ids
 		return
 
+func _queue_butterfly_scan_findings(state: Dictionary):
+	var center := Vector2(state.get("outside_position", get_shelter_position()))
+	var pending_cards: Array = Array(state.get("pending_location_cards", [])).duplicate(true)
+	var known_positions := {}
+	known_positions[_serialize_vector(get_shelter_position())] = true
+	for location_card in location_cards:
+		known_positions[_serialize_vector(_vector_from_variant(location_card.get("position", {}), Vector2.ZERO))] = true
+	for pending_variant in pending_cards:
+		if typeof(pending_variant) != TYPE_DICTIONARY:
+			continue
+		known_positions[_serialize_vector(_vector_from_variant(Dictionary(pending_variant).get("position", {}), Vector2.ZERO))] = true
+	for offset_x in range(-4, 5):
+		for offset_y in range(-4, 5):
+			var offset := Vector2(offset_x, offset_y)
+			if offset.length() > 4.0:
+				continue
+			var candidate := center + offset
+			if not _is_inside_grid(candidate):
+				continue
+			var serialized := _serialize_vector(candidate)
+			if known_positions.has(serialized):
+				continue
+			if randf() > 0.05:
+				continue
+			pending_cards.append(_build_scanned_location_card_at(candidate, "butterfly_scan"))
+			known_positions[serialized] = true
+	state["pending_location_cards"] = pending_cards
+
+func _attempt_location_pickup(state: Dictionary) -> String:
+	var mission_location_id := str(state.get("mission_location_id", ""))
+	var mission_location_type := str(state.get("mission_location_type", ""))
+	if mission_location_id.is_empty() or mission_location_type.is_empty():
+		return "PCK ignored: no location mission"
+	var mission_position := _vector_from_variant(state.get("mission_location_position", {}), get_shelter_position())
+	var current_position := Vector2(state.get("outside_position", get_shelter_position()))
+	if current_position != mission_position:
+		return "PCK ignored: not at target"
+	var pickup_attempts := int(state.get("mission_pickup_attempts", 0)) + 1
+	state["mission_pickup_attempts"] = pickup_attempts
+	var pending_drops: Array = Array(state.get("pending_salvage_drops", [])).duplicate(true)
+	var message_parts: Array = ["PCK attempt %d at %s" % [pickup_attempts, mission_location_type.to_upper()]]
+	var drop_entry := _roll_location_scavenge_drop(mission_location_type, pickup_attempts)
+	if not drop_entry.is_empty():
+		_add_pending_salvage_drop(pending_drops, drop_entry)
+		state["pending_salvage_drops"] = pending_drops
+		state["mission_pickups"] = int(state.get("mission_pickups", 0)) + 1
+		var drop_kind := str(drop_entry.get("kind", "material"))
+		if drop_kind == "power":
+			message_parts.append("found POWER UNIT")
+		else:
+			message_parts.append("found %dx %s" % [
+				maxi(int(drop_entry.get("quantity", 1)), 1),
+				str(drop_entry.get("type", "material")).to_upper(),
+			])
+	else:
+		message_parts.append("no salvage")
+	var enemy_card := _roll_location_encounter_card(mission_location_type, mission_location_id)
+	if not enemy_card.is_empty():
+		enemy_cards.append(enemy_card)
+		state["mission_encounters"] = int(state.get("mission_encounters", 0)) + 1
+		message_parts.append("encounter %s" % str(enemy_card.get("type", "hostile")).replace("_", " ").to_upper())
+	return "; ".join(message_parts)
+
+func _add_pending_salvage_drop(pending_drops: Array, drop_entry: Dictionary) -> void:
+	var drop_kind := str(drop_entry.get("kind", ""))
+	if drop_kind == "material":
+		var material_type := str(drop_entry.get("type", ""))
+		for index in range(pending_drops.size()):
+			if typeof(pending_drops[index]) != TYPE_DICTIONARY:
+				continue
+			var existing: Dictionary = Dictionary(pending_drops[index]).duplicate(true)
+			if str(existing.get("kind", "")) != "material":
+				continue
+			if str(existing.get("type", "")) != material_type:
+				continue
+			existing["quantity"] = maxi(int(existing.get("quantity", 0)), 0) + maxi(int(drop_entry.get("quantity", 0)), 0)
+			pending_drops[index] = existing
+			return
+	pending_drops.append(drop_entry.duplicate(true))
+
+func _roll_location_scavenge_drop(location_type: String, pickup_attempts: int = 1) -> Dictionary:
+	var drop_table: Array = Array(LOCATION_SCAVENGE_TABLES.get(location_type, []))
+	if drop_table.is_empty():
+		return {}
+	var base_chance := float(LOCATION_SCAVENGE_CHANCES.get(location_type, 0.28))
+	var attempt_penalty := maxf(float(maxi(pickup_attempts - 1, 0)) * 0.08, 0.0)
+	var success_chance := clampf(base_chance - attempt_penalty, 0.05, 0.90)
+	if randf() > success_chance:
+		return {}
+	var drop_entry := _roll_weighted_material_drop_entry(drop_table)
+	if drop_entry.is_empty():
+		return {}
+	var drop_kind := str(drop_entry.get("kind", "material"))
+	if drop_kind == "power":
+		return {
+			"kind": "power",
+			"display_name": "Power Unit",
+			"charge": BOT_POWER_CAPACITY,
+			"max_charge": BOT_POWER_CAPACITY,
+			"source_location_type": location_type,
+		}
+	var material_type := str(drop_entry.get("type", ""))
+	var quantity_min := maxi(int(drop_entry.get("quantity_min", 1)), 1)
+	var quantity_max := maxi(int(drop_entry.get("quantity_max", quantity_min)), quantity_min)
+	return {
+		"kind": "material",
+		"type": material_type,
+		"display_name": material_type.replace("_", " ").capitalize(),
+		"quantity": randi_range(quantity_min, quantity_max),
+		"source_location_type": location_type,
+	}
+
+func _roll_location_encounter_card(location_type: String, location_id: String) -> Dictionary:
+	var encounter_def: Dictionary = Dictionary(LOCATION_ENCOUNTER_TABLES.get(location_type, {}))
+	if encounter_def.is_empty():
+		return {}
+	if randf() > float(encounter_def.get("chance", 0.0)):
+		return {}
+	var enemy_entry := _roll_weighted_material_drop_entry(Array(encounter_def.get("types", [])))
+	var enemy_type := str(enemy_entry.get("type", ""))
+	if enemy_type.is_empty():
+		return {}
+	return _build_enemy_card_for_type(enemy_type, "location_scavenge:%s:%s" % [location_type, location_id])
+
+func _build_scanned_location_card_at(position: Vector2, source: String = "drone_scan") -> Dictionary:
+	var location_types := [
+		"cache",
+		"crater",
+		"tower",
+		"surveillance_zone",
+		"facility",
+		"pond",
+		"bunker",
+		"field",
+		"dump",
+		"nest",
+	]
+	var location_type := str(location_types[randi() % location_types.size()])
+	var location_id := "loc_%d_%d_%d" % [int(Time.get_unix_time_from_system()), int(position.x), int(position.y)]
+	return {
+		"id": location_id,
+		"type": location_type,
+		"display_name": _generate_markov_name(LOCATION_NAME_CORPUS, true),
+		"image_seed": randi(),
+		"position": _serialize_vector(position),
+		"survey_level": 1,
+		"source": source,
+	}
+
+func _build_enemy_card_for_type(enemy_type: String, source: String = "operator_scan") -> Dictionary:
+	var enemy_def := _get_enemy_type_definition(enemy_type)
+	return {
+		"id": "enemy_%d_%d" % [int(Time.get_unix_time_from_system()), enemy_cards.size()],
+		"type": enemy_type,
+		"display_name": str(enemy_def.get("label", _default_enemy_display_name(enemy_type))),
+		"threat_level": int(enemy_def.get("threat_level", 1)),
+		"attack": int(enemy_def.get("attack", 1)),
+		"hp": int(enemy_def.get("hp", 3)),
+		"source": source,
+	}
+
 func _commit_pending_discoveries(state: Dictionary) -> int:
 	var pending_ids: Array = state.get("pending_discovery_ids", []).duplicate()
 	var discoveries := 0
@@ -1704,15 +2156,106 @@ func _commit_pending_discoveries(state: Dictionary) -> int:
 				discoveries += 1
 			break
 	state["pending_discovery_ids"] = []
+	var pending_location_cards: Array = Array(state.get("pending_location_cards", [])).duplicate(true)
+	for pending_variant in pending_location_cards:
+		if typeof(pending_variant) != TYPE_DICTIONARY:
+			continue
+		var pending_card: Dictionary = Dictionary(pending_variant).duplicate(true)
+		var position_key := _serialize_vector(_vector_from_variant(pending_card.get("position", {}), Vector2.ZERO))
+		var already_known := false
+		for location_card in location_cards:
+			if _serialize_vector(_vector_from_variant(location_card.get("position", {}), Vector2.ZERO)) == position_key:
+				already_known = true
+				break
+		if already_known:
+			continue
+		location_cards.append(pending_card)
+		discoveries += 1
+	state["pending_location_cards"] = []
 	return discoveries
 
-func _build_mission_summary(state: Dictionary, status: String, discoveries: int) -> String:
+func _commit_pending_salvage(state: Dictionary) -> Dictionary:
+	var pending_drops: Array = Array(state.get("pending_salvage_drops", [])).duplicate(true)
+	var committed := 0
+	var material_count := 0
+	var power_count := 0
+	var aggregated_materials := {}
+	for drop_variant in pending_drops:
+		if typeof(drop_variant) != TYPE_DICTIONARY:
+			continue
+		var drop_entry: Dictionary = Dictionary(drop_variant)
+		var drop_kind := str(drop_entry.get("kind", ""))
+		if drop_kind == "power":
+			var slot_index := _get_first_empty_power_drop_slot_index()
+			if slot_index < 0:
+				continue
+			if slot_index == power_unit_slots.size():
+				power_unit_slots.append({})
+			power_unit_slots[slot_index] = {
+				"id": "power_unit_%d" % slot_index,
+				"charge": BOT_POWER_CAPACITY,
+				"max_charge": BOT_POWER_CAPACITY,
+			}
+			committed += 1
+			power_count += 1
+			continue
+		if drop_kind != "material":
+			continue
+		var material_type := str(drop_entry.get("type", ""))
+		if material_type.is_empty():
+			continue
+		if not aggregated_materials.has(material_type):
+			aggregated_materials[material_type] = {
+				"type": material_type,
+				"display_name": str(drop_entry.get("display_name", material_type.replace("_", " ").capitalize())),
+				"quantity": 0,
+				"source_location_type": str(drop_entry.get("source_location_type", "")),
+			}
+		var aggregate_entry: Dictionary = Dictionary(aggregated_materials[material_type]).duplicate(true)
+		aggregate_entry["quantity"] = maxi(int(aggregate_entry.get("quantity", 0)), 0) + maxi(int(drop_entry.get("quantity", 1)), 1)
+		aggregated_materials[material_type] = aggregate_entry
+	for material_type in aggregated_materials.keys():
+		var aggregate_entry: Dictionary = Dictionary(aggregated_materials[material_type]).duplicate(true)
+		if _append_material_card(aggregate_entry):
+			committed += 1
+			material_count += 1
+	state["pending_salvage_drops"] = []
+	return {
+		"count": committed,
+		"materials": material_count,
+		"power_units": power_count,
+	}
+
+func _append_material_card(material_entry: Dictionary) -> bool:
+	var material_type := str(material_entry.get("type", ""))
+	if material_type.is_empty():
+		return false
+	var quantity := maxi(int(material_entry.get("quantity", 0)), 0)
+	if quantity <= 0:
+		return false
+	material_cards.append({
+		"id": "material_%d_%d" % [int(Time.get_unix_time_from_system()), material_cards.size()],
+		"type": material_type,
+		"display_name": str(material_entry.get("display_name", material_type.replace("_", " ").capitalize())),
+		"quantity": quantity,
+		"source_location_type": str(material_entry.get("source_location_type", "")),
+	})
+	return true
+
+func _build_mission_summary(state: Dictionary, status: String, discoveries: int, salvage: Dictionary = {}) -> String:
 	var bot_name := _bot_display_name(_get_bot_index_from_state(state))
 	match status:
 		"returned":
+			var summary_parts: Array = []
 			if discoveries > 0:
 				var noun := "discovery" if discoveries == 1 else "discoveries"
-				return "%s returned with %d new %s" % [bot_name, discoveries, noun]
+				summary_parts.append("%d new %s" % [discoveries, noun])
+			var salvage_count := int(salvage.get("count", 0))
+			if salvage_count > 0:
+				var salvage_noun := "salvage item" if salvage_count == 1 else "salvage items"
+				summary_parts.append("%d %s" % [salvage_count, salvage_noun])
+			if not summary_parts.is_empty():
+				return "%s returned with %s" % [bot_name, " and ".join(summary_parts)]
 			return "%s returned with no new discoveries" % bot_name
 		"stranded":
 			return "%s stranded in the field" % bot_name
@@ -1730,6 +2273,7 @@ func _get_bot_index_from_state(state: Dictionary) -> int:
 
 func _apply_saved_bot_entry(bot_index: int, bot_entry: Dictionary):
 	bot_loadouts[bot_index]["loaded_cartridge_id"] = str(bot_entry.get("loaded_cartridge_id", ""))
+	bot_loadouts[bot_index]["combat_ptr"] = int(bot_entry.get("combat_ptr", 0))
 	var saved_power_charge := int(bot_entry.get("power_charge", bot_entry.get("wound_energy", 0)))
 	var saved_max_power := int(bot_entry.get("max_power_charge", bot_entry.get("max_wound_energy", BOT_POWER_CAPACITY)))
 	if saved_max_power < BOT_POWER_CAPACITY and saved_power_charge > 0:
@@ -1747,8 +2291,47 @@ func _apply_saved_bot_entry(bot_index: int, bot_entry: Dictionary):
 	bot_loadouts[bot_index]["outside_trail"] = _vector_array_from_variant(bot_entry.get("outside_trail", []))
 	bot_loadouts[bot_index]["predicted_trail"] = _vector_array_from_variant(bot_entry.get("predicted_trail", []))
 	bot_loadouts[bot_index]["pending_discovery_ids"] = bot_entry.get("pending_discovery_ids", []).duplicate()
+	bot_loadouts[bot_index]["pending_location_cards"] = _normalize_saved_location_cards(Array(bot_entry.get("pending_location_cards", [])))
+	bot_loadouts[bot_index]["mission_location_id"] = str(bot_entry.get("mission_location_id", ""))
+	bot_loadouts[bot_index]["mission_location_type"] = str(bot_entry.get("mission_location_type", ""))
+	bot_loadouts[bot_index]["mission_location_position"] = _vector_from_variant(bot_entry.get("mission_location_position", {}), get_shelter_position())
+	bot_loadouts[bot_index]["pending_salvage_drops"] = Array(bot_entry.get("pending_salvage_drops", [])).duplicate(true)
+	bot_loadouts[bot_index]["mission_pickups"] = maxi(int(bot_entry.get("mission_pickups", 0)), 0)
+	bot_loadouts[bot_index]["mission_pickup_attempts"] = maxi(int(bot_entry.get("mission_pickup_attempts", 0)), 0)
+	bot_loadouts[bot_index]["mission_encounters"] = maxi(int(bot_entry.get("mission_encounters", 0)), 0)
+	bot_loadouts[bot_index]["activity_tick"] = maxi(int(bot_entry.get("activity_tick", 0)), 0)
+	bot_loadouts[bot_index]["activity_log"] = Array(bot_entry.get("activity_log", [])).duplicate(true)
 	bot_loadouts[bot_index]["last_mission_summary"] = str(bot_entry.get("last_mission_summary", ""))
 	_sync_power_card_count(bot_loadouts[bot_index])
+
+func _normalize_loaded_bot_states() -> bool:
+	var changed := false
+	for bot_index in range(bot_loadouts.size()):
+		var bot_state: Dictionary = bot_loadouts[bot_index].duplicate(true)
+		var loaded_id := str(bot_state.get("loaded_cartridge_id", ""))
+		var has_cartridge := loaded_id.is_empty() == false and not get_bot_loaded_cartridge(bot_index).is_empty()
+		var outside_status := str(bot_state.get("outside_status", "cabinet"))
+		var at_shelter := Vector2(bot_state.get("outside_position", get_shelter_position())) == get_shelter_position()
+		if not has_cartridge and not loaded_id.is_empty():
+			bot_state["loaded_cartridge_id"] = ""
+			bot_state["combat_ptr"] = 0
+			changed = true
+		if outside_status == "active" and not has_cartridge:
+			if at_shelter:
+				bot_state["outside_status"] = "returned"
+				_clear_bot_mission_state(bot_state)
+				bot_state["last_mission_summary"] = "%s reset at shelter" % _bot_display_name(bot_index)
+			else:
+				_set_terminal_status(bot_state, "halted", false)
+			changed = true
+		elif outside_status == "active" and at_shelter and not str(bot_state.get("mission_location_id", "")).is_empty():
+			var trail: Array = Array(bot_state.get("outside_trail", []))
+			var did_progress := trail.size() > 1 or int(bot_state.get("mission_pickup_attempts", 0)) > 0 or int(bot_state.get("mission_pickups", 0)) > 0
+			if did_progress:
+				_set_terminal_status(bot_state, "halted", true)
+				changed = true
+		bot_loadouts[bot_index] = bot_state
+	return changed
 
 func _apply_saved_outside_objects(object_data: Array):
 	var defaults := {}
@@ -1776,6 +2359,7 @@ func _serialize_bot_loadouts() -> Array:
 			"id": str(bot.get("id", "")),
 			"drone_type": str(bot.get("drone_type", "")),
 			"loaded_cartridge_id": str(bot.get("loaded_cartridge_id", "")),
+			"combat_ptr": int(bot.get("combat_ptr", 0)),
 			"power_charge": int(bot.get("power_charge", 0)),
 			"power_card_count": int(bot.get("power_card_count", 0)),
 			"max_power_charge": int(bot.get("max_power_charge", BOT_POWER_CAPACITY)),
@@ -1788,6 +2372,16 @@ func _serialize_bot_loadouts() -> Array:
 			"outside_trail": _serialize_vector_array(bot.get("outside_trail", [])),
 			"predicted_trail": _serialize_vector_array(bot.get("predicted_trail", [])),
 			"pending_discovery_ids": bot.get("pending_discovery_ids", []).duplicate(),
+			"pending_location_cards": Array(bot.get("pending_location_cards", [])).duplicate(true),
+			"mission_location_id": str(bot.get("mission_location_id", "")),
+			"mission_location_type": str(bot.get("mission_location_type", "")),
+			"mission_location_position": _serialize_vector(Vector2(bot.get("mission_location_position", get_shelter_position()))),
+			"pending_salvage_drops": Array(bot.get("pending_salvage_drops", [])).duplicate(true),
+			"mission_pickups": maxi(int(bot.get("mission_pickups", 0)), 0),
+			"mission_pickup_attempts": maxi(int(bot.get("mission_pickup_attempts", 0)), 0),
+			"mission_encounters": maxi(int(bot.get("mission_encounters", 0)), 0),
+			"activity_tick": maxi(int(bot.get("activity_tick", 0)), 0),
+			"activity_log": Array(bot.get("activity_log", [])).duplicate(true),
 			"last_mission_summary": str(bot.get("last_mission_summary", "")),
 		})
 	return data
@@ -1859,15 +2453,17 @@ func _normalize_saved_blueprint_cards(cards: Array) -> Array:
 	for entry in cards:
 		if typeof(entry) != TYPE_DICTIONARY:
 			continue
+		var result_name := str(entry.get("result", "Blueprint")).to_upper()
 		var formula := str(entry.get("formula", ""))
 		var formula_parts: Array = _sanitize_recipe_parts(Array(entry.get("formula_parts", [])).duplicate(true))
 		if formula_parts.is_empty():
 			formula_parts = _sanitize_recipe_parts(_formula_parts_from_formula_string(formula))
+		formula_parts = _normalize_recipe_result_parts(result_name, formula_parts)
 		result.append({
 			"id": str(entry.get("id", "")),
 			"recipe_id": str(entry.get("recipe_id", "")),
 			"result": str(entry.get("result", "Blueprint")),
-			"formula": "%s = %s" % [str(entry.get("result", "Blueprint")).to_upper(), _join_formula_parts(formula_parts)],
+			"formula": "%s = %s" % [result_name, _join_formula_parts(formula_parts)],
 			"formula_parts": formula_parts,
 			"subject_key": str(entry.get("subject_key", "")),
 		})
@@ -1897,15 +2493,17 @@ func _normalize_saved_journal_entries(entries: Array) -> Array:
 			if typeof(recipe_variant) != TYPE_DICTIONARY:
 				continue
 			var recipe: Dictionary = recipe_variant
+			var result_name := str(recipe.get("result", "Blueprint")).to_upper()
 			var formula := str(recipe.get("formula", ""))
 			var formula_parts: Array = _sanitize_recipe_parts(Array(recipe.get("formula_parts", [])).duplicate(true))
 			if formula_parts.is_empty():
 				formula_parts = _sanitize_recipe_parts(_formula_parts_from_formula_string(formula))
+			formula_parts = _normalize_recipe_result_parts(result_name, formula_parts)
 			normalized_recipes.append({
 				"id": str(recipe.get("id", "")),
-				"result": str(recipe.get("result", "Blueprint")).to_upper(),
+				"result": result_name,
 				"formula_parts": formula_parts,
-				"formula": "%s = %s" % [str(recipe.get("result", "Blueprint")).to_upper(), _join_formula_parts(formula_parts)],
+				"formula": "%s = %s" % [result_name, _join_formula_parts(formula_parts)],
 				"subject_key": str(recipe.get("subject_key", "")),
 				"unread": bool(recipe.get("unread", false)),
 			})
@@ -1913,8 +2511,8 @@ func _normalize_saved_journal_entries(entries: Array) -> Array:
 			"subject_key": str(entry.get("subject_key", "")),
 			"subject_kind": str(entry.get("subject_kind", "")),
 			"subject_type": str(entry.get("subject_type", "")),
-			"title": str(entry.get("title", "")),
-			"description": str(entry.get("description", "")),
+			"title": _get_normalized_journal_title(entry),
+			"description": _get_normalized_journal_description(entry),
 			"recipes": normalized_recipes,
 			"unread": bool(entry.get("unread", false)),
 			"attempts": maxi(int(entry.get("attempts", 0)), 0),
@@ -1946,6 +2544,69 @@ func _sanitize_recipe_parts(parts: Array) -> Array:
 			continue
 		sanitized.append(normalized)
 	return sanitized
+
+func _load_recipe_catalog():
+	recipe_catalog = {}
+	if not FileAccess.file_exists(RECIPE_CATALOG_PATH):
+		push_warning("Recipe catalog missing at %s" % RECIPE_CATALOG_PATH)
+		return
+	var file := FileAccess.open(RECIPE_CATALOG_PATH, FileAccess.READ)
+	if file == null:
+		push_warning("Failed to open recipe catalog at %s" % RECIPE_CATALOG_PATH)
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_warning("Recipe catalog at %s is not a dictionary" % RECIPE_CATALOG_PATH)
+		return
+	recipe_catalog = Dictionary(parsed)
+
+func _load_enemy_loot_catalog():
+	enemy_loot_catalog = {}
+	if not FileAccess.file_exists(ENEMY_LOOT_CATALOG_PATH):
+		push_warning("Enemy loot catalog missing at %s" % ENEMY_LOOT_CATALOG_PATH)
+		return
+	var file := FileAccess.open(ENEMY_LOOT_CATALOG_PATH, FileAccess.READ)
+	if file == null:
+		push_warning("Failed to open enemy loot catalog at %s" % ENEMY_LOOT_CATALOG_PATH)
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_warning("Enemy loot catalog at %s is not a dictionary" % ENEMY_LOOT_CATALOG_PATH)
+		return
+	enemy_loot_catalog = Dictionary(parsed)
+
+func _get_loaded_research_recipes(subject_key: String) -> Array:
+	var loaded: Array = []
+	if recipe_catalog.is_empty():
+		return loaded
+	for recipe_variant in Array(recipe_catalog.get(subject_key, [])):
+		if typeof(recipe_variant) != TYPE_DICTIONARY:
+			continue
+		var recipe: Dictionary = recipe_variant
+		loaded.append(_build_recipe(
+			str(recipe.get("id", "")),
+			str(recipe.get("result", "")),
+			Array(recipe.get("parts", [])).duplicate(true),
+			subject_key
+		))
+	return loaded
+
+func _get_loaded_enemy_loot_table(enemy_type: String) -> Array:
+	if enemy_loot_catalog.is_empty():
+		return []
+	return Array(enemy_loot_catalog.get(enemy_type, [])).duplicate(true)
+
+func _normalize_recipe_result_parts(result_name: String, parts: Array) -> Array:
+	var normalized_result := result_name.to_upper()
+	if normalized_result != "ENERGY BAR" and normalized_result != "DRY RATIONS":
+		return parts
+	var filtered: Array = []
+	for part_variant in parts:
+		var normalized_part := str(part_variant).strip_edges()
+		if normalized_part.to_upper() == "PAPER x1".to_upper():
+			continue
+		filtered.append(normalized_part)
+	return filtered
 
 func _get_journal_entry_index(subject_key: String) -> int:
 	for entry_index in range(journal_entries.size()):
@@ -2018,6 +2679,26 @@ func _consume_research_subject(subject: Dictionary) -> Dictionary:
 		_:
 			return {"consumed": true, "depleted": false}
 
+func _get_normalized_journal_title(entry: Dictionary) -> String:
+	var subject_def := _get_research_subject_definition({
+		"kind": str(entry.get("subject_kind", "")),
+		"type": str(entry.get("subject_type", "")),
+	})
+	var normalized_title := str(subject_def.get("title", ""))
+	if not normalized_title.is_empty():
+		return normalized_title
+	return str(entry.get("title", ""))
+
+func _get_normalized_journal_description(entry: Dictionary) -> String:
+	var subject_def := _get_research_subject_definition({
+		"kind": str(entry.get("subject_kind", "")),
+		"type": str(entry.get("subject_type", "")),
+	})
+	var normalized_description := str(subject_def.get("description", ""))
+	if not normalized_description.is_empty():
+		return normalized_description
+	return str(entry.get("description", ""))
+
 func _get_research_subject_definition(subject: Dictionary) -> Dictionary:
 	var subject_kind := str(subject.get("kind", ""))
 	var subject_type := str(subject.get("type", ""))
@@ -2039,6 +2720,37 @@ func _get_research_subject_definition(subject: Dictionary) -> Dictionary:
 		_:
 			return {}
 
+func _get_drone_action_command_list(drone_type: String) -> Array:
+	return Array(DRONE_ACTION_COMMANDS.get(drone_type, []))
+
+func _get_drone_action_command_text(drone_type: String) -> String:
+	var command_labels: Array[String] = []
+	for command_name_variant in _get_drone_action_command_list(drone_type):
+		command_labels.append(str(command_name_variant).to_upper())
+	return ", ".join(command_labels)
+
+func _get_drone_action_command_code_text(drone_type: String) -> String:
+	var command_specs: Array[String] = []
+	for command_name_variant in _get_drone_action_command_list(drone_type):
+		var command_name := str(command_name_variant).to_upper()
+		var bits := _get_instruction_opcode_bits(command_name)
+		if bits.is_empty():
+			command_specs.append(command_name)
+		else:
+			command_specs.append("%s %s" % [command_name, bits])
+	return ", ".join(command_specs)
+
+func _get_instruction_opcode_bits(command_name: String) -> String:
+	for index in range(32):
+		if PunchEncodingData.get_opcode_name(index) == command_name:
+			return PunchEncodingData.bits_for_index(index)
+	return ""
+
+func _is_drone_command_supported(drone_type: String, instruction_type: String) -> bool:
+	if DRONE_SHARED_COMMANDS.has(instruction_type):
+		return true
+	return _get_drone_action_command_list(drone_type).has(instruction_type)
+
 func _get_material_research_definition(material_type: String) -> Dictionary:
 	var subject_key := "material_%s" % material_type
 	match material_type:
@@ -2048,10 +2760,7 @@ func _get_material_research_definition(material_type: String) -> Dictionary:
 				"subject_type": material_type,
 				"title": "METAL",
 				"description": "Recovered structural stock. Best used for frames, braces, mounts, and hard-wearing shells.",
-				"recipes": [
-					_build_recipe("metal_scrap_frame", "SCRAP FRAME", ["BLUEPRINT", "OPERATOR", "METAL x2", "SPRING x1"], subject_key),
-					_build_recipe("metal_route_pin", "ROUTE PIN", ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "METAL x1", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"spring":
 			return {
@@ -2059,10 +2768,7 @@ func _get_material_research_definition(material_type: String) -> Dictionary:
 				"subject_type": material_type,
 				"title": "SPRING",
 				"description": "Tension stock. Stores work in a compact form and anchors most wound or snapping mechanisms.",
-				"recipes": [
-					_build_recipe("spring_wound_core", "WOUND CORE", ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "METAL x2", "SPRING x1"], subject_key),
-					_build_recipe("spring_trip_latch", "TRIP LATCH", ["BLUEPRINT", "BENCH", "OPERATOR", "SPRING x2", "METAL x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"paper":
 			return {
@@ -2070,10 +2776,7 @@ func _get_material_research_definition(material_type: String) -> Dictionary:
 				"subject_type": material_type,
 				"title": "PAPER",
 				"description": "Recording stock. Useful for labels, disposable notes, and the outer layers of printable media.",
-				"recipes": [
-					_build_recipe("paper_media_stock", "MEDIA STOCK", ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2"], subject_key),
-					_build_recipe("paper_field_dossier", "FIELD DOSSIER", ["BLUEPRINT", "OPERATOR", "PAPER x2", "HIDE x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"biomass":
 			return {
@@ -2081,12 +2784,7 @@ func _get_material_research_definition(material_type: String) -> Dictionary:
 				"subject_type": material_type,
 				"title": "BIOMASS",
 				"description": "Wet organic stock. Ferments, binds, and carries scent more readily than harder materials.",
-				"recipes": [
-					_build_recipe("biomass_energy_bar", "ENERGY BAR", ["BLUEPRINT", "OPERATOR", "BIOMASS x2", "PAPER x1"], subject_key),
-					_build_recipe("biomass_medicine", "MEDICINE", ["BLUEPRINT", "OPERATOR", "BIOMASS x2", "PAPER x1", "BONE x1"], subject_key),
-					_build_recipe("biomass_bait_paste", "BAIT PASTE", ["BLUEPRINT", "OPERATOR", "BIOMASS x2", "BONE x1"], subject_key),
-					_build_recipe("biomass_growth_medium", "GROWTH MEDIUM", ["BLUEPRINT", "OPERATOR", "BIOMASS x3", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"hide":
 			return {
@@ -2094,10 +2792,7 @@ func _get_material_research_definition(material_type: String) -> Dictionary:
 				"subject_type": material_type,
 				"title": "HIDE",
 				"description": "Flexible organic sheet stock. Good for wraps, satchels, and quiet padded layers.",
-				"recipes": [
-					_build_recipe("hide_padded_wrap", "PADDED WRAP", ["BLUEPRINT", "OPERATOR", "HIDE x2", "PAPER x1"], subject_key),
-					_build_recipe("hide_satchel", "HIDE SATCHEL", ["BLUEPRINT", "OPERATOR", "HIDE x2", "BONE x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"bone":
 			return {
@@ -2105,10 +2800,7 @@ func _get_material_research_definition(material_type: String) -> Dictionary:
 				"subject_type": material_type,
 				"title": "BONE",
 				"description": "Hard organic stock. Light, rigid, and easy to shape into hooks, pins, and points.",
-				"recipes": [
-					_build_recipe("bone_needle", "BONE NEEDLE", ["BLUEPRINT", "OPERATOR", "BONE x2", "HIDE x1"], subject_key),
-					_build_recipe("bone_charm", "BONE CHARM", ["BLUEPRINT", "OPERATOR", "BONE x1", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
 			return {}
@@ -2122,10 +2814,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "POND",
 				"description": "Shallow basin with recoverable wet stock. Extracts: BIOMASS, PAPER traces, soft organic residue. Scavenging risk: STALKER tracks, WOLF PACK sign, occasional GRIZZLY visits near water.",
-				"recipes": [
-					_build_recipe("pond_reed_filter", "REED FILTER", ["BLUEPRINT", "OPERATOR", "POND", "PAPER x1", "BIOMASS x1"], subject_key),
-					_build_recipe("pond_bait_broth", "BAIT BROTH", ["BLUEPRINT", "OPERATOR", "POND", "BIOMASS x2", "BONE x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"crater":
 			return {
@@ -2133,10 +2822,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "CRATER",
 				"description": "Impact basin with sifted dust and hard edges. Extracts: METAL fragments, BONE shards, dry BIOMASS. Scavenging risk: STALKER ambush, WOLF PACK sheltering in the lip, rare SURVEILLANCE DRONE pass-over.",
-				"recipes": [
-					_build_recipe("crater_dust_sieve", "DUST SIEVE", ["BLUEPRINT", "OPERATOR", "CRATER", "METAL x1", "PAPER x1"], subject_key),
-					_build_recipe("crater_impact_brace", "IMPACT BRACE", ["BLUEPRINT", "OPERATOR", "CRATER", "METAL x2", "BONE x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"tower":
 			return {
@@ -2144,10 +2830,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "TOWER",
 				"description": "Elevated relay structure. Extracts: METAL, PAPER records, occasional POWER UNIT salvage. Scavenging risk: SURVEILLANCE DRONE patrols, INFANTRY DRONE response, STALKER spotter nests around the base.",
-				"recipes": [
-					_build_recipe("tower_signal_mast", "SIGNAL MAST", ["BLUEPRINT", "OPERATOR", "TOWER", "METAL x2", "SPRING x1"], subject_key),
-					_build_recipe("tower_watch_glass", "WATCH GLASS", ["BLUEPRINT", "OPERATOR", "TOWER", "PAPER x1", "METAL x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"surveillance_zone":
 			return {
@@ -2155,10 +2838,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "SURVEILLANCE ZONE",
 				"description": "Observed corridor with repeated watch coverage. Extracts: PAPER scraps, METAL stakes, occasional POWER UNIT debris. Scavenging risk: SURVEILLANCE DRONE always likely, INFANTRY DRONE escalation if disturbed, STALKER scavengers trailing the route.",
-				"recipes": [
-					_build_recipe("surveillance_blind_banner", "BLIND BANNER", ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "SURVEILLANCE ZONE", "PAPER x2", "METAL x1"], subject_key),
-					_build_recipe("surveillance_scramble_kite", "SCRAMBLE KITE", ["BLUEPRINT", "OPERATOR", "SURVEILLANCE ZONE", "PAPER x1", "SPRING x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"facility":
 			return {
@@ -2166,10 +2846,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "FACILITY",
 				"description": "Industrial structure with repeated joints and work surfaces. Extracts: METAL, PAPER manuals, POWER UNIT stock, compact machine parts. Scavenging risk: INFANTRY DRONE defense, SURVEILLANCE DRONE watch, STALKER looters using interior cover.",
-				"recipes": [
-					_build_recipe("facility_press_frame", "PRESS FRAME", ["BLUEPRINT", "BENCH", "OPERATOR", "FACILITY", "METAL x2"], subject_key),
-					_build_recipe("facility_tool_chest", "TOOL CHEST", ["BLUEPRINT", "OPERATOR", "FACILITY", "METAL x1", "HIDE x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"bunker":
 			return {
@@ -2177,10 +2854,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "BUNKER",
 				"description": "Sealed shelter construction. Extracts: PAPER archives, METAL lockers, preserved POWER UNIT stock. Scavenging risk: STALKER squatters, INFANTRY DRONE holdouts, GRIZZLY denning in breached entrances.",
-				"recipes": [
-					_build_recipe("bunker_sealed_locker", "SEALED LOCKER", ["BLUEPRINT", "OPERATOR", "BUNKER", "METAL x2", "PAPER x1"], subject_key),
-					_build_recipe("bunker_hatch_brace", "HATCH BRACE", ["BLUEPRINT", "OPERATOR", "BUNKER", "METAL x1", "SPRING x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"field":
 			return {
@@ -2188,10 +2862,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "FIELD",
 				"description": "Open productive ground. Extracts: BIOMASS, PAPER sacks, dry HIDE scraps from old work camps. Scavenging risk: WOLF PACK movement in the rows, GRIZZLY foraging, STALKER harvest raids.",
-				"recipes": [
-					_build_recipe("field_dry_rations", "DRY RATIONS", ["BLUEPRINT", "OPERATOR", "FIELD", "BIOMASS x2", "PAPER x1"], subject_key),
-					_build_recipe("field_fiber_bundle", "FIBER BUNDLE", ["BLUEPRINT", "OPERATOR", "FIELD", "HIDE x1", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"dump":
 			return {
@@ -2199,10 +2870,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "DUMP",
 				"description": "Mixed discard site. Extracts: METAL, PAPER, BONE, occasional POWER UNIT scrap. Scavenging risk: STALKER scavengers, GRIZZLY feeding runs, SURVEILLANCE DRONE sweeps over open heaps.",
-				"recipes": [
-					_build_recipe("dump_scrap_bundle", "SCRAP BUNDLE", ["BLUEPRINT", "TRASH", "OPERATOR", "DUMP", "METAL x2"], subject_key),
-					_build_recipe("dump_sort_bin", "SORT BIN", ["BLUEPRINT", "TRASH", "OPERATOR", "DUMP", "METAL x1", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"cache":
 			return {
@@ -2210,10 +2878,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "CACHE",
 				"description": "Small reserve layout. Extracts: PAPER tags, METAL fittings, preserved BIOMASS or HIDE bundles depending on stock. Scavenging risk: STALKER looters, WOLF PACK scenting stored food, rare SURVEILLANCE DRONE checks if the cache is marked.",
-				"recipes": [
-					_build_recipe("cache_archive_satchel", "ARCHIVE SATCHEL", ["BLUEPRINT", "OPERATOR", "CACHE", "HIDE x1", "PAPER x2"], subject_key),
-					_build_recipe("cache_supply_wrap", "SUPPLY WRAP", ["BLUEPRINT", "OPERATOR", "CACHE", "PAPER x1", "HIDE x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"nest":
 			return {
@@ -2221,10 +2886,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "NEST",
 				"description": "Organic clustered structure. Extracts: BIOMASS, BONE splinters, HIDE fragments from prey remains. Scavenging risk: STALKER opportunists, WOLF PACK scavenging around kills, GRIZZLY disruption near active nests.",
-				"recipes": [
-					_build_recipe("nest_repellent_paste", "REPELLENT PASTE", ["BLUEPRINT", "OPERATOR", "NEST", "BIOMASS x2", "BONE x1"], subject_key),
-					_build_recipe("nest_brood_cage", "BROOD CAGE", ["BLUEPRINT", "OPERATOR", "NEST", "METAL x1", "HIDE x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"ruin":
 			return {
@@ -2232,10 +2894,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_type": location_type,
 				"title": "RUIN",
 				"description": "Broken structure with surviving edges and voids. Extracts: METAL braces, PAPER fragments, BONE and BIOMASS trapped in collapse pockets. Scavenging risk: STALKER sheltering, WOLF PACK dens, SURVEILLANCE DRONE line-of-sight nests on upper remains.",
-				"recipes": [
-					_build_recipe("ruin_mason_brace", "MASON BRACE", ["BLUEPRINT", "OPERATOR", "RUIN", "METAL x1", "BONE x1"], subject_key),
-					_build_recipe("ruin_archive_shelf", "ARCHIVE SHELF", ["BLUEPRINT", "OPERATOR", "RUIN", "METAL x1", "PAPER x2"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
 			return {}
@@ -2249,10 +2908,7 @@ func _get_enemy_research_definition(enemy_type: String) -> Dictionary:
 				"subject_type": enemy_type,
 				"title": "SURVEILLANCE DRONE",
 				"description": "A light machine watcher. Useful for masking sightlines and redirecting observation.",
-				"recipes": [
-					_build_recipe("surveillance_blind_lens", "BLIND LENS", ["BLUEPRINT", "OPERATOR", "SURVEILLANCE DRONE", "METAL x1", "SPRING x1"], subject_key),
-					_build_recipe("surveillance_signal_scrambler", "SIGNAL SCRAMBLER", ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "SURVEILLANCE DRONE", "SPRING x1", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"infantry_drone":
 			return {
@@ -2260,10 +2916,7 @@ func _get_enemy_research_definition(enemy_type: String) -> Dictionary:
 				"subject_type": enemy_type,
 				"title": "INFANTRY DRONE",
 				"description": "A heavier combat chassis. Teaches armor layering and recoil management.",
-				"recipes": [
-					_build_recipe("infantry_armor_patch", "ARMOR PATCH", ["BLUEPRINT", "OPERATOR", "INFANTRY DRONE", "METAL x2"], subject_key),
-					_build_recipe("infantry_spring_bolt", "SPRING BOLT", ["BLUEPRINT", "BENCH", "OPERATOR", "INFANTRY DRONE", "SPRING x1", "METAL x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"stalker":
 			return {
@@ -2271,10 +2924,7 @@ func _get_enemy_research_definition(enemy_type: String) -> Dictionary:
 				"subject_type": enemy_type,
 				"title": "STALKER",
 				"description": "A hostile scavenger. Its carried remnants suggest note-keeping, stalking gear, and field improvisation.",
-				"recipes": [
-					_build_recipe("stalker_trail_notes", "TRAIL NOTES", ["BLUEPRINT", "OPERATOR", "STALKER", "PAPER x2"], subject_key),
-					_build_recipe("stalker_quiet_harness", "QUIET HARNESS", ["BLUEPRINT", "OPERATOR", "STALKER", "HIDE x1", "SPRING x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"grizzly":
 			return {
@@ -2282,10 +2932,7 @@ func _get_enemy_research_definition(enemy_type: String) -> Dictionary:
 				"subject_type": enemy_type,
 				"title": "GRIZZLY",
 				"description": "Heavy animal mass. Suggests insulation, load-bearing hide use, and hook geometry from bone.",
-				"recipes": [
-					_build_recipe("grizzly_hide_mantle", "HIDE MANTLE", ["BLUEPRINT", "OPERATOR", "GRIZZLY", "HIDE x2", "BONE x1"], subject_key),
-					_build_recipe("grizzly_bone_hook", "BONE HOOK", ["BLUEPRINT", "OPERATOR", "GRIZZLY", "BONE x2", "METAL x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"wolf_pack":
 			return {
@@ -2293,10 +2940,7 @@ func _get_enemy_research_definition(enemy_type: String) -> Dictionary:
 				"subject_type": enemy_type,
 				"title": "WOLF PACK",
 				"description": "Coordinated animal threat. Reveals pack spacing, tether logic, and scent-driven movement.",
-				"recipes": [
-					_build_recipe("wolf_hide_leash", "HIDE LEASH", ["BLUEPRINT", "OPERATOR", "WOLF PACK", "HIDE x1", "BONE x1"], subject_key),
-					_build_recipe("wolf_pack_caller", "PACK CALLER", ["BLUEPRINT", "OPERATOR", "WOLF PACK", "BONE x1", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
 			return {}
@@ -2310,10 +2954,7 @@ func _get_machine_research_definition(machine_type: String) -> Dictionary:
 				"subject_type": machine_type,
 				"title": "PROGRAMMING BENCH",
 				"description": "Punch-driven media station. Best for discovering recording layouts and tape handling procedures.",
-				"recipes": [
-					_build_recipe("bench_code_strip", "CODE STRIP", ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2", "SPRING x1"], subject_key),
-					_build_recipe("bench_archive_copy", "ARCHIVE COPY", ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"route":
 			return {
@@ -2321,10 +2962,7 @@ func _get_machine_research_definition(machine_type: String) -> Dictionary:
 				"subject_type": machine_type,
 				"title": "ROUTE TABLE",
 				"description": "Paper plotting station. Useful for route slips, survey marks, and path abstractions.",
-				"recipes": [
-					_build_recipe("route_survey_map", "SURVEY MAP", ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "PAPER x2", "METAL x1"], subject_key),
-					_build_recipe("route_route_slip", "ROUTE SLIP", ["BLUEPRINT", "ROUTE TABLE", "OPERATOR", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"charge":
 			return {
@@ -2332,10 +2970,7 @@ func _get_machine_research_definition(machine_type: String) -> Dictionary:
 				"subject_type": machine_type,
 				"title": "CHARGE MACHINE",
 				"description": "Spring winding apparatus. A direct reference for charge handling and tension storage.",
-				"recipes": [
-					_build_recipe("charge_wound_pack", "WOUND PACK", ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "SPRING x2", "METAL x1"], subject_key),
-					_build_recipe("charge_reserve_charge", "RESERVE CHARGE", ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "SPRING x1", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"trash":
 			return {
@@ -2343,10 +2978,7 @@ func _get_machine_research_definition(machine_type: String) -> Dictionary:
 				"subject_type": machine_type,
 				"title": "TRASH",
 				"description": "Sorting and discard point. Good for learning reclamation, pulping, and material separation.",
-				"recipes": [
-					_build_recipe("trash_pulp_sheet", "PULP SHEET", ["BLUEPRINT", "TRASH", "OPERATOR", "PAPER x2"], subject_key),
-					_build_recipe("trash_scrap_sorter", "SCRAP SORTER", ["BLUEPRINT", "TRASH", "OPERATOR", "METAL x1", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
 			return {}
@@ -2359,22 +2991,16 @@ func _get_drone_research_definition(drone_type: String) -> Dictionary:
 				"subject_kind": "drone",
 				"subject_type": drone_type,
 				"title": "SPIDER DRONE",
-				"description": "Stable low profile frame. Good for trap rigs, bracing, and close terrain work.",
-				"recipes": [
-					_build_recipe("spider_trip_rig", "TRIP RIG", ["BLUEPRINT", "OPERATOR", "SPIDER DRONE", "METAL x1", "SPRING x1"], subject_key),
-					_build_recipe("spider_claw_brace", "CLAW BRACE", ["BLUEPRINT", "OPERATOR", "SPIDER DRONE", "METAL x2"], subject_key),
-				],
+				"description": "Stable low profile frame. Processes: salvage, carrying, drop placement, close terrain work, direct attack approach. Action commands: %s. Punch codes: %s." % [_get_drone_action_command_text(drone_type), _get_drone_action_command_code_text(drone_type)],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"butterfly":
 			return {
 				"subject_kind": "drone",
 				"subject_type": drone_type,
 				"title": "BUTTERFLY DRONE",
-				"description": "Light winged platform. Useful for glide surfaces, balance, and visual signal surfaces.",
-				"recipes": [
-					_build_recipe("butterfly_glide_vane", "GLIDE VANE", ["BLUEPRINT", "OPERATOR", "BUTTERFLY DRONE", "PAPER x1", "SPRING x1"], subject_key),
-					_build_recipe("butterfly_scout_sail", "SCOUT SAIL", ["BLUEPRINT", "OPERATOR", "BUTTERFLY DRONE", "PAPER x2", "METAL x1"], subject_key),
-				],
+				"description": "Light winged platform. Processes: scouting, movement, turning, visual survey, light route discovery. Action commands: %s. Punch codes: %s." % [_get_drone_action_command_text(drone_type), _get_drone_action_command_code_text(drone_type)],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
 			return {}
@@ -2388,10 +3014,7 @@ func _get_tape_research_definition(tape_type: String) -> Dictionary:
 				"subject_type": tape_type,
 				"title": "PROGRAMMED TAPE",
 				"description": "Punched instruction medium. Reveals sequencing, loops, and reusable command patterns.",
-				"recipes": [
-					_build_recipe("tape_loop_strip", "LOOP STRIP", ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2", "SPRING x1"], subject_key),
-					_build_recipe("tape_archive_strip", "ARCHIVE STRIP", ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x3"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"blank":
 			return {
@@ -2399,10 +3022,7 @@ func _get_tape_research_definition(tape_type: String) -> Dictionary:
 				"subject_type": tape_type,
 				"title": "BLANK TAPE",
 				"description": "Unused media stock. Useful for fresh recording surfaces and clean punched layouts.",
-				"recipes": [
-					_build_recipe("blank_fresh_tape", "FRESH TAPE", ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x2"], subject_key),
-					_build_recipe("blank_clean_strip", "CLEAN STRIP", ["BLUEPRINT", "BENCH", "OPERATOR", "PAPER x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
 			return {}
@@ -2416,10 +3036,7 @@ func _get_resource_research_definition(resource_type: String) -> Dictionary:
 				"subject_type": resource_type,
 				"title": "POWER CARD",
 				"description": "Prepared wound charge. A compact store of mechanical work and reserve field motion.",
-				"recipes": [
-					_build_recipe("resource_wound_spring", "WOUND SPRING", ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "SPRING x2"], subject_key),
-					_build_recipe("resource_reserve_charge", "RESERVE CHARGE", ["BLUEPRINT", "CHARGE MACHINE", "OPERATOR", "SPRING x1", "METAL x1"], subject_key),
-				],
+				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
 			return {}
