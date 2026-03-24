@@ -13,10 +13,12 @@ const PROGRAMMED_CARTRIDGE_CAPACITY := 8
 const BLANK_CARTRIDGE_SLOT_COUNT := 4
 const BOT_CABINET_CAPACITY := 2
 const BOT_POWER_CAPACITY := 50
+const UNIT_EQUIPMENT_SLOT_COUNT := 3
 const OPERATOR_MAX_ENERGY := 12
 const OPERATOR_MAX_HP := 6
 const CHARGE_WORK_COST := 2
 const MAX_PREDICTION_STEPS := 64
+const TANK_PROCESS_DEFAULT_DURATION := 7.8
 const LOCATION_NAME_CORPUS := [
 	"watchtower",
 	"waystation",
@@ -39,6 +41,14 @@ const LOCATION_NAME_CORPUS := [
 	"nestfield",
 	"vaultgate",
 ]
+const RESEARCH_MATERIAL_TYPES := ["metal", "spring", "paper", "fiber", "biomass", "dry_rations", "medicine", "growth_medium", "mushrooms", "algae", "bacteria", "mealworms", "bone_meal", "hide", "bone"]
+const RESEARCH_LOCATION_TYPES := ["pond", "crater", "tower", "surveillance_zone", "facility", "bunker", "field", "dump", "cache", "nest", "ruin"]
+const RESEARCH_ENEMY_TYPES := ["surveillance_drone", "infantry_drone", "stalker", "grizzly", "wolf_pack"]
+const RESEARCH_MACHINE_TYPES := ["bench", "route", "charge", "trash"]
+const RESEARCH_DRONE_TYPES := ["spider", "butterfly"]
+const RESEARCH_TAPE_TYPES := ["programmed", "blank"]
+const RESEARCH_RESOURCE_TYPES := ["spring_charge"]
+const RESEARCH_EQUIPMENT_TYPES := ["knife", "bow", "plate_mail", "hide_cloak", "tool_kit"]
 
 const ENEMY_TYPE_DEFS := {
 	"grizzly": {
@@ -74,8 +84,9 @@ const ENEMY_TYPE_DEFS := {
 }
 const LOCATION_SCAVENGE_TABLES := {
 	"pond": [
-		{"kind": "material", "type": "biomass", "weight": 70, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "paper", "weight": 30, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "biomass", "weight": 45, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "algae", "weight": 35, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "mushrooms", "weight": 20, "quantity_min": 1, "quantity_max": 1},
 	],
 	"crater": [
 		{"kind": "material", "type": "metal", "weight": 45, "quantity_min": 1, "quantity_max": 2},
@@ -83,52 +94,75 @@ const LOCATION_SCAVENGE_TABLES := {
 		{"kind": "material", "type": "biomass", "weight": 25, "quantity_min": 1, "quantity_max": 1},
 	],
 	"tower": [
-		{"kind": "material", "type": "metal", "weight": 45, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "paper", "weight": 35, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 2},
 		{"kind": "power", "weight": 20},
+		{"kind": "equipment", "type": "knife", "result": "KNIFE", "display_name": "Knife", "weight": 15},
+		{"kind": "equipment", "type": "bow", "result": "BOW", "display_name": "Bow", "weight": 15},
+		{"kind": "equipment", "type": "plate_mail", "result": "PLATE MAIL", "display_name": "Plate Mail", "weight": 15},
 	],
 	"surveillance_zone": [
-		{"kind": "material", "type": "paper", "weight": 45, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "power", "weight": 20},
+		{"kind": "material", "type": "metal", "weight": 55, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "power", "weight": 35},
+		{"kind": "equipment", "type": "bow", "result": "BOW", "display_name": "Bow", "weight": 10},
 	],
 	"facility": [
-		{"kind": "material", "type": "metal", "weight": 45, "quantity_min": 1, "quantity_max": 3},
-		{"kind": "material", "type": "paper", "weight": 25, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "power", "weight": 30},
+		{"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 3},
+		{"kind": "power", "weight": 20},
+		{"kind": "material", "type": "dry_rations", "weight": 20, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "mushrooms", "weight": 15, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "algae", "weight": 10, "quantity_min": 1, "quantity_max": 1},
 	],
 	"bunker": [
-		{"kind": "material", "type": "paper", "weight": 40, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "power", "weight": 25},
+		{"kind": "material", "type": "paper", "weight": 18, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "metal", "weight": 18, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "power", "weight": 14},
+		{"kind": "material", "type": "medicine", "weight": 10, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "dry_rations", "weight": 10, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "mushrooms", "weight": 8, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "algae", "weight": 6, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "equipment", "type": "knife", "result": "KNIFE", "display_name": "Knife", "weight": 6},
+		{"kind": "equipment", "type": "bow", "result": "BOW", "display_name": "Bow", "weight": 4},
+		{"kind": "equipment", "type": "plate_mail", "result": "PLATE MAIL", "display_name": "Plate Mail", "weight": 4},
+		{"kind": "equipment", "type": "tool_kit", "result": "TOOL KIT", "display_name": "Tool Kit", "weight": 2},
 	],
 	"field": [
 		{"kind": "material", "type": "biomass", "weight": 55, "quantity_min": 1, "quantity_max": 3},
-		{"kind": "material", "type": "paper", "weight": 25, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "hide", "weight": 20, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "fiber", "weight": 25, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "hide", "weight": 15, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "mushrooms", "weight": 5, "quantity_min": 1, "quantity_max": 1},
 	],
 	"dump": [
-		{"kind": "material", "type": "metal", "weight": 40, "quantity_min": 1, "quantity_max": 3},
-		{"kind": "material", "type": "paper", "weight": 25, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "bone", "weight": 20, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "power", "weight": 15},
+		{"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 3},
+		{"kind": "material", "type": "fiber", "weight": 18, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "bone", "weight": 15, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "power", "weight": 12},
+		{"kind": "equipment", "type": "knife", "result": "KNIFE", "display_name": "Knife", "weight": 8},
+		{"kind": "equipment", "type": "plate_mail", "result": "PLATE MAIL", "display_name": "Plate Mail", "weight": 6},
+		{"kind": "equipment", "type": "tool_kit", "result": "TOOL KIT", "display_name": "Tool Kit", "weight": 6},
 	],
 	"cache": [
-		{"kind": "material", "type": "paper", "weight": 35, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "metal", "weight": 25, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "biomass", "weight": 20, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "hide", "weight": 20, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "medicine", "weight": 24, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "dry_rations", "weight": 20, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "paper", "weight": 12, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "equipment", "type": "knife", "result": "KNIFE", "display_name": "Knife", "weight": 16},
+		{"kind": "equipment", "type": "bow", "result": "BOW", "display_name": "Bow", "weight": 14},
+		{"kind": "equipment", "type": "plate_mail", "result": "PLATE MAIL", "display_name": "Plate Mail", "weight": 14},
 	],
 	"nest": [
-		{"kind": "material", "type": "biomass", "weight": 50, "quantity_min": 1, "quantity_max": 3},
-		{"kind": "material", "type": "bone", "weight": 30, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "hide", "weight": 20, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "biomass", "weight": 34, "quantity_min": 1, "quantity_max": 3},
+		{"kind": "material", "type": "bone", "weight": 22, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "hide", "weight": 18, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "bacteria", "weight": 14, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "mealworms", "weight": 7, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "mushrooms", "weight": 5, "quantity_min": 1, "quantity_max": 1},
 	],
 	"ruin": [
-		{"kind": "material", "type": "metal", "weight": 35, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "paper", "weight": 30, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "bone", "weight": 20, "quantity_min": 1, "quantity_max": 2},
-		{"kind": "material", "type": "biomass", "weight": 15, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "material", "type": "metal", "weight": 28, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "paper", "weight": 22, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "bone", "weight": 15, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "fiber", "weight": 12, "quantity_min": 1, "quantity_max": 2},
+		{"kind": "material", "type": "mushrooms", "weight": 15, "quantity_min": 1, "quantity_max": 1},
+		{"kind": "equipment", "type": "knife", "result": "KNIFE", "display_name": "Knife", "weight": 8},
 	],
 }
 const LOCATION_SCAVENGE_CHANCES := {
@@ -145,17 +179,17 @@ const LOCATION_SCAVENGE_CHANCES := {
 	"ruin": 0.75,
 }
 const LOCATION_ENCOUNTER_TABLES := {
-	"pond": {"chance": 0.20, "types": [{"type": "stalker", "weight": 45}, {"type": "wolf_pack", "weight": 35}, {"type": "grizzly", "weight": 20}]},
-	"crater": {"chance": 0.22, "types": [{"type": "stalker", "weight": 45}, {"type": "wolf_pack", "weight": 35}, {"type": "surveillance_drone", "weight": 20}]},
-	"tower": {"chance": 0.30, "types": [{"type": "surveillance_drone", "weight": 45}, {"type": "infantry_drone", "weight": 30}, {"type": "stalker", "weight": 25}]},
-	"surveillance_zone": {"chance": 0.38, "types": [{"type": "surveillance_drone", "weight": 50}, {"type": "infantry_drone", "weight": 30}, {"type": "stalker", "weight": 20}]},
-	"facility": {"chance": 0.34, "types": [{"type": "infantry_drone", "weight": 40}, {"type": "surveillance_drone", "weight": 30}, {"type": "stalker", "weight": 30}]},
-	"bunker": {"chance": 0.32, "types": [{"type": "stalker", "weight": 40}, {"type": "infantry_drone", "weight": 35}, {"type": "grizzly", "weight": 25}]},
-	"field": {"chance": 0.22, "types": [{"type": "wolf_pack", "weight": 40}, {"type": "grizzly", "weight": 30}, {"type": "stalker", "weight": 30}]},
-	"dump": {"chance": 0.28, "types": [{"type": "stalker", "weight": 40}, {"type": "grizzly", "weight": 30}, {"type": "surveillance_drone", "weight": 30}]},
-	"cache": {"chance": 0.24, "types": [{"type": "stalker", "weight": 45}, {"type": "wolf_pack", "weight": 35}, {"type": "surveillance_drone", "weight": 20}]},
-	"nest": {"chance": 0.36, "types": [{"type": "grizzly", "weight": 35}, {"type": "wolf_pack", "weight": 35}, {"type": "stalker", "weight": 30}]},
-	"ruin": {"chance": 0.26, "types": [{"type": "stalker", "weight": 45}, {"type": "wolf_pack", "weight": 30}, {"type": "surveillance_drone", "weight": 25}]},
+	"pond": {"chance": 0.18, "types": [{"type": "wolf_pack", "weight": 45}, {"type": "stalker", "weight": 35}, {"type": "grizzly", "weight": 20}]},
+	"crater": {"chance": 0.22, "types": [{"type": "stalker", "weight": 45}, {"type": "wolf_pack", "weight": 35}, {"type": "grizzly", "weight": 20}]},
+	"tower": {"chance": 0.32, "types": [{"type": "surveillance_drone", "weight": 55}, {"type": "infantry_drone", "weight": 30}, {"type": "stalker", "weight": 15}]},
+	"surveillance_zone": {"chance": 0.40, "types": [{"type": "surveillance_drone", "weight": 60}, {"type": "infantry_drone", "weight": 35}, {"type": "stalker", "weight": 5}]},
+	"facility": {"chance": 0.30, "types": [{"type": "infantry_drone", "weight": 45}, {"type": "surveillance_drone", "weight": 35}, {"type": "stalker", "weight": 20}]},
+	"bunker": {"chance": 0.34, "types": [{"type": "stalker", "weight": 45}, {"type": "infantry_drone", "weight": 30}, {"type": "surveillance_drone", "weight": 20}, {"type": "wolf_pack", "weight": 5}]},
+	"field": {"chance": 0.20, "types": [{"type": "wolf_pack", "weight": 50}, {"type": "grizzly", "weight": 30}, {"type": "stalker", "weight": 20}]},
+	"dump": {"chance": 0.28, "types": [{"type": "stalker", "weight": 40}, {"type": "wolf_pack", "weight": 25}, {"type": "grizzly", "weight": 20}, {"type": "infantry_drone", "weight": 15}]},
+	"cache": {"chance": 0.22, "types": [{"type": "stalker", "weight": 50}, {"type": "wolf_pack", "weight": 30}, {"type": "infantry_drone", "weight": 20}]},
+	"nest": {"chance": 0.38, "types": [{"type": "wolf_pack", "weight": 40}, {"type": "grizzly", "weight": 35}, {"type": "stalker", "weight": 25}]},
+	"ruin": {"chance": 0.27, "types": [{"type": "stalker", "weight": 50}, {"type": "wolf_pack", "weight": 25}, {"type": "grizzly", "weight": 15}, {"type": "infantry_drone", "weight": 10}]},
 }
 const ENEMY_NAME_CORPUS := [
 	"stalker",
@@ -204,6 +238,7 @@ var enemy_cards: Array = []
 var material_cards: Array = []
 var blueprint_cards: Array = []
 var crafted_cards: Array = []
+var equipment_cards: Array = []
 var journal_entries: Array = []
 var workshop_layout: Dictionary = {}
 var operator_state: Dictionary = {}
@@ -215,6 +250,66 @@ const DRONE_ACTION_COMMANDS := {
 	"butterfly": ["mov", "rot", "scn"],
 }
 const DRONE_SHARED_COMMANDS := ["nop", "jmp", "jnz", "dec", "inc", "set", "die"]
+const STACKABLE_CRAFT_RESULT_SPECS := {
+	"DRY RATIONS": {"type": "dry_rations", "display_name": "Dry Rations", "quantity": 1},
+	"MEDICINE": {"type": "medicine", "display_name": "Medicine", "quantity": 1},
+	"GROWTH MEDIUM": {"type": "growth_medium", "display_name": "Growth Medium", "quantity": 1},
+	"MUSHROOMS": {"type": "mushrooms", "display_name": "Mushrooms", "quantity": 1},
+	"ALGAE": {"type": "algae", "display_name": "Algae", "quantity": 1},
+	"BACTERIA": {"type": "bacteria", "display_name": "Bacteria", "quantity": 1},
+	"MEALWORMS": {"type": "mealworms", "display_name": "Mealworms", "quantity": 1},
+	"BONE MEAL": {"type": "bone_meal", "display_name": "Bone Meal", "quantity": 1},
+	"FIBER": {"type": "fiber", "display_name": "Fiber", "quantity": 1},
+	"PAPER": {"type": "paper", "display_name": "Paper", "quantity": 1},
+}
+const EQUIPMENT_TYPE_SPECS := {
+	"knife": {
+		"type": "knife",
+		"display_name": "Knife",
+		"stats": {"attack": 1, "armor": 0, "stealth": 0, "utility": 0},
+	},
+	"bow": {
+		"type": "bow",
+		"display_name": "Bow",
+		"stats": {"attack": 3, "armor": -1, "stealth": 0, "utility": 0},
+	},
+	"plate_mail": {
+		"type": "plate_mail",
+		"display_name": "Plate Mail",
+		"stats": {"attack": 0, "armor": 3, "stealth": -1, "utility": 0},
+	},
+	"hide_cloak": {
+		"type": "hide_cloak",
+		"display_name": "Hide Cloak",
+		"stats": {"attack": 0, "armor": 0, "stealth": 3, "utility": 0},
+	},
+	"tool_kit": {
+		"type": "tool_kit",
+		"display_name": "Tool Kit",
+		"stats": {"attack": 0, "armor": 0, "stealth": 0, "utility": 3},
+	},
+}
+const STORAGE_CRAFTED_TYPES := ["tool_chest", "archive_shelf"]
+const TANK_PROCESS_SPECS := {
+	"algae_to_fiber": {
+		"inputs": {"algae": 1},
+		"result_type": "fiber",
+		"display_name": "Fiber",
+		"quantity": 2,
+	},
+	"bacteria_to_medicine": {
+		"inputs": {"bacteria": 1, "bone_meal": 1},
+		"result_type": "medicine",
+		"display_name": "Medicine",
+		"quantity": 1,
+	},
+	"mealworms_to_rations": {
+		"inputs": {"mealworms": 1, "biomass": 1},
+		"result_type": "dry_rations",
+		"display_name": "Dry Rations",
+		"quantity": 1,
+	},
+}
 
 func _ready():
 	_load_recipe_catalog()
@@ -242,7 +337,7 @@ func has_charged_power_unit_available() -> bool:
 	return _get_first_charged_power_unit_slot_index() != -1
 
 func has_free_programmed_slot() -> bool:
-	return _get_first_free_programmed_slot_index() != -1
+	return true
 
 func is_run_active() -> bool:
 	return int(operator_state.get("hp", 0)) > 0 and str(operator_state.get("status", "active")) != "dead"
@@ -251,21 +346,13 @@ func get_operator_state() -> Dictionary:
 	return operator_state.duplicate(true)
 
 func can_open_programming_bench() -> bool:
-	return has_blank_cartridge_available() and has_free_programmed_slot()
+	return has_blank_cartridge_available()
 
 func get_blank_cartridge_count() -> int:
-	var count := 0
-	for filled in blank_cartridge_slots:
-		if bool(filled):
-			count += 1
-	return count
+	return blank_cartridge_slots.size()
 
 func get_free_programmed_slot_count() -> int:
-	var free_count := 0
-	for slot_index in range(PROGRAMMED_CARTRIDGE_CAPACITY):
-		if get_programmed_cartridge_in_slot(slot_index).is_empty():
-			free_count += 1
-	return free_count
+	return 999999
 
 func get_workshop_card_position(layout_key: String, fallback: Vector2) -> Vector2:
 	if not workshop_layout.has(layout_key):
@@ -287,8 +374,7 @@ func clear_workshop_card_position(layout_key: String):
 
 func save_programmed_cartridge(label: String, rows: Array) -> Dictionary:
 	var blank_slot_index := _get_first_blank_slot_index()
-	var programmed_slot_index := _get_first_free_programmed_slot_index()
-	if blank_slot_index == -1 or programmed_slot_index == -1:
+	if blank_slot_index == -1:
 		return {}
 
 	var trimmed_label := label.strip_edges()
@@ -300,14 +386,14 @@ func save_programmed_cartridge(label: String, rows: Array) -> Dictionary:
 		"id": str(Time.get_unix_time_from_system()) + "_" + str(randi()),
 		"label": trimmed_label,
 		"rows": normalized_rows,
-		"slot_index": programmed_slot_index,
+		"slot_index": programmed_cartridges.size(),
 		"location": "shelf",
 		"use_count": 0,
 		"wear": 0.0,
 		"saved_at": Time.get_unix_time_from_system(),
 	}
 
-	blank_cartridge_slots[blank_slot_index] = false
+	blank_cartridge_slots.remove_at(blank_slot_index)
 	programmed_cartridges.append(cartridge)
 	selected_cartridge_id = str(cartridge.get("id", ""))
 	_refresh_bot_predictions()
@@ -339,10 +425,17 @@ func get_programmed_cartridge_by_id(cartridge_id: String) -> Dictionary:
 	return {}
 
 func get_programmed_cartridge_in_slot(slot_index: int) -> Dictionary:
+	var shelf_cartridges := get_shelf_programmed_cartridges()
+	if slot_index < 0 or slot_index >= shelf_cartridges.size():
+		return {}
+	return Dictionary(shelf_cartridges[slot_index]).duplicate(true)
+
+func get_shelf_programmed_cartridges() -> Array:
+	var shelf_cartridges: Array = []
 	for cartridge in programmed_cartridges:
-		if int(cartridge.get("slot_index", -1)) == slot_index and str(cartridge.get("location", "")) == "shelf":
-			return cartridge
-	return {}
+		if str(cartridge.get("location", "")) == "shelf":
+			shelf_cartridges.append(Dictionary(cartridge).duplicate(true))
+	return shelf_cartridges
 
 func recycle_programmed_cartridge(cartridge_id: String) -> bool:
 	var cartridge_index := _get_programmed_cartridge_index(cartridge_id)
@@ -351,10 +444,7 @@ func recycle_programmed_cartridge(cartridge_id: String) -> bool:
 	var cartridge: Dictionary = programmed_cartridges[cartridge_index]
 	if str(cartridge.get("location", "")) != "shelf":
 		return false
-	var empty_blank_slot := _get_first_empty_blank_slot_index()
-	if empty_blank_slot == -1:
-		return false
-	blank_cartridge_slots[empty_blank_slot] = true
+	blank_cartridge_slots.append(true)
 	programmed_cartridges.remove_at(cartridge_index)
 	if selected_cartridge_id == cartridge_id:
 		selected_cartridge_id = ""
@@ -368,7 +458,10 @@ func recycle_programmed_cartridge(cartridge_id: String) -> bool:
 func is_blank_slot_filled(slot_index: int) -> bool:
 	if slot_index < 0 or slot_index >= blank_cartridge_slots.size():
 		return false
-	return bool(blank_cartridge_slots[slot_index])
+	return true
+
+func has_empty_blank_cartridge_slot() -> bool:
+	return true
 
 func get_power_unit_in_slot(slot_index: int) -> Dictionary:
 	if slot_index < 0 or slot_index >= power_unit_slots.size():
@@ -807,6 +900,9 @@ func get_blueprint_cards() -> Array:
 func get_crafted_cards() -> Array:
 	return crafted_cards.duplicate(true)
 
+func get_equipment_cards() -> Array:
+	return equipment_cards.duplicate(true)
+
 func get_state_table_cards(kind: String) -> Array:
 	match kind:
 		"location":
@@ -819,6 +915,8 @@ func get_state_table_cards(kind: String) -> Array:
 			return get_blueprint_cards()
 		"crafted":
 			return get_crafted_cards()
+		"equipment":
+			return get_equipment_cards()
 		_:
 			return []
 
@@ -826,13 +924,70 @@ func get_state_table_card_layout_key(kind: String, card_id: String) -> String:
 	if card_id.is_empty():
 		return ""
 	match kind:
-		"location", "enemy", "material", "blueprint", "crafted":
+		"location", "enemy", "material", "blueprint", "crafted", "equipment":
 			return "%s_%s" % [kind, card_id]
 		_:
 			return ""
 
 func get_journal_entries() -> Array:
 	return journal_entries.duplicate(true)
+
+func get_journal_display_entries() -> Array:
+	var discovered_by_key := {}
+	var discovered_recipes_by_id := {}
+	for entry_variant in journal_entries:
+		if typeof(entry_variant) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = Dictionary(entry_variant).duplicate(true)
+		var subject_key := str(entry.get("subject_key", ""))
+		if subject_key.is_empty():
+			continue
+		for recipe_variant in Array(entry.get("recipes", [])):
+			if typeof(recipe_variant) != TYPE_DICTIONARY:
+				continue
+			var recipe: Dictionary = Dictionary(recipe_variant).duplicate(true)
+			var recipe_id := str(recipe.get("id", ""))
+			if recipe_id.is_empty():
+				continue
+			discovered_recipes_by_id[recipe_id] = recipe
+		discovered_by_key[subject_key] = entry
+	var display_entries: Array = []
+	var seen_subject_keys := {}
+	for subject in _get_all_research_subjects():
+		var subject_key := _get_research_subject_key(subject)
+		if subject_key.is_empty() or seen_subject_keys.has(subject_key):
+			continue
+		seen_subject_keys[subject_key] = true
+		var subject_def := _get_research_subject_definition(subject)
+		if subject_def.is_empty():
+			continue
+		var related_recipe_ids := _get_related_recipe_ids(subject_key)
+		if discovered_by_key.has(subject_key):
+			var discovered_entry: Dictionary = Dictionary(discovered_by_key[subject_key]).duplicate(true)
+			discovered_entry["recipes"] = _build_journal_recipe_display_list(
+				subject_key,
+				discovered_recipes_by_id,
+				related_recipe_ids
+			)
+			discovered_entry["recipe_ids"] = related_recipe_ids.duplicate()
+			discovered_entry["locked"] = false
+			display_entries.append(discovered_entry)
+			continue
+		var locked_entry := _build_locked_journal_entry(subject_key, subject_def)
+		locked_entry["recipes"] = _build_journal_recipe_display_list(subject_key, discovered_recipes_by_id, related_recipe_ids)
+		locked_entry["recipe_ids"] = related_recipe_ids.duplicate()
+		display_entries.append(locked_entry)
+	for subject_key_variant in discovered_by_key.keys():
+		var subject_key := str(subject_key_variant)
+		if seen_subject_keys.has(subject_key):
+			continue
+		var fallback_entry: Dictionary = Dictionary(discovered_by_key[subject_key]).duplicate(true)
+		var fallback_recipe_ids := _get_related_recipe_ids(subject_key)
+		fallback_entry["recipe_ids"] = fallback_recipe_ids.duplicate()
+		fallback_entry["recipes"] = _build_journal_recipe_display_list(subject_key, discovered_recipes_by_id, fallback_recipe_ids)
+		fallback_entry["locked"] = false
+		display_entries.append(fallback_entry)
+	return display_entries
 
 func has_unread_journal_entries() -> bool:
 	for entry_variant in journal_entries:
@@ -959,6 +1114,242 @@ func forget_blueprint_card(card_id: String) -> bool:
 func forget_crafted_card(card_id: String) -> bool:
 	return forget_state_table_card("crafted", card_id)
 
+func forget_equipment_card(card_id: String) -> bool:
+	return forget_state_table_card("equipment", card_id)
+
+func get_operator_equipment_totals() -> Dictionary:
+	return _sum_equipment_slot_totals(Array(operator_state.get("equipment_slots", [])))
+
+func get_bot_equipment_totals(bot_index: int) -> Dictionary:
+	if bot_index < 0 or bot_index >= bot_loadouts.size():
+		return _default_equipment_totals()
+	return _sum_equipment_slot_totals(Array(bot_loadouts[bot_index].get("equipment_slots", [])))
+
+func equip_equipment_on_operator(card_id: String) -> Dictionary:
+	if card_id.is_empty():
+		return {"ok": false, "message": "No equipment selected"}
+	if not is_run_active():
+		return {"ok": false, "message": "Operator can no longer equip gear"}
+	var result := _equip_equipment_into_slots(card_id, Array(operator_state.get("equipment_slots", [])))
+	if not bool(result.get("ok", false)):
+		return result
+	operator_state["equipment_slots"] = Array(result.get("slots", _default_equipment_slots())).duplicate(true)
+	save_programmed_cartridges()
+	EventBus.operator_state_changed.emit(get_operator_state())
+	EventBus.outside_world_changed.emit()
+	return {
+		"ok": true,
+		"slot_index": int(result.get("slot_index", -1)),
+		"display_name": str(result.get("display_name", "Equipment")),
+		"message": "%s equipped" % str(result.get("display_name", "Equipment")),
+	}
+
+func unequip_equipment_on_operator(slot_index: int) -> Dictionary:
+	var result := _unequip_equipment_from_slots(Array(operator_state.get("equipment_slots", [])), slot_index)
+	if not bool(result.get("ok", false)):
+		return result
+	operator_state["equipment_slots"] = Array(result.get("slots", _default_equipment_slots())).duplicate(true)
+	save_programmed_cartridges()
+	EventBus.operator_state_changed.emit(get_operator_state())
+	EventBus.outside_world_changed.emit()
+	return {
+		"ok": true,
+		"slot_index": int(result.get("slot_index", -1)),
+		"display_name": str(result.get("display_name", "Equipment")),
+		"equipment_card": Dictionary(result.get("equipment_card", {})).duplicate(true),
+		"message": "%s extracted" % str(result.get("display_name", "Equipment")),
+	}
+
+func equip_equipment_on_bot(card_id: String, bot_index: int) -> Dictionary:
+	if card_id.is_empty():
+		return {"ok": false, "message": "No equipment selected"}
+	if bot_index < 0 or bot_index >= bot_loadouts.size():
+		return {"ok": false, "message": "Drone not found"}
+	if not is_bot_available_in_workshop(bot_index):
+		return {"ok": false, "message": "Drone is not in workshop"}
+	var bot_entry := Dictionary(bot_loadouts[bot_index]).duplicate(true)
+	var result := _equip_equipment_into_slots(card_id, Array(bot_entry.get("equipment_slots", [])))
+	if not bool(result.get("ok", false)):
+		return result
+	bot_entry["equipment_slots"] = Array(result.get("slots", _default_equipment_slots())).duplicate(true)
+	bot_loadouts[bot_index] = bot_entry
+	save_programmed_cartridges()
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	EventBus.outside_world_changed.emit()
+	return {
+		"ok": true,
+		"slot_index": int(result.get("slot_index", -1)),
+		"display_name": str(result.get("display_name", "Equipment")),
+		"message": "%s equipped on %s" % [
+			str(result.get("display_name", "Equipment")),
+			str(bot_entry.get("drone_type", "drone")).replace("_", " ").capitalize(),
+		],
+	}
+
+func unequip_equipment_on_bot(bot_index: int, slot_index: int) -> Dictionary:
+	if bot_index < 0 or bot_index >= bot_loadouts.size():
+		return {"ok": false, "message": "Drone not found"}
+	if not is_bot_available_in_workshop(bot_index):
+		return {"ok": false, "message": "Drone is not in workshop"}
+	var bot_entry := Dictionary(bot_loadouts[bot_index]).duplicate(true)
+	var result := _unequip_equipment_from_slots(Array(bot_entry.get("equipment_slots", [])), slot_index)
+	if not bool(result.get("ok", false)):
+		return result
+	bot_entry["equipment_slots"] = Array(result.get("slots", _default_equipment_slots())).duplicate(true)
+	bot_loadouts[bot_index] = bot_entry
+	save_programmed_cartridges()
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	EventBus.outside_world_changed.emit()
+	return {
+		"ok": true,
+		"slot_index": int(result.get("slot_index", -1)),
+		"display_name": str(result.get("display_name", "Equipment")),
+		"equipment_card": Dictionary(result.get("equipment_card", {})).duplicate(true),
+		"message": "%s extracted from %s" % [
+			str(result.get("display_name", "Equipment")),
+			str(bot_entry.get("drone_type", "drone")).replace("_", " ").capitalize(),
+		],
+	}
+
+func is_storage_crafted_card(card_id: String) -> bool:
+	var crafted_index := _find_crafted_card_index(card_id)
+	if crafted_index == -1:
+		return false
+	return _is_storage_crafted_type(str(crafted_cards[crafted_index].get("type", "")))
+
+func get_crafted_storage_contents(card_id: String) -> Array:
+	var crafted_index := _find_crafted_card_index(card_id)
+	if crafted_index == -1:
+		return []
+	return Array(crafted_cards[crafted_index].get("stored_cards", [])).duplicate(true)
+
+func store_card_in_crafted_storage(container_id: String, source_kind: String, card_id: String) -> Dictionary:
+	var container_index := _find_crafted_card_index(container_id)
+	if container_index == -1:
+		return {"ok": false, "message": "Storage card not found"}
+	var container := Dictionary(crafted_cards[container_index])
+	var container_type := str(container.get("type", ""))
+	if not _is_storage_crafted_type(container_type):
+		return {"ok": false, "message": "Card is not storage"}
+	var stored_cards := Array(container.get("stored_cards", [])).duplicate(true)
+	if source_kind == "material":
+		for card_index in range(material_cards.size()):
+			var material_card: Dictionary = material_cards[card_index]
+			if str(material_card.get("id", "")) != card_id:
+				continue
+			var material_type := str(material_card.get("type", ""))
+			var quantity := maxi(int(material_card.get("quantity", 0)), 0)
+			if quantity <= 0:
+				return {"ok": false, "message": "Nothing to store"}
+			var merged := false
+			for stored_index in range(stored_cards.size()):
+				var stored_entry := Dictionary(stored_cards[stored_index])
+				if str(stored_entry.get("kind", "")) != "material":
+					continue
+				if str(stored_entry.get("type", "")) != material_type:
+					continue
+				stored_entry["quantity"] = maxi(int(stored_entry.get("quantity", 0)), 0) + quantity
+				stored_cards[stored_index] = stored_entry
+				merged = true
+				break
+			if not merged:
+				stored_cards.append({
+					"entry_id": "stored_%d_%d" % [int(Time.get_unix_time_from_system()), stored_cards.size()],
+					"kind": "material",
+					"type": material_type,
+					"display_name": str(material_card.get("display_name", _default_material_display_name(material_type))),
+					"quantity": quantity,
+				})
+			material_cards.remove_at(card_index)
+			container["stored_cards"] = stored_cards
+			crafted_cards[container_index] = container
+			save_programmed_cartridges()
+			EventBus.outside_world_changed.emit()
+			return {
+				"ok": true,
+				"kind": "material",
+				"type": material_type,
+				"quantity": quantity,
+				"message": "%s stored" % str(container.get("display_name", container.get("result", "Storage"))),
+			}
+		return {"ok": false, "message": "Resource card not found"}
+	if source_kind == "crafted":
+		var source_index := _find_crafted_card_index(card_id)
+		if source_index == -1 or source_index == container_index:
+			return {"ok": false, "message": "Crafted card not found"}
+		var crafted_card := Dictionary(crafted_cards[source_index])
+		var crafted_type := str(crafted_card.get("type", ""))
+		if _is_storage_crafted_type(crafted_type):
+			return {"ok": false, "message": "Cannot nest storage"}
+		if not crafted_type.contains("cage"):
+			return {"ok": false, "message": "Only cages can be stored here"}
+		stored_cards.append({
+			"entry_id": "stored_%d_%d" % [int(Time.get_unix_time_from_system()), stored_cards.size()],
+			"kind": "crafted",
+			"type": crafted_type,
+			"display_name": str(crafted_card.get("display_name", crafted_card.get("result", "Item"))),
+			"result": str(crafted_card.get("result", "")),
+			"recipe_id": str(crafted_card.get("recipe_id", "")),
+			"formula": str(crafted_card.get("formula", "")),
+		})
+		crafted_cards.remove_at(source_index)
+		if source_index < container_index:
+			container_index -= 1
+			container = Dictionary(crafted_cards[container_index])
+		container["stored_cards"] = stored_cards
+		crafted_cards[container_index] = container
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+		return {
+			"ok": true,
+			"kind": "crafted",
+			"type": crafted_type,
+			"message": "%s stored" % str(container.get("display_name", container.get("result", "Storage"))),
+		}
+	return {"ok": false, "message": "Card type cannot be stored"}
+
+func withdraw_crafted_storage_item(container_id: String, entry_id: String) -> Dictionary:
+	var container_index := _find_crafted_card_index(container_id)
+	if container_index == -1:
+		return {}
+	var container := Dictionary(crafted_cards[container_index])
+	if not _is_storage_crafted_type(str(container.get("type", ""))):
+		return {}
+	var stored_cards := Array(container.get("stored_cards", [])).duplicate(true)
+	for stored_index in range(stored_cards.size()):
+		var stored_entry := Dictionary(stored_cards[stored_index])
+		if str(stored_entry.get("entry_id", "")) != entry_id:
+			continue
+		stored_cards.remove_at(stored_index)
+		container["stored_cards"] = stored_cards
+		crafted_cards[container_index] = container
+		var entry_kind := str(stored_entry.get("kind", ""))
+		var created_card: Dictionary = {}
+		if entry_kind == "material":
+			created_card = _add_material_card({
+				"type": str(stored_entry.get("type", "")),
+				"display_name": str(stored_entry.get("display_name", "")),
+				"quantity": maxi(int(stored_entry.get("quantity", 1)), 1),
+			})
+			if not created_card.is_empty():
+				created_card["kind"] = "material"
+		elif entry_kind == "crafted":
+			created_card = {
+				"id": "crafted_%d_%d" % [int(Time.get_unix_time_from_system()), crafted_cards.size()],
+				"type": str(stored_entry.get("type", "")),
+				"display_name": str(stored_entry.get("display_name", stored_entry.get("result", "Item"))),
+				"result": str(stored_entry.get("result", "Crafted Item")),
+				"recipe_id": str(stored_entry.get("recipe_id", "")),
+				"formula": str(stored_entry.get("formula", "")),
+				"stored_cards": [],
+			}
+			crafted_cards.append(created_card)
+			created_card["kind"] = "crafted"
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+		return created_card.duplicate(true)
+	return {}
+
 func forget_state_table_card(kind: String, card_id: String) -> bool:
 	if card_id.is_empty():
 		return false
@@ -974,6 +1365,8 @@ func forget_state_table_card(kind: String, card_id: String) -> bool:
 			removed = _remove_table_card_by_id(blueprint_cards, card_id)
 		"crafted":
 			removed = _remove_table_card_by_id(crafted_cards, card_id)
+		"equipment":
+			removed = _remove_table_card_by_id(equipment_cards, card_id)
 	if not removed:
 		return false
 	save_programmed_cartridges()
@@ -988,6 +1381,17 @@ func _remove_table_card_by_id(cards: Array, card_id: String) -> bool:
 		return true
 	return false
 
+func _find_crafted_card_index(card_id: String) -> int:
+	if card_id.is_empty():
+		return -1
+	for card_index in range(crafted_cards.size()):
+		if str(crafted_cards[card_index].get("id", "")) == card_id:
+			return card_index
+	return -1
+
+func _is_storage_crafted_type(crafted_type: String) -> bool:
+	return crafted_type in STORAGE_CRAFTED_TYPES
+
 func use_crafted_card_on_operator(card_id: String) -> Dictionary:
 	if card_id.is_empty():
 		return {"ok": false, "message": "No crafted card selected"}
@@ -997,42 +1401,42 @@ func use_crafted_card_on_operator(card_id: String) -> Dictionary:
 		var crafted_card: Dictionary = crafted_cards[card_index]
 		if str(crafted_card.get("id", "")) != card_id:
 			continue
-		var result_name := str(crafted_card.get("result", "")).to_upper()
-		var energy_gain := 0
-		var hp_gain := 0
-		var success_message := ""
-		match result_name:
-			"ENERGY BAR":
-				energy_gain = 4
-				success_message = "Operator fed"
-			"DRY RATIONS":
-				energy_gain = 3
-				success_message = "Operator fed"
-			"MEDICINE":
-				hp_gain = 2
-				success_message = "Operator treated"
-			_:
-				return {"ok": false, "message": "%s cannot be used on the operator" % result_name.capitalize()}
-		var current_energy := int(operator_state.get("energy", 0))
-		var max_operator_energy := int(operator_state.get("max_energy", OPERATOR_MAX_ENERGY))
-		var current_hp := int(operator_state.get("hp", 0))
-		var max_operator_hp := int(operator_state.get("max_hp", OPERATOR_MAX_HP))
-		if energy_gain > 0:
-			if current_energy >= max_operator_energy:
-				return {"ok": false, "message": "Operator energy is already full"}
-			operator_state["energy"] = mini(current_energy + energy_gain, max_operator_energy)
-		if hp_gain > 0:
-			if current_hp >= max_operator_hp:
-				return {"ok": false, "message": "Operator HP is already full"}
-			operator_state["hp"] = mini(current_hp + hp_gain, max_operator_hp)
-		if int(operator_state.get("hp", 0)) > 0:
-			operator_state["status"] = "active"
+		var use_result := _apply_operator_supply_effect(str(crafted_card.get("result", "")))
+		if not bool(use_result.get("ok", false)):
+			return use_result
 		crafted_cards.remove_at(card_index)
 		save_programmed_cartridges()
 		EventBus.operator_state_changed.emit(get_operator_state())
 		EventBus.outside_world_changed.emit()
-		return {"ok": true, "message": success_message}
+		return use_result
 	return {"ok": false, "message": "Crafted card not found"}
+
+func use_material_card_on_operator(card_id: String) -> Dictionary:
+	if card_id.is_empty():
+		return {"ok": false, "message": "No resource card selected"}
+	if not is_run_active():
+		return {"ok": false, "message": "Operator can no longer use supplies"}
+	for card_index in range(material_cards.size()):
+		var material_card: Dictionary = material_cards[card_index]
+		if str(material_card.get("id", "")) != card_id:
+			continue
+		var use_result := _apply_operator_supply_effect(str(material_card.get("type", "")))
+		if not bool(use_result.get("ok", false)):
+			return use_result
+		var quantity := maxi(int(material_card.get("quantity", 0)), 0) - 1
+		var removed := false
+		if quantity <= 0:
+			material_cards.remove_at(card_index)
+			removed = true
+		else:
+			material_cards[card_index]["quantity"] = quantity
+		save_programmed_cartridges()
+		EventBus.operator_state_changed.emit(get_operator_state())
+		EventBus.outside_world_changed.emit()
+		use_result["removed"] = removed
+		use_result["remaining_quantity"] = maxi(quantity, 0)
+		return use_result
+	return {"ok": false, "message": "Resource card not found"}
 
 func create_blueprint_card(recipe: Dictionary) -> Dictionary:
 	if recipe.is_empty():
@@ -1063,6 +1467,10 @@ func resolve_blueprint_craft(blueprint_id: String, material_consumptions: Array)
 			break
 	if blueprint_index == -1:
 		return {}
+	var blueprint_card: Dictionary = blueprint_cards[blueprint_index]
+	var result_name := str(blueprint_card.get("result", "")).to_upper()
+	var crafted_result_spec := _get_craft_result_spec(result_name)
+	var result_kind := str(crafted_result_spec.get("kind", "crafted"))
 	for consumption_variant in material_consumptions:
 		if typeof(consumption_variant) != TYPE_DICTIONARY:
 			return {}
@@ -1073,17 +1481,58 @@ func resolve_blueprint_craft(blueprint_id: String, material_consumptions: Array)
 			return {}
 		if not _consume_material_quantity(material_id, quantity):
 			return {}
-	var blueprint_card: Dictionary = blueprint_cards[blueprint_index]
+	if result_kind == "blank":
+		blank_cartridge_slots.append(true)
+		blueprint_cards.remove_at(blueprint_index)
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+		return {
+			"kind": "blank",
+			"result": result_name,
+			"type": str(crafted_result_spec.get("type", "blank_tape")),
+			"display_name": str(crafted_result_spec.get("display_name", "Fresh Tape")),
+			"blank_index": blank_cartridge_slots.size() - 1,
+		}
+	if result_kind == "material":
+		var created_material := _add_material_card({
+			"type": str(crafted_result_spec.get("type", _result_name_to_type(result_name))),
+			"display_name": str(crafted_result_spec.get("display_name", result_name)),
+			"quantity": maxi(int(crafted_result_spec.get("quantity", 1)), 1),
+			"source_recipe_id": str(blueprint_card.get("recipe_id", "")),
+		})
+		if created_material.is_empty():
+			return {}
+		blueprint_cards.remove_at(blueprint_index)
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+		created_material["kind"] = "material"
+		return created_material.duplicate(true)
+	if result_kind == "equipment":
+		var created_equipment := _add_equipment_card({
+			"type": str(crafted_result_spec.get("type", _result_name_to_type(result_name))),
+			"display_name": str(crafted_result_spec.get("display_name", result_name)),
+		})
+		if created_equipment.is_empty():
+			return {}
+		blueprint_cards.remove_at(blueprint_index)
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+		created_equipment["kind"] = "equipment"
+		return created_equipment.duplicate(true)
 	var crafted_card := {
 		"id": "crafted_%d_%d" % [int(Time.get_unix_time_from_system()), crafted_cards.size()],
+		"type": str(crafted_result_spec.get("type", _result_name_to_type(result_name))),
+		"display_name": str(crafted_result_spec.get("display_name", result_name.replace("_", " ").capitalize())),
 		"result": str(blueprint_card.get("result", "Crafted Item")),
 		"recipe_id": str(blueprint_card.get("recipe_id", "")),
 		"formula": str(blueprint_card.get("formula", "")),
+		"stored_cards": [],
 	}
 	blueprint_cards.remove_at(blueprint_index)
 	crafted_cards.append(crafted_card)
 	save_programmed_cartridges()
 	EventBus.outside_world_changed.emit()
+	crafted_card["kind"] = "crafted"
 	return crafted_card.duplicate(true)
 
 func resolve_journal_research(subject: Dictionary) -> Dictionary:
@@ -1105,6 +1554,7 @@ func resolve_journal_research(subject: Dictionary) -> Dictionary:
 			"subject_type": str(subject_def.get("subject_type", "")),
 			"title": str(subject_def.get("title", subject_key.replace("_", " ").to_upper())),
 			"description": str(subject_def.get("description", "")),
+			"recipe_ids": _get_related_recipe_ids(subject_key),
 			"recipes": [],
 			"unread": true,
 			"attempts": 0,
@@ -1143,6 +1593,7 @@ func resolve_journal_research(subject: Dictionary) -> Dictionary:
 		entry["unread"] = true
 	if not success:
 		failure_penalty = _apply_operator_research_penalty(randi_range(1, 2), 1 if randf() < 0.45 else 0)
+	entry["recipe_ids"] = _get_related_recipe_ids(subject_key)
 	journal_entries[entry_index] = entry
 	save_programmed_cartridges()
 	EventBus.operator_state_changed.emit(get_operator_state())
@@ -1177,7 +1628,8 @@ func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Arra
 	var bot_attack_events: Array = []
 	var combat_participants: Array = []
 	if use_operator and is_run_active():
-		operator_attack = 2
+		var operator_totals := get_operator_equipment_totals()
+		operator_attack = 2 + int(operator_totals.get("attack", 0))
 		total_attack += operator_attack
 	for bot_index_variant in bot_indices:
 		var bot_index := int(bot_index_variant)
@@ -1189,7 +1641,8 @@ func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Arra
 		var instruction_type := _get_bot_combat_instruction_type(bot_index)
 		combat_participants.append(bot_index)
 		if instruction_type == "atk":
-			var bot_attack := 3 if str(bot_state.get("drone_type", "spider")) == "spider" else 2
+			var bot_totals := get_bot_equipment_totals(bot_index)
+			var bot_attack := (3 if str(bot_state.get("drone_type", "spider")) == "spider" else 2) + int(bot_totals.get("attack", 0))
 			total_attack += bot_attack
 			bot_attack_events.append({
 				"bot_index": bot_index,
@@ -1199,18 +1652,19 @@ func resolve_enemy_fight(enemy_id: String, use_operator: bool, bot_indices: Arra
 		return {}
 	enemy_hp -= total_attack
 	if use_operator and is_run_active():
-		operator_damage = enemy_attack
-		_apply_operator_loss(enemy_attack)
+		operator_damage = maxi(enemy_attack - int(get_operator_equipment_totals().get("armor", 0)), 0)
+		_apply_operator_loss(operator_damage)
 	for bot_index in combat_participants:
 		var bot_state: Dictionary = bot_loadouts[bot_index]
 		if int(bot_state.get("power_charge", 0)) <= 0:
 			continue
-		bot_state["power_charge"] = maxi(int(bot_state.get("power_charge", 0)) - enemy_attack, 0)
+		var mitigated_damage := maxi(enemy_attack - int(get_bot_equipment_totals(bot_index).get("armor", 0)), 0)
+		bot_state["power_charge"] = maxi(int(bot_state.get("power_charge", 0)) - mitigated_damage, 0)
 		_sync_power_card_count(bot_state)
 		bot_loadouts[bot_index] = bot_state
 		bot_damage_events.append({
 			"bot_index": bot_index,
-			"damage": enemy_attack,
+			"damage": mitigated_damage,
 		})
 	var defeated := enemy_hp <= 0
 	var drop_card := {}
@@ -1271,6 +1725,7 @@ func load_programmed_cartridges():
 	material_cards = []
 	blueprint_cards = []
 	crafted_cards = []
+	equipment_cards = []
 	journal_entries = []
 	workshop_layout = {}
 	if not FileAccess.file_exists(CARTRIDGE_STORAGE_PATH):
@@ -1309,8 +1764,10 @@ func load_programmed_cartridges():
 
 	var blank_data: Array = parsed.get("blank_cartridge_slots", [])
 	if typeof(blank_data) == TYPE_ARRAY:
-		for blank_index in range(mini(blank_data.size(), blank_cartridge_slots.size())):
-			blank_cartridge_slots[blank_index] = bool(blank_data[blank_index])
+		blank_cartridge_slots.clear()
+		for blank_entry in blank_data:
+			if bool(blank_entry):
+				blank_cartridge_slots.append(true)
 	var power_data: Array = parsed.get("power_unit_slots", [])
 	if typeof(power_data) == TYPE_ARRAY:
 		for power_index in range(power_data.size()):
@@ -1349,6 +1806,7 @@ func load_programmed_cartridges():
 		operator_state["max_hp"] = maxi(int(saved_operator_state.get("max_hp", OPERATOR_MAX_HP)), OPERATOR_MAX_HP)
 		operator_state["hp"] = clampi(int(saved_operator_state.get("hp", OPERATOR_MAX_HP)), 0, int(operator_state["max_hp"]))
 		operator_state["status"] = str(saved_operator_state.get("status", "active"))
+		operator_state["equipment_slots"] = _normalize_equipment_slots(Array(saved_operator_state.get("equipment_slots", [])))
 
 	var object_data: Array = parsed.get("outside_objects", [])
 	if typeof(object_data) == TYPE_ARRAY:
@@ -1373,6 +1831,11 @@ func load_programmed_cartridges():
 	var saved_crafted_cards: Array = parsed.get("crafted_cards", [])
 	if typeof(saved_crafted_cards) == TYPE_ARRAY:
 		crafted_cards = _normalize_saved_crafted_cards(saved_crafted_cards)
+	var saved_equipment_cards: Array = parsed.get("equipment_cards", [])
+	if typeof(saved_equipment_cards) == TYPE_ARRAY:
+		equipment_cards = _normalize_saved_equipment_cards(saved_equipment_cards)
+	_migrate_stackable_crafted_cards_to_materials()
+	_migrate_equipment_like_crafted_cards_to_equipment()
 
 	var saved_journal_entries: Array = parsed.get("journal_entries", [])
 	if typeof(saved_journal_entries) == TYPE_ARRAY:
@@ -1422,6 +1885,7 @@ func save_programmed_cartridges():
 		"material_cards": material_cards,
 		"blueprint_cards": blueprint_cards,
 		"crafted_cards": crafted_cards,
+		"equipment_cards": equipment_cards,
 		"journal_entries": journal_entries,
 		"workshop_layout": workshop_layout,
 		"operator_state": operator_state,
@@ -1451,6 +1915,7 @@ func _initialize_operator_state():
 		"hp": OPERATOR_MAX_HP,
 		"max_hp": OPERATOR_MAX_HP,
 		"status": "active",
+		"equipment_slots": _default_equipment_slots(),
 	}
 
 func _default_bot_state(bot_index: int) -> Dictionary:
@@ -1482,7 +1947,35 @@ func _default_bot_state(bot_index: int) -> Dictionary:
 		"activity_tick": 0,
 		"activity_log": [],
 		"last_mission_summary": "",
+		"equipment_slots": _default_equipment_slots(),
 	}
+
+func _default_equipment_slots() -> Array:
+	var slots: Array = []
+	for slot_index in range(UNIT_EQUIPMENT_SLOT_COUNT):
+		slots.append({
+			"slot_index": slot_index,
+			"item_type": "",
+			"display_name": "",
+		})
+	return slots
+
+func _normalize_equipment_slots(saved_slots: Array) -> Array:
+	var slots := _default_equipment_slots()
+	for slot_index in range(mini(saved_slots.size(), UNIT_EQUIPMENT_SLOT_COUNT)):
+		var saved_slot: Variant = saved_slots[slot_index]
+		if typeof(saved_slot) != TYPE_DICTIONARY:
+			continue
+		var item_type := str(saved_slot.get("item_type", ""))
+		var display_name := str(saved_slot.get("display_name", ""))
+		if display_name.is_empty() and not item_type.is_empty():
+			display_name = _get_equipment_display_name(item_type)
+		slots[slot_index] = {
+			"slot_index": slot_index,
+			"item_type": item_type,
+			"display_name": display_name,
+		}
+	return slots
 
 func _initialize_blank_slots():
 	blank_cartridge_slots.clear()
@@ -1512,6 +2005,7 @@ func _build_random_operator_location_card() -> Dictionary:
 		"field",
 		"dump",
 		"nest",
+		"ruin",
 	]
 	var location_type := str(location_types[randi() % location_types.size()])
 	var position := _generate_random_location_position()
@@ -1667,27 +2161,13 @@ func _get_programmed_cartridge_index(cartridge_id: String) -> int:
 	return -1
 
 func _get_first_blank_slot_index() -> int:
-	for slot_index in range(blank_cartridge_slots.size()):
-		if bool(blank_cartridge_slots[slot_index]):
-			return slot_index
-	return -1
+	return 0 if not blank_cartridge_slots.is_empty() else -1
 
 func _get_first_empty_blank_slot_index() -> int:
-	for slot_index in range(blank_cartridge_slots.size()):
-		if not bool(blank_cartridge_slots[slot_index]):
-			return slot_index
-	return -1
+	return blank_cartridge_slots.size()
 
 func _get_first_free_programmed_slot_index() -> int:
-	for slot_index in range(PROGRAMMED_CARTRIDGE_CAPACITY):
-		var occupied := false
-		for cartridge in programmed_cartridges:
-			if int(cartridge.get("slot_index", -1)) == slot_index:
-				occupied = true
-				break
-		if not occupied:
-			return slot_index
-	return -1
+	return programmed_cartridges.size()
 
 func _decode_program_from_rows(rows: Array) -> Array:
 	var decoded_rows: Dictionary = PunchEncodingData.decode_rows(rows)
@@ -2031,6 +2511,8 @@ func _attempt_location_pickup(state: Dictionary) -> String:
 		var drop_kind := str(drop_entry.get("kind", "material"))
 		if drop_kind == "power":
 			message_parts.append("found POWER UNIT")
+		elif drop_kind in ["crafted", "equipment"]:
+			message_parts.append("found %s" % str(drop_entry.get("display_name", drop_entry.get("result", "item"))).to_upper())
 		else:
 			message_parts.append("found %dx %s" % [
 				maxi(int(drop_entry.get("quantity", 1)), 1),
@@ -2083,6 +2565,22 @@ func _roll_location_scavenge_drop(location_type: String, pickup_attempts: int = 
 			"max_charge": BOT_POWER_CAPACITY,
 			"source_location_type": location_type,
 		}
+	if drop_kind == "equipment":
+		return {
+			"kind": "equipment",
+			"type": str(drop_entry.get("type", "")),
+			"display_name": str(drop_entry.get("display_name", drop_entry.get("result", "Equipment"))),
+			"result": str(drop_entry.get("result", "")),
+			"source_location_type": location_type,
+		}
+	if drop_kind == "crafted":
+		return {
+			"kind": "crafted",
+			"type": str(drop_entry.get("type", "")),
+			"display_name": str(drop_entry.get("display_name", drop_entry.get("result", "Item"))),
+			"result": str(drop_entry.get("result", "")),
+			"source_location_type": location_type,
+		}
 	var material_type := str(drop_entry.get("type", ""))
 	var quantity_min := maxi(int(drop_entry.get("quantity_min", 1)), 1)
 	var quantity_max := maxi(int(drop_entry.get("quantity_max", quantity_min)), quantity_min)
@@ -2118,6 +2616,7 @@ func _build_scanned_location_card_at(position: Vector2, source: String = "drone_
 		"field",
 		"dump",
 		"nest",
+		"ruin",
 	]
 	var location_type := str(location_types[randi() % location_types.size()])
 	var location_id := "loc_%d_%d_%d" % [int(Time.get_unix_time_from_system()), int(position.x), int(position.y)]
@@ -2179,6 +2678,7 @@ func _commit_pending_salvage(state: Dictionary) -> Dictionary:
 	var committed := 0
 	var material_count := 0
 	var power_count := 0
+	var crafted_count := 0
 	var aggregated_materials := {}
 	for drop_variant in pending_drops:
 		if typeof(drop_variant) != TYPE_DICTIONARY:
@@ -2198,6 +2698,30 @@ func _commit_pending_salvage(state: Dictionary) -> Dictionary:
 			}
 			committed += 1
 			power_count += 1
+			continue
+		if drop_kind == "equipment":
+			var equipment_card := _add_equipment_card({
+				"type": str(drop_entry.get("type", "")),
+				"display_name": str(drop_entry.get("display_name", drop_entry.get("result", "Equipment"))),
+			})
+			if equipment_card.is_empty():
+				continue
+			committed += 1
+			crafted_count += 1
+			continue
+		if drop_kind == "crafted":
+			var crafted_card := {
+				"id": "crafted_%d_%d" % [int(Time.get_unix_time_from_system()), crafted_cards.size()],
+				"type": str(drop_entry.get("type", "")),
+				"display_name": str(drop_entry.get("display_name", drop_entry.get("result", "Item"))),
+				"result": str(drop_entry.get("result", "Crafted Item")),
+				"recipe_id": "",
+				"formula": "",
+				"stored_cards": [],
+			}
+			crafted_cards.append(crafted_card)
+			committed += 1
+			crafted_count += 1
 			continue
 		if drop_kind != "material":
 			continue
@@ -2224,23 +2748,11 @@ func _commit_pending_salvage(state: Dictionary) -> Dictionary:
 		"count": committed,
 		"materials": material_count,
 		"power_units": power_count,
+		"crafted": crafted_count,
 	}
 
 func _append_material_card(material_entry: Dictionary) -> bool:
-	var material_type := str(material_entry.get("type", ""))
-	if material_type.is_empty():
-		return false
-	var quantity := maxi(int(material_entry.get("quantity", 0)), 0)
-	if quantity <= 0:
-		return false
-	material_cards.append({
-		"id": "material_%d_%d" % [int(Time.get_unix_time_from_system()), material_cards.size()],
-		"type": material_type,
-		"display_name": str(material_entry.get("display_name", material_type.replace("_", " ").capitalize())),
-		"quantity": quantity,
-		"source_location_type": str(material_entry.get("source_location_type", "")),
-	})
-	return true
+	return not _add_material_card(material_entry).is_empty()
 
 func _build_mission_summary(state: Dictionary, status: String, discoveries: int, salvage: Dictionary = {}) -> String:
 	var bot_name := _bot_display_name(_get_bot_index_from_state(state))
@@ -2302,6 +2814,7 @@ func _apply_saved_bot_entry(bot_index: int, bot_entry: Dictionary):
 	bot_loadouts[bot_index]["activity_tick"] = maxi(int(bot_entry.get("activity_tick", 0)), 0)
 	bot_loadouts[bot_index]["activity_log"] = Array(bot_entry.get("activity_log", [])).duplicate(true)
 	bot_loadouts[bot_index]["last_mission_summary"] = str(bot_entry.get("last_mission_summary", ""))
+	bot_loadouts[bot_index]["equipment_slots"] = _normalize_equipment_slots(Array(bot_entry.get("equipment_slots", [])))
 	_sync_power_card_count(bot_loadouts[bot_index])
 
 func _normalize_loaded_bot_states() -> bool:
@@ -2383,6 +2896,7 @@ func _serialize_bot_loadouts() -> Array:
 			"activity_tick": maxi(int(bot.get("activity_tick", 0)), 0),
 			"activity_log": Array(bot.get("activity_log", [])).duplicate(true),
 			"last_mission_summary": str(bot.get("last_mission_summary", "")),
+			"equipment_slots": _normalize_equipment_slots(Array(bot.get("equipment_slots", []))),
 		})
 	return data
 
@@ -2442,9 +2956,25 @@ func _normalize_saved_material_cards(cards: Array) -> Array:
 		result.append({
 			"id": str(entry.get("id", "")),
 			"type": material_type,
-			"display_name": str(entry.get("display_name", material_type.replace("_", " ").capitalize())),
+			"display_name": str(entry.get("display_name", _default_material_display_name(material_type))),
 			"quantity": maxi(int(entry.get("quantity", 1)), 1),
 			"source_enemy_type": str(entry.get("source_enemy_type", "")),
+		})
+	return result
+
+func _normalize_saved_equipment_cards(cards: Array) -> Array:
+	var result: Array = []
+	for entry in cards:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var equipment_type := str(entry.get("type", ""))
+		var spec := _get_equipment_type_spec(equipment_type)
+		if spec.is_empty():
+			continue
+		result.append({
+			"id": str(entry.get("id", "")),
+			"type": equipment_type,
+			"display_name": str(entry.get("display_name", spec.get("display_name", _get_equipment_display_name(equipment_type)))),
 		})
 	return result
 
@@ -2453,16 +2983,21 @@ func _normalize_saved_blueprint_cards(cards: Array) -> Array:
 	for entry in cards:
 		if typeof(entry) != TYPE_DICTIONARY:
 			continue
+		var recipe_id := str(entry.get("recipe_id", ""))
+		var live_recipe := _get_loaded_recipe_by_id(recipe_id)
 		var result_name := str(entry.get("result", "Blueprint")).to_upper()
 		var formula := str(entry.get("formula", ""))
 		var formula_parts: Array = _sanitize_recipe_parts(Array(entry.get("formula_parts", [])).duplicate(true))
-		if formula_parts.is_empty():
+		if not live_recipe.is_empty():
+			result_name = str(live_recipe.get("result", result_name)).to_upper()
+			formula_parts = _sanitize_recipe_parts(Array(live_recipe.get("formula_parts", formula_parts)).duplicate(true))
+		elif formula_parts.is_empty():
 			formula_parts = _sanitize_recipe_parts(_formula_parts_from_formula_string(formula))
 		formula_parts = _normalize_recipe_result_parts(result_name, formula_parts)
 		result.append({
 			"id": str(entry.get("id", "")),
-			"recipe_id": str(entry.get("recipe_id", "")),
-			"result": str(entry.get("result", "Blueprint")),
+			"recipe_id": recipe_id,
+			"result": result_name,
 			"formula": "%s = %s" % [result_name, _join_formula_parts(formula_parts)],
 			"formula_parts": formula_parts,
 			"subject_key": str(entry.get("subject_key", "")),
@@ -2474,13 +3009,112 @@ func _normalize_saved_crafted_cards(cards: Array) -> Array:
 	for entry in cards:
 		if typeof(entry) != TYPE_DICTIONARY:
 			continue
+		var result_name := str(entry.get("result", "Crafted Item"))
+		var result_type := str(entry.get("type", _result_name_to_type(result_name.to_upper())))
 		result.append({
 			"id": str(entry.get("id", "")),
-			"result": str(entry.get("result", "Crafted Item")),
+			"type": result_type,
+			"display_name": str(entry.get("display_name", result_name)),
+			"result": result_name,
 			"recipe_id": str(entry.get("recipe_id", "")),
 			"formula": str(entry.get("formula", "")),
+			"stored_cards": _normalize_saved_storage_entries(Array(entry.get("stored_cards", []))),
+			"tank_batch": _normalize_saved_tank_batch(Dictionary(entry.get("tank_batch", {}))),
 		})
 	return result
+
+func _normalize_saved_tank_batch(entry: Dictionary) -> Dictionary:
+	if entry.is_empty():
+		return {}
+	var process_id := str(entry.get("process_id", ""))
+	if process_id.is_empty():
+		return {}
+	var spec := Dictionary(TANK_PROCESS_SPECS.get(process_id, {}))
+	if spec.is_empty():
+		return {}
+	var duration := maxf(float(entry.get("duration", TANK_PROCESS_DEFAULT_DURATION)), 0.1)
+	var ends_at := float(entry.get("ends_at", 0.0))
+	if ends_at <= 0.0:
+		ends_at = float(Time.get_unix_time_from_system()) + duration
+	return {
+		"process_id": process_id,
+		"result_type": str(entry.get("result_type", spec.get("result_type", ""))),
+		"display_name": str(entry.get("display_name", spec.get("display_name", "Tank Batch"))),
+		"quantity": maxi(int(entry.get("quantity", int(spec.get("quantity", 1)))), 1),
+		"duration": duration,
+		"ends_at": ends_at,
+	}
+
+func _migrate_stackable_crafted_cards_to_materials() -> void:
+	if crafted_cards.is_empty():
+		return
+	var remaining_crafted: Array = []
+	for entry_variant in crafted_cards:
+		if typeof(entry_variant) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = entry_variant
+		var result_name := str(entry.get("result", ""))
+		var spec := _get_craft_result_spec(result_name)
+		if str(spec.get("kind", "")) == "material":
+			_add_material_card({
+				"type": str(spec.get("type", _result_name_to_type(result_name))),
+				"display_name": str(spec.get("display_name", result_name)),
+				"quantity": maxi(int(entry.get("quantity", spec.get("quantity", 1))), 1),
+				"source_recipe_id": str(entry.get("recipe_id", "")),
+			})
+			continue
+		remaining_crafted.append(entry.duplicate(true))
+	crafted_cards = remaining_crafted
+
+func _migrate_equipment_like_crafted_cards_to_equipment() -> void:
+	if crafted_cards.is_empty():
+		return
+	var remaining_crafted: Array = []
+	for entry_variant in crafted_cards:
+		if typeof(entry_variant) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = Dictionary(entry_variant).duplicate(true)
+		var result_name := str(entry.get("result", ""))
+		var spec := _get_craft_result_spec(result_name)
+		if str(spec.get("kind", "")) == "equipment":
+			_add_equipment_card({
+				"type": str(spec.get("type", _result_name_to_type(result_name))),
+				"display_name": str(spec.get("display_name", result_name)),
+			})
+			continue
+		remaining_crafted.append(entry)
+	crafted_cards = remaining_crafted
+
+func _normalize_saved_storage_entries(entries: Array) -> Array:
+	var normalized: Array = []
+	for entry_variant in entries:
+		if typeof(entry_variant) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = entry_variant
+		var entry_kind := str(entry.get("kind", ""))
+		var entry_type := str(entry.get("type", ""))
+		if entry_kind == "material":
+			var quantity := maxi(int(entry.get("quantity", 0)), 0)
+			if quantity <= 0 or entry_type.is_empty():
+				continue
+			normalized.append({
+				"entry_id": str(entry.get("entry_id", "stored_%d" % normalized.size())),
+				"kind": "material",
+				"type": entry_type,
+				"display_name": str(entry.get("display_name", _default_material_display_name(entry_type))),
+				"quantity": quantity,
+			})
+		elif entry_kind == "crafted":
+			normalized.append({
+				"entry_id": str(entry.get("entry_id", "stored_%d" % normalized.size())),
+				"kind": "crafted",
+				"type": entry_type,
+				"display_name": str(entry.get("display_name", entry.get("result", "Item"))),
+				"result": str(entry.get("result", "Crafted Item")),
+				"recipe_id": str(entry.get("recipe_id", "")),
+				"formula": str(entry.get("formula", "")),
+			})
+	return normalized
 
 func _normalize_saved_journal_entries(entries: Array) -> Array:
 	var result: Array = []
@@ -2493,14 +3127,19 @@ func _normalize_saved_journal_entries(entries: Array) -> Array:
 			if typeof(recipe_variant) != TYPE_DICTIONARY:
 				continue
 			var recipe: Dictionary = recipe_variant
+			var recipe_id := str(recipe.get("id", ""))
+			var live_recipe := _get_loaded_recipe_by_id(recipe_id)
 			var result_name := str(recipe.get("result", "Blueprint")).to_upper()
 			var formula := str(recipe.get("formula", ""))
 			var formula_parts: Array = _sanitize_recipe_parts(Array(recipe.get("formula_parts", [])).duplicate(true))
-			if formula_parts.is_empty():
+			if not live_recipe.is_empty():
+				result_name = str(live_recipe.get("result", result_name)).to_upper()
+				formula_parts = _sanitize_recipe_parts(Array(live_recipe.get("formula_parts", formula_parts)).duplicate(true))
+			elif formula_parts.is_empty():
 				formula_parts = _sanitize_recipe_parts(_formula_parts_from_formula_string(formula))
 			formula_parts = _normalize_recipe_result_parts(result_name, formula_parts)
 			normalized_recipes.append({
-				"id": str(recipe.get("id", "")),
+				"id": recipe_id,
 				"result": result_name,
 				"formula_parts": formula_parts,
 				"formula": "%s = %s" % [result_name, _join_formula_parts(formula_parts)],
@@ -2513,6 +3152,7 @@ func _normalize_saved_journal_entries(entries: Array) -> Array:
 			"subject_type": str(entry.get("subject_type", "")),
 			"title": _get_normalized_journal_title(entry),
 			"description": _get_normalized_journal_description(entry),
+			"recipe_ids": _get_related_recipe_ids(str(entry.get("subject_key", ""))),
 			"recipes": normalized_recipes,
 			"unread": bool(entry.get("unread", false)),
 			"attempts": maxi(int(entry.get("attempts", 0)), 0),
@@ -2596,6 +3236,284 @@ func _get_loaded_enemy_loot_table(enemy_type: String) -> Array:
 		return []
 	return Array(enemy_loot_catalog.get(enemy_type, [])).duplicate(true)
 
+func _get_loaded_recipe_by_id(recipe_id: String) -> Dictionary:
+	if recipe_id.is_empty() or recipe_catalog.is_empty():
+		return {}
+	for recipe_list_variant in recipe_catalog.values():
+		if typeof(recipe_list_variant) != TYPE_ARRAY:
+			continue
+		for recipe_variant in Array(recipe_list_variant):
+			if typeof(recipe_variant) != TYPE_DICTIONARY:
+				continue
+			var recipe := Dictionary(recipe_variant)
+			if str(recipe.get("id", "")) == recipe_id:
+				return recipe.duplicate(true)
+	return {}
+
+func _get_all_research_subjects() -> Array:
+	var subjects: Array = []
+	for material_type in RESEARCH_MATERIAL_TYPES:
+		subjects.append({"kind": "material", "type": material_type})
+	for location_type in RESEARCH_LOCATION_TYPES:
+		subjects.append({"kind": "location", "type": location_type})
+	for enemy_type in RESEARCH_ENEMY_TYPES:
+		subjects.append({"kind": "enemy", "type": enemy_type})
+	for machine_type in RESEARCH_MACHINE_TYPES:
+		subjects.append({"kind": "machine", "type": machine_type})
+	for drone_type in RESEARCH_DRONE_TYPES:
+		subjects.append({"kind": "drone", "type": drone_type})
+	for tape_type in RESEARCH_TAPE_TYPES:
+		subjects.append({"kind": "tape", "type": tape_type})
+	for resource_type in RESEARCH_RESOURCE_TYPES:
+		subjects.append({"kind": "resource", "type": resource_type})
+	for equipment_type in RESEARCH_EQUIPMENT_TYPES:
+		subjects.append({"kind": "equipment", "type": equipment_type})
+	return subjects
+
+func _get_all_loaded_research_recipes() -> Array:
+	var loaded: Array = []
+	if recipe_catalog.is_empty():
+		return loaded
+	for subject_key_variant in recipe_catalog.keys():
+		var subject_key := str(subject_key_variant)
+		for recipe_variant in Array(recipe_catalog.get(subject_key, [])):
+			if typeof(recipe_variant) != TYPE_DICTIONARY:
+				continue
+			var recipe: Dictionary = Dictionary(recipe_variant)
+			loaded.append(_build_recipe(
+				str(recipe.get("id", "")),
+				str(recipe.get("result", "")),
+				Array(recipe.get("parts", [])).duplicate(true),
+				subject_key
+			))
+	return loaded
+
+func _get_related_recipe_ids(subject_key: String) -> Array:
+	var related_ids: Array[String] = []
+	for recipe_variant in _get_all_loaded_research_recipes():
+		if typeof(recipe_variant) != TYPE_DICTIONARY:
+			continue
+		var recipe: Dictionary = Dictionary(recipe_variant)
+		if subject_key in _get_recipe_related_subject_keys(recipe):
+			var recipe_id := str(recipe.get("id", ""))
+			if not recipe_id.is_empty():
+				related_ids.append(recipe_id)
+	return _dedupe_strings(related_ids)
+
+func _build_journal_recipe_display_list(subject_key: String, discovered_recipes_by_id: Dictionary, related_recipe_ids: Array) -> Array:
+	var display_recipes: Array = []
+	var seen_recipe_ids := {}
+	for recipe_id_variant in related_recipe_ids:
+		var recipe_id := str(recipe_id_variant)
+		if recipe_id.is_empty():
+			continue
+		var live_recipe := _get_loaded_recipe_by_id(recipe_id)
+		if live_recipe.is_empty():
+			continue
+		seen_recipe_ids[recipe_id] = true
+		if discovered_recipes_by_id.has(recipe_id):
+			var discovered_recipe: Dictionary = Dictionary(discovered_recipes_by_id[recipe_id]).duplicate(true)
+			discovered_recipe["locked"] = false
+			display_recipes.append(discovered_recipe)
+			continue
+		display_recipes.append(_build_locked_journal_recipe(subject_key, live_recipe))
+	for recipe_id_variant in discovered_recipes_by_id.keys():
+		var recipe_id := str(recipe_id_variant)
+		if seen_recipe_ids.has(recipe_id):
+			continue
+		var discovered_recipe: Dictionary = Dictionary(discovered_recipes_by_id[recipe_id]).duplicate(true)
+		if subject_key in _get_recipe_related_subject_keys(discovered_recipe):
+			discovered_recipe["locked"] = false
+			display_recipes.append(discovered_recipe)
+	return display_recipes
+
+func _get_recipe_related_subject_keys(recipe: Dictionary) -> Array:
+	var related_keys: Array[String] = []
+	var owner_subject_key := str(recipe.get("subject_key", ""))
+	if not owner_subject_key.is_empty():
+		related_keys.append(owner_subject_key)
+	var result_subject_key := _get_named_subject_key(str(recipe.get("result", "")))
+	if not result_subject_key.is_empty():
+		related_keys.append(result_subject_key)
+	for part_variant in Array(recipe.get("formula_parts", [])):
+		var part_subject_key := _get_formula_part_subject_key(str(part_variant))
+		if not part_subject_key.is_empty():
+			related_keys.append(part_subject_key)
+	return _dedupe_strings(related_keys)
+
+func _get_formula_part_subject_key(part: String) -> String:
+	var normalized := part.strip_edges()
+	if normalized.is_empty():
+		return ""
+	var quantity_marker := normalized.to_lower().rfind(" x")
+	if quantity_marker != -1:
+		normalized = normalized.substr(0, quantity_marker).strip_edges()
+	return _get_named_subject_key(normalized)
+
+func _get_named_subject_key(token: String) -> String:
+	match token.strip_edges().to_upper():
+		"METAL":
+			return "material_metal"
+		"SPRING":
+			return "material_spring"
+		"PAPER":
+			return "material_paper"
+		"FIBER":
+			return "material_fiber"
+		"BIOMASS":
+			return "material_biomass"
+		"DRY RATIONS":
+			return "material_dry_rations"
+		"MEDICINE":
+			return "material_medicine"
+		"GROWTH MEDIUM":
+			return "material_growth_medium"
+		"MUSHROOMS":
+			return "material_mushrooms"
+		"ALGAE":
+			return "material_algae"
+		"BACTERIA":
+			return "material_bacteria"
+		"MEALWORMS":
+			return "material_mealworms"
+		"BONE MEAL":
+			return "material_bone_meal"
+		"HIDE":
+			return "material_hide"
+		"BONE":
+			return "material_bone"
+		"POND":
+			return "location_pond"
+		"CRATER":
+			return "location_crater"
+		"TOWER":
+			return "location_tower"
+		"SURVEILLANCE ZONE":
+			return "location_surveillance_zone"
+		"FACILITY":
+			return "location_facility"
+		"BUNKER":
+			return "location_bunker"
+		"FIELD":
+			return "location_field"
+		"DUMP":
+			return "location_dump"
+		"CACHE":
+			return "location_cache"
+		"NEST":
+			return "location_nest"
+		"RUIN":
+			return "location_ruin"
+		"SURVEILLANCE DRONE":
+			return "enemy_surveillance_drone"
+		"INFANTRY DRONE":
+			return "enemy_infantry_drone"
+		"STALKER":
+			return "enemy_stalker"
+		"GRIZZLY":
+			return "enemy_grizzly"
+		"WOLF PACK":
+			return "enemy_wolf_pack"
+		"BENCH":
+			return "machine_bench"
+		"ROUTE TABLE":
+			return "machine_route"
+		"CHARGE MACHINE":
+			return "machine_charge"
+		"TRASH":
+			return "machine_trash"
+		"SPIDER DRONE":
+			return "drone_spider"
+		"BUTTERFLY DRONE":
+			return "drone_butterfly"
+		"PROGRAMMED TAPE":
+			return "tape_programmed"
+		"BLANK TAPE":
+			return "tape_blank"
+		"POWER UNIT", "SPRING CHARGE":
+			return "resource_spring_charge"
+		"KNIFE":
+			return "equipment_knife"
+		"BOW":
+			return "equipment_bow"
+		"PLATE MAIL":
+			return "equipment_plate_mail"
+		"HIDE CLOAK":
+			return "equipment_hide_cloak"
+		"TOOL KIT":
+			return "equipment_tool_kit"
+		_:
+			return ""
+
+func _build_locked_journal_entry(subject_key: String, subject_def: Dictionary) -> Dictionary:
+	return {
+		"subject_key": subject_key,
+		"subject_kind": str(subject_def.get("subject_kind", "")),
+		"subject_type": str(subject_def.get("subject_type", "")),
+		"title": _mask_locked_journal_label(str(subject_def.get("title", "UNKNOWN ENTRY"))),
+		"description": _build_locked_journal_description(subject_def),
+		"recipe_ids": _get_related_recipe_ids(subject_key),
+		"recipes": _build_locked_journal_recipe_list(subject_key, Array(subject_def.get("recipes", []))),
+		"unread": false,
+		"attempts": 0,
+		"locked": true,
+	}
+
+func _build_locked_journal_recipe_list(subject_key: String, live_recipes: Array) -> Array:
+	var recipes: Array = []
+	for live_recipe_variant in live_recipes:
+		if typeof(live_recipe_variant) != TYPE_DICTIONARY:
+			continue
+		recipes.append(_build_locked_journal_recipe(subject_key, Dictionary(live_recipe_variant)))
+	return recipes
+
+func _build_locked_journal_recipe(subject_key: String, live_recipe: Dictionary) -> Dictionary:
+	var formula_parts: Array = Array(live_recipe.get("formula_parts", [])).duplicate(true)
+	return {
+		"id": str(live_recipe.get("id", "")),
+		"result": _mask_locked_journal_label(str(live_recipe.get("result", "UNKNOWN"))),
+		"formula_parts": formula_parts,
+		"formula": _build_locked_formula_text(str(live_recipe.get("result", "UNKNOWN")), formula_parts),
+		"subject_key": subject_key,
+		"unread": false,
+		"locked": true,
+	}
+
+func _build_locked_formula_text(result_name: String, formula_parts: Array) -> String:
+	var masked_parts: Array[String] = []
+	for part_variant in formula_parts:
+		masked_parts.append(_mask_locked_formula_part(str(part_variant)))
+	return "%s = %s" % [_mask_locked_journal_label(result_name), " + ".join(masked_parts)]
+
+func _mask_locked_formula_part(part: String) -> String:
+	var normalized := part.strip_edges()
+	if normalized.is_empty():
+		return "??"
+	var quantity_marker := normalized.to_lower().rfind(" x")
+	if quantity_marker != -1 and quantity_marker < normalized.length() - 2:
+		return "?? %s" % normalized.substr(quantity_marker + 1, normalized.length() - quantity_marker - 1)
+	return "??"
+
+func _mask_locked_journal_label(label: String) -> String:
+	var normalized := label.strip_edges().replace("_", " ").to_upper()
+	if normalized.is_empty():
+		return "???"
+	var masked := ""
+	for char_index in range(normalized.length()):
+		var char := normalized.substr(char_index, 1)
+		if char == " ":
+			masked += char
+			continue
+		masked += char if char_index % 3 == 0 else "?"
+	return masked
+
+func _build_locked_journal_description(subject_def: Dictionary) -> String:
+	var recipe_count := Array(subject_def.get("recipes", [])).size()
+	if recipe_count <= 0:
+		return "Undiscovered notes. The page structure is present, but no stable fragments are readable yet."
+	var formula_noun := "formula" if recipe_count == 1 else "formulas"
+	return "Undiscovered notes. Fragmented observations suggest %d locked %s under this subject." % [recipe_count, formula_noun]
+
 func _normalize_recipe_result_parts(result_name: String, parts: Array) -> Array:
 	var normalized_result := result_name.to_upper()
 	if normalized_result != "ENERGY BAR" and normalized_result != "DRY RATIONS":
@@ -2628,6 +3546,8 @@ func _get_research_subject_key(subject: Dictionary) -> String:
 			return "tape_%s" % subject_type
 		"resource":
 			return "resource_%s" % subject_type
+		"equipment":
+			return "equipment_%s" % subject_type
 		"location":
 			return "location_%s" % subject_type
 		"enemy":
@@ -2656,6 +3576,16 @@ func _consume_research_subject(subject: Dictionary) -> Dictionary:
 					return {"consumed": true, "depleted": true}
 				material_cards[card_index]["quantity"] = quantity
 				return {"consumed": true, "depleted": false}
+			return {"consumed": false, "depleted": false}
+		"equipment":
+			var equipment_card_id := str(subject.get("card_id", ""))
+			if equipment_card_id.is_empty():
+				return {"consumed": false, "depleted": false}
+			for card_index in range(equipment_cards.size()):
+				if str(equipment_cards[card_index].get("id", "")) != equipment_card_id:
+					continue
+				equipment_cards.remove_at(card_index)
+				return {"consumed": true, "depleted": true}
 			return {"consumed": false, "depleted": false}
 		"resource":
 			var subject_type := str(subject.get("type", ""))
@@ -2717,6 +3647,8 @@ func _get_research_subject_definition(subject: Dictionary) -> Dictionary:
 			return _get_tape_research_definition(subject_type)
 		"resource":
 			return _get_resource_research_definition(subject_type)
+		"equipment":
+			return _get_equipment_research_definition(subject_type)
 		_:
 			return {}
 
@@ -2778,12 +3710,84 @@ func _get_material_research_definition(material_type: String) -> Dictionary:
 				"description": "Recording stock. Useful for labels, disposable notes, and the outer layers of printable media.",
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
+		"fiber":
+			return {
+				"subject_kind": "material",
+				"subject_type": material_type,
+				"title": "FIBER",
+				"description": "Dry plant stock. Useful for processing into paper, packing, and preserved food binders.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
 		"biomass":
 			return {
 				"subject_kind": "material",
 				"subject_type": material_type,
 				"title": "BIOMASS",
 				"description": "Wet organic stock. Ferments, binds, and carries scent more readily than harder materials.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"dry_rations":
+			return {
+				"subject_kind": "material",
+				"subject_type": material_type,
+				"title": "DRY RATIONS",
+				"description": "Packed preserved food. Stable shelf stock for restoring operator energy.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"medicine":
+			return {
+				"subject_kind": "material",
+				"subject_type": material_type,
+				"title": "MEDICINE",
+				"description": "Prepared treatment stock. Used to restore operator health in the workshop.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"growth_medium":
+			return {
+				"subject_kind": "material",
+				"subject_type": material_type,
+				"title": "GROWTH MEDIUM",
+				"description": "Prepared bio substrate. Stable organic stock for later cultivation or cage work.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"mushrooms":
+			return {
+				"subject_kind": "material",
+				"subject_type": material_type,
+				"title": "MUSHROOMS",
+				"description": "Fungal food stock. Grows from wet substrate and can be dried or processed into rough rations.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"algae":
+			return {
+				"subject_kind": "material",
+				"subject_type": material_type,
+				"title": "ALGAE",
+				"description": "Wet filament stock. Useful as a fiber-rich biological source for pond-side growth processes.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"bacteria":
+			return {
+				"subject_kind": "material",
+				"subject_type": material_type,
+				"title": "BACTERIA",
+				"description": "Microbial stock. Useful for breakdown, fermentation, and medical processing lines.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"mealworms":
+			return {
+				"subject_kind": "material",
+				"subject_type": material_type,
+				"title": "MEALWORMS",
+				"description": "Insect protein stock. Useful for dense biomass conversion and compact food-chain processes.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"bone_meal":
+			return {
+				"subject_kind": "material",
+				"subject_type": material_type,
+				"title": "BONE MEAL",
+				"description": "Ground mineral powder. Useful for feeding growth processes and bacterial work.",
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"hide":
@@ -2807,13 +3811,15 @@ func _get_material_research_definition(material_type: String) -> Dictionary:
 
 func _get_location_research_definition(location_type: String) -> Dictionary:
 	var subject_key := "location_%s" % location_type
+	var extract_text := _get_location_extracts_text(location_type)
+	var risk_text := _get_location_risk_text(location_type)
 	match location_type:
 		"pond":
 			return {
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "POND",
-				"description": "Shallow basin with recoverable wet stock. Extracts: BIOMASS, PAPER traces, soft organic residue. Scavenging risk: STALKER tracks, WOLF PACK sign, occasional GRIZZLY visits near water.",
+				"description": "Shallow basin with recoverable wet stock. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"crater":
@@ -2821,7 +3827,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "CRATER",
-				"description": "Impact basin with sifted dust and hard edges. Extracts: METAL fragments, BONE shards, dry BIOMASS. Scavenging risk: STALKER ambush, WOLF PACK sheltering in the lip, rare SURVEILLANCE DRONE pass-over.",
+				"description": "Impact basin with sifted dust and hard edges. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"tower":
@@ -2829,7 +3835,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "TOWER",
-				"description": "Elevated relay structure. Extracts: METAL, PAPER records, occasional POWER UNIT salvage. Scavenging risk: SURVEILLANCE DRONE patrols, INFANTRY DRONE response, STALKER spotter nests around the base.",
+				"description": "Elevated relay structure. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"surveillance_zone":
@@ -2837,7 +3843,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "SURVEILLANCE ZONE",
-				"description": "Observed corridor with repeated watch coverage. Extracts: PAPER scraps, METAL stakes, occasional POWER UNIT debris. Scavenging risk: SURVEILLANCE DRONE always likely, INFANTRY DRONE escalation if disturbed, STALKER scavengers trailing the route.",
+				"description": "Observed corridor with repeated watch coverage. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"facility":
@@ -2845,7 +3851,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "FACILITY",
-				"description": "Industrial structure with repeated joints and work surfaces. Extracts: METAL, PAPER manuals, POWER UNIT stock, compact machine parts. Scavenging risk: INFANTRY DRONE defense, SURVEILLANCE DRONE watch, STALKER looters using interior cover.",
+				"description": "Industrial structure with repeated joints and work surfaces. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"bunker":
@@ -2853,7 +3859,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "BUNKER",
-				"description": "Sealed shelter construction. Extracts: PAPER archives, METAL lockers, preserved POWER UNIT stock. Scavenging risk: STALKER squatters, INFANTRY DRONE holdouts, GRIZZLY denning in breached entrances.",
+				"description": "Sealed shelter construction. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"field":
@@ -2861,7 +3867,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "FIELD",
-				"description": "Open productive ground. Extracts: BIOMASS, PAPER sacks, dry HIDE scraps from old work camps. Scavenging risk: WOLF PACK movement in the rows, GRIZZLY foraging, STALKER harvest raids.",
+				"description": "Open productive ground. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"dump":
@@ -2869,7 +3875,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "DUMP",
-				"description": "Mixed discard site. Extracts: METAL, PAPER, BONE, occasional POWER UNIT scrap. Scavenging risk: STALKER scavengers, GRIZZLY feeding runs, SURVEILLANCE DRONE sweeps over open heaps.",
+				"description": "Mixed discard site. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"cache":
@@ -2877,7 +3883,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "CACHE",
-				"description": "Small reserve layout. Extracts: PAPER tags, METAL fittings, preserved BIOMASS or HIDE bundles depending on stock. Scavenging risk: STALKER looters, WOLF PACK scenting stored food, rare SURVEILLANCE DRONE checks if the cache is marked.",
+				"description": "Small reserve layout. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"nest":
@@ -2885,7 +3891,7 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "NEST",
-				"description": "Organic clustered structure. Extracts: BIOMASS, BONE splinters, HIDE fragments from prey remains. Scavenging risk: STALKER opportunists, WOLF PACK scavenging around kills, GRIZZLY disruption near active nests.",
+				"description": "Organic clustered structure. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"ruin":
@@ -2893,11 +3899,81 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "RUIN",
-				"description": "Broken structure with surviving edges and voids. Extracts: METAL braces, PAPER fragments, BONE and BIOMASS trapped in collapse pockets. Scavenging risk: STALKER sheltering, WOLF PACK dens, SURVEILLANCE DRONE line-of-sight nests on upper remains.",
+				"description": "Broken structure with surviving edges and voids. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
 			return {}
+
+func _get_location_extracts_text(location_type: String) -> String:
+	var drop_table: Array = Array(LOCATION_SCAVENGE_TABLES.get(location_type, []))
+	if drop_table.is_empty():
+		return "no confirmed salvage"
+	var parts: Array[String] = []
+	for entry_variant in drop_table:
+		if typeof(entry_variant) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = entry_variant
+		var entry_kind := str(entry.get("kind", "material"))
+		if entry_kind == "power":
+			parts.append("POWER UNIT")
+			continue
+		if entry_kind in ["crafted", "equipment"]:
+			var crafted_name := str(entry.get("display_name", entry.get("result", ""))).strip_edges()
+			if crafted_name.is_empty():
+				crafted_name = str(entry.get("type", "")).replace("_", " ")
+			if not crafted_name.is_empty():
+				parts.append(crafted_name.to_upper())
+			continue
+		var material_type := str(entry.get("type", ""))
+		if material_type.is_empty():
+			continue
+		parts.append(material_type.replace("_", " ").to_upper())
+	if parts.is_empty():
+		return "no confirmed salvage"
+	return _join_readable_list(_dedupe_strings(parts))
+
+func _get_location_risk_text(location_type: String) -> String:
+	var encounter_table: Dictionary = Dictionary(LOCATION_ENCOUNTER_TABLES.get(location_type, {}))
+	var type_entries: Array = Array(encounter_table.get("types", []))
+	if type_entries.is_empty():
+		return "no confirmed hostile pattern"
+	var parts: Array[String] = []
+	for type_entry_variant in type_entries:
+		if typeof(type_entry_variant) != TYPE_DICTIONARY:
+			continue
+		var type_entry: Dictionary = type_entry_variant
+		var enemy_type := str(type_entry.get("type", ""))
+		if enemy_type.is_empty():
+			continue
+		parts.append(enemy_type.replace("_", " ").to_upper())
+	if parts.is_empty():
+		return "no confirmed hostile pattern"
+	return _join_readable_list(_dedupe_strings(parts))
+
+func _dedupe_strings(values: Array[String]) -> Array[String]:
+	var deduped: Array[String] = []
+	var seen := {}
+	for value in values:
+		if seen.has(value):
+			continue
+		seen[value] = true
+		deduped.append(value)
+	return deduped
+
+func _join_readable_list(items: Array[String]) -> String:
+	if items.is_empty():
+		return ""
+	if items.size() == 1:
+		return items[0]
+	if items.size() == 2:
+		return "%s and %s" % [items[0], items[1]]
+	var head := ""
+	for item_index in range(items.size() - 1):
+		if item_index > 0:
+			head += ", "
+		head += items[item_index]
+	return "%s, and %s" % [head, items[items.size() - 1]]
 
 func _get_enemy_research_definition(enemy_type: String) -> Dictionary:
 	var subject_key := "enemy_%s" % enemy_type
@@ -3041,6 +4117,338 @@ func _get_resource_research_definition(resource_type: String) -> Dictionary:
 		_:
 			return {}
 
+func _get_equipment_research_definition(equipment_type: String) -> Dictionary:
+	var subject_key := "equipment_%s" % equipment_type
+	match equipment_type:
+		"knife":
+			return {
+				"subject_kind": "equipment",
+				"subject_type": equipment_type,
+				"title": "KNIFE",
+				"description": "Close combat tool. Grants ATTACK +1 per copy when equipped in a universal slot.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"bow":
+			return {
+				"subject_kind": "equipment",
+				"subject_type": equipment_type,
+				"title": "BOW",
+				"description": "Ranged weapon platform. Grants ATTACK +3 and ARMOR -1 per copy when equipped.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"plate_mail":
+			return {
+				"subject_kind": "equipment",
+				"subject_type": equipment_type,
+				"title": "PLATE MAIL",
+				"description": "Heavy layered protection. Grants ARMOR +3 and STEALTH -1 per copy when equipped.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"hide_cloak":
+			return {
+				"subject_kind": "equipment",
+				"subject_type": equipment_type,
+				"title": "HIDE CLOAK",
+				"description": "Soft concealment layer. Grants STEALTH +3 per copy when equipped.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"tool_kit":
+			return {
+				"subject_kind": "equipment",
+				"subject_type": equipment_type,
+				"title": "TOOL KIT",
+				"description": "Field repair and build bundle. Grants UTILITY +3 per copy when equipped.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		_:
+			return {}
+
+func _apply_operator_supply_effect(supply_key: String) -> Dictionary:
+	var normalized := supply_key.strip_edges().to_upper().replace("_", " ")
+	var energy_gain := 0
+	var hp_gain := 0
+	var success_message := ""
+	match normalized:
+		"ENERGY BAR":
+			energy_gain = 4
+			success_message = "Operator fed"
+		"DRY RATIONS":
+			energy_gain = 3
+			success_message = "Operator fed"
+		"MEDICINE":
+			hp_gain = 2
+			success_message = "Operator treated"
+		_:
+			return {"ok": false, "message": "%s cannot be used on the operator" % _default_material_display_name(_result_name_to_type(normalized))}
+	var current_energy := int(operator_state.get("energy", 0))
+	var max_operator_energy := int(operator_state.get("max_energy", OPERATOR_MAX_ENERGY))
+	var current_hp := int(operator_state.get("hp", 0))
+	var max_operator_hp := int(operator_state.get("max_hp", OPERATOR_MAX_HP))
+	if energy_gain > 0:
+		if current_energy >= max_operator_energy:
+			return {"ok": false, "message": "Operator energy is already full"}
+		operator_state["energy"] = mini(current_energy + energy_gain, max_operator_energy)
+	if hp_gain > 0:
+		if current_hp >= max_operator_hp:
+			return {"ok": false, "message": "Operator HP is already full"}
+		operator_state["hp"] = mini(current_hp + hp_gain, max_operator_hp)
+	if int(operator_state.get("hp", 0)) > 0:
+		operator_state["status"] = "active"
+	return {"ok": true, "message": success_message}
+
+func _get_craft_result_spec(result_name: String) -> Dictionary:
+	var normalized := result_name.strip_edges().to_upper()
+	if normalized == "FRESH TAPE":
+		return {
+			"kind": "blank",
+			"type": "blank_tape",
+			"display_name": "Fresh Tape",
+		}
+	if STACKABLE_CRAFT_RESULT_SPECS.has(normalized):
+		var spec: Dictionary = Dictionary(STACKABLE_CRAFT_RESULT_SPECS[normalized]).duplicate(true)
+		spec["kind"] = "material"
+		return spec
+	if _is_equipment_result_name(normalized):
+		var equipment_type := _result_name_to_type(normalized)
+		var equipment_spec := _get_equipment_type_spec(equipment_type)
+		if not equipment_spec.is_empty():
+			return {
+				"kind": "equipment",
+				"type": equipment_type,
+				"display_name": str(equipment_spec.get("display_name", _get_equipment_display_name(equipment_type))),
+			}
+	return {
+		"kind": "crafted",
+		"type": _result_name_to_type(normalized),
+		"display_name": normalized.replace("_", " ").capitalize(),
+	}
+
+func get_tank_process_specs() -> Dictionary:
+	return TANK_PROCESS_SPECS.duplicate(true)
+
+func get_active_tank_batches() -> Array:
+	var batches: Array = []
+	var now := float(Time.get_unix_time_from_system())
+	for crafted_card_variant in crafted_cards:
+		if typeof(crafted_card_variant) != TYPE_DICTIONARY:
+			continue
+		var crafted_card: Dictionary = crafted_card_variant
+		if str(crafted_card.get("type", "")) != "tank":
+			continue
+		var tank_batch: Dictionary = Dictionary(crafted_card.get("tank_batch", {}))
+		if tank_batch.is_empty():
+			continue
+		var duration := maxf(float(tank_batch.get("duration", TANK_PROCESS_DEFAULT_DURATION)), 0.1)
+		var remaining := maxf(float(tank_batch.get("ends_at", now)) - now, 0.0)
+		batches.append({
+			"tank_id": str(crafted_card.get("id", "")),
+			"process_id": str(tank_batch.get("process_id", "")),
+			"display_name": str(tank_batch.get("display_name", "Tank Batch")),
+			"duration": duration,
+			"remaining": remaining,
+		})
+	return batches
+
+func start_tank_process(tank_id: String, process_id: String, material_consumptions: Array, result_spec: Dictionary, duration: float) -> Dictionary:
+	if tank_id.is_empty() or process_id.is_empty():
+		return {"ok": false, "message": "Tank process is incomplete"}
+	var tank_index := _find_crafted_card_index(tank_id)
+	if tank_index == -1:
+		return {"ok": false, "message": "Tank not found"}
+	var tank_card: Dictionary = Dictionary(crafted_cards[tank_index]).duplicate(true)
+	if str(tank_card.get("type", "")) != "tank":
+		return {"ok": false, "message": "Card is not a tank"}
+	if not Dictionary(tank_card.get("tank_batch", {})).is_empty():
+		return {"ok": false, "message": "Tank is already running"}
+	for consumption_variant in material_consumptions:
+		if typeof(consumption_variant) != TYPE_DICTIONARY:
+			return {"ok": false, "message": "Tank inputs are invalid"}
+		var consumption: Dictionary = consumption_variant
+		if not _has_material_quantity(str(consumption.get("material_id", "")), maxi(int(consumption.get("quantity", 0)), 1)):
+			return {"ok": false, "message": "Tank is missing input stock"}
+	for consumption_variant in material_consumptions:
+		var consumption: Dictionary = consumption_variant
+		if not _consume_material_quantity(str(consumption.get("material_id", "")), maxi(int(consumption.get("quantity", 0)), 1)):
+			return {"ok": false, "message": "Tank could not consume inputs"}
+	var normalized_duration := maxf(duration, 0.1)
+	tank_card["tank_batch"] = {
+		"process_id": process_id,
+		"result_type": str(result_spec.get("result_type", "")),
+		"display_name": str(result_spec.get("display_name", "Tank Batch")),
+		"quantity": maxi(int(result_spec.get("quantity", 1)), 1),
+		"duration": normalized_duration,
+		"ends_at": float(Time.get_unix_time_from_system()) + normalized_duration,
+	}
+	crafted_cards[tank_index] = tank_card
+	save_programmed_cartridges()
+	EventBus.outside_world_changed.emit()
+	return {
+		"ok": true,
+		"tank_id": tank_id,
+		"process_id": process_id,
+		"display_name": str(result_spec.get("display_name", "Tank Batch")),
+	}
+
+func tick_tank_processes() -> Array:
+	var completions: Array = []
+	var now := float(Time.get_unix_time_from_system())
+	var changed := false
+	for tank_index in range(crafted_cards.size()):
+		var crafted_card: Dictionary = Dictionary(crafted_cards[tank_index]).duplicate(true)
+		if str(crafted_card.get("type", "")) != "tank":
+			continue
+		var tank_batch: Dictionary = Dictionary(crafted_card.get("tank_batch", {}))
+		if tank_batch.is_empty():
+			continue
+		if float(tank_batch.get("ends_at", now + 1.0)) > now:
+			continue
+		var result_type := str(tank_batch.get("result_type", ""))
+		if result_type.is_empty():
+			crafted_card["tank_batch"] = {}
+			crafted_cards[tank_index] = crafted_card
+			changed = true
+			continue
+		var created_material := _add_material_card({
+			"type": result_type,
+			"display_name": str(tank_batch.get("display_name", _default_material_display_name(result_type))),
+			"quantity": maxi(int(tank_batch.get("quantity", 1)), 1),
+			"source_recipe_id": str(tank_batch.get("process_id", "")),
+		})
+		crafted_card["tank_batch"] = {}
+		crafted_cards[tank_index] = crafted_card
+		changed = true
+		if not created_material.is_empty():
+			created_material["kind"] = "material"
+			completions.append({
+				"tank_id": str(crafted_card.get("id", "")),
+				"material": created_material.duplicate(true),
+			})
+	if changed:
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+	return completions
+
+func _result_name_to_type(result_name: String) -> String:
+	return result_name.strip_edges().to_lower().replace(" ", "_").replace("-", "_")
+
+func _default_material_display_name(material_type: String) -> String:
+	return material_type.replace("_", " ").capitalize()
+
+func _default_equipment_totals() -> Dictionary:
+	return {
+		"attack": 0,
+		"armor": 0,
+		"stealth": 0,
+		"utility": 0,
+	}
+
+func _sum_equipment_slot_totals(slots: Array) -> Dictionary:
+	var totals := _default_equipment_totals()
+	for slot_variant in slots:
+		if typeof(slot_variant) != TYPE_DICTIONARY:
+			continue
+		var slot_entry := Dictionary(slot_variant)
+		var spec := _get_equipment_type_spec(str(slot_entry.get("item_type", "")))
+		if spec.is_empty():
+			continue
+		var stats: Dictionary = Dictionary(spec.get("stats", {}))
+		for stat_name in totals.keys():
+			totals[stat_name] = int(totals.get(stat_name, 0)) + int(stats.get(stat_name, 0))
+	return totals
+
+func _get_equipment_type_spec(equipment_type: String) -> Dictionary:
+	if EQUIPMENT_TYPE_SPECS.has(equipment_type):
+		return Dictionary(EQUIPMENT_TYPE_SPECS[equipment_type]).duplicate(true)
+	return {}
+
+func _get_equipment_display_name(equipment_type: String) -> String:
+	var spec := _get_equipment_type_spec(equipment_type)
+	if not spec.is_empty():
+		return str(spec.get("display_name", equipment_type.replace("_", " ").capitalize()))
+	return equipment_type.replace("_", " ").capitalize()
+
+func _is_equipment_result_name(result_name: String) -> bool:
+	return not _get_equipment_type_spec(_result_name_to_type(result_name)).is_empty()
+
+func _find_equipment_card_index(card_id: String) -> int:
+	if card_id.is_empty():
+		return -1
+	for card_index in range(equipment_cards.size()):
+		if str(equipment_cards[card_index].get("id", "")) == card_id:
+			return card_index
+	return -1
+
+func _add_equipment_card(entry: Dictionary) -> Dictionary:
+	var equipment_type := str(entry.get("type", ""))
+	var spec := _get_equipment_type_spec(equipment_type)
+	if spec.is_empty():
+		return {}
+	var card := {
+		"id": "equipment_%d_%d" % [int(Time.get_unix_time_from_system()), equipment_cards.size()],
+		"type": equipment_type,
+		"display_name": str(entry.get("display_name", spec.get("display_name", _get_equipment_display_name(equipment_type)))),
+	}
+	equipment_cards.append(card)
+	return card.duplicate(true)
+
+func _equip_equipment_into_slots(card_id: String, slots: Array) -> Dictionary:
+	var equipment_index := _find_equipment_card_index(card_id)
+	if equipment_index == -1:
+		return {"ok": false, "message": "Equipment card not found"}
+	var equipment_card := Dictionary(equipment_cards[equipment_index]).duplicate(true)
+	var equipment_type := str(equipment_card.get("type", ""))
+	var spec := _get_equipment_type_spec(equipment_type)
+	if spec.is_empty():
+		return {"ok": false, "message": "Unsupported equipment"}
+	var next_slots := _normalize_equipment_slots(slots)
+	for slot_index in range(next_slots.size()):
+		var slot_entry := Dictionary(next_slots[slot_index]).duplicate(true)
+		if not str(slot_entry.get("item_type", "")).is_empty():
+			continue
+		slot_entry["item_type"] = equipment_type
+		slot_entry["display_name"] = str(spec.get("display_name", _get_equipment_display_name(equipment_type)))
+		next_slots[slot_index] = slot_entry
+		equipment_cards.remove_at(equipment_index)
+		return {
+			"ok": true,
+			"slots": next_slots,
+			"slot_index": slot_index,
+			"display_name": str(slot_entry.get("display_name", "Equipment")),
+			"type": equipment_type,
+		}
+	return {"ok": false, "message": "No free equipment slot"}
+
+func _unequip_equipment_from_slots(slots: Array, slot_index: int) -> Dictionary:
+	var next_slots := _normalize_equipment_slots(slots)
+	if slot_index < 0 or slot_index >= next_slots.size():
+		return {"ok": false, "message": "Equipment slot not found"}
+	var slot_entry := Dictionary(next_slots[slot_index]).duplicate(true)
+	var equipment_type := str(slot_entry.get("item_type", ""))
+	if equipment_type.is_empty():
+		return {"ok": false, "message": "Equipment slot is empty"}
+	var display_name := str(slot_entry.get("display_name", ""))
+	if display_name.is_empty():
+		display_name = _get_equipment_display_name(equipment_type)
+	var equipment_card := _add_equipment_card({
+		"type": equipment_type,
+		"display_name": display_name,
+	})
+	if equipment_card.is_empty():
+		return {"ok": false, "message": "Failed to extract equipment"}
+	next_slots[slot_index] = {
+		"slot_index": slot_index,
+		"item_type": "",
+		"display_name": "",
+	}
+	return {
+		"ok": true,
+		"slots": next_slots,
+		"slot_index": slot_index,
+		"display_name": display_name,
+		"type": equipment_type,
+		"equipment_card": equipment_card,
+	}
+
 func _build_recipe(recipe_id: String, result_name: String, parts: Array, subject_key: String) -> Dictionary:
 	var normalized_parts: Array = _sanitize_recipe_parts(parts.duplicate(true))
 	return {
@@ -3074,6 +4482,37 @@ func _consume_material_quantity(card_id: String, amount: int) -> bool:
 			material_cards[card_index]["quantity"] = quantity
 		return true
 	return false
+
+func _has_material_quantity(card_id: String, amount: int) -> bool:
+	if card_id.is_empty() or amount <= 0:
+		return false
+	for card_variant in material_cards:
+		if typeof(card_variant) != TYPE_DICTIONARY:
+			continue
+		var card: Dictionary = card_variant
+		if str(card.get("id", "")) != card_id:
+			continue
+		return maxi(int(card.get("quantity", 0)), 0) >= amount
+	return false
+
+func _add_material_card(material_entry: Dictionary) -> Dictionary:
+	var material_type := str(material_entry.get("type", ""))
+	if material_type.is_empty():
+		return {}
+	var quantity := maxi(int(material_entry.get("quantity", 0)), 0)
+	if quantity <= 0:
+		return {}
+	var card := {
+		"id": "material_%d_%d" % [int(Time.get_unix_time_from_system()), material_cards.size()],
+		"type": material_type,
+		"display_name": str(material_entry.get("display_name", _default_material_display_name(material_type))),
+		"quantity": quantity,
+		"source_enemy_type": str(material_entry.get("source_enemy_type", "")),
+		"source_location_type": str(material_entry.get("source_location_type", "")),
+		"source_recipe_id": str(material_entry.get("source_recipe_id", "")),
+	}
+	material_cards.append(card)
+	return card.duplicate(true)
 
 func _get_enemy_type_definition(enemy_type: String) -> Dictionary:
 	if ENEMY_TYPE_DEFS.has(enemy_type):

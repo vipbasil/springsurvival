@@ -76,6 +76,55 @@
       "role": "portable wound charge"
     }
   ],
+  "equipment": [
+    {
+      "id": "knife",
+      "label": "Knife",
+      "card_kind": "equipment",
+      "role": "close combat weapon",
+      "stats": {
+        "attack": 1
+      }
+    },
+    {
+      "id": "bow",
+      "label": "Bow",
+      "card_kind": "equipment",
+      "role": "ranged weapon",
+      "stats": {
+        "attack": 3,
+        "armor": -1
+      }
+    },
+    {
+      "id": "plate_mail",
+      "label": "Plate Mail",
+      "card_kind": "equipment",
+      "role": "heavy armor",
+      "stats": {
+        "armor": 3,
+        "stealth": -1
+      }
+    },
+    {
+      "id": "hide_cloak",
+      "label": "Hide Cloak",
+      "card_kind": "equipment",
+      "role": "stealth outerwear",
+      "stats": {
+        "stealth": 3
+      }
+    },
+    {
+      "id": "tool_kit",
+      "label": "Tool Kit",
+      "card_kind": "equipment",
+      "role": "repair and build utility gear",
+      "stats": {
+        "utility": 3
+      }
+    }
+  ],
   "materials": [
     {
       "id": "metal",
@@ -94,6 +143,60 @@
       "label": "Paper",
       "card_kind": "material",
       "role": "recording and wrapping stock"
+    },
+    {
+      "id": "fiber",
+      "label": "Fiber",
+      "card_kind": "material",
+      "role": "plant processing stock"
+    },
+    {
+      "id": "dry_rations",
+      "label": "Dry Rations",
+      "card_kind": "material",
+      "role": "stored food supply"
+    },
+    {
+      "id": "medicine",
+      "label": "Medicine",
+      "card_kind": "material",
+      "role": "healing supply"
+    },
+    {
+      "id": "growth_medium",
+      "label": "Growth Medium",
+      "card_kind": "material",
+      "role": "bio substrate stock"
+    },
+    {
+      "id": "mushrooms",
+      "label": "Mushrooms",
+      "card_kind": "material",
+      "role": "fungal food stock"
+    },
+    {
+      "id": "algae",
+      "label": "Algae",
+      "card_kind": "material",
+      "role": "wet fiber-rich culture stock"
+    },
+    {
+      "id": "bacteria",
+      "label": "Bacteria",
+      "card_kind": "material",
+      "role": "microbial processing stock"
+    },
+    {
+      "id": "mealworms",
+      "label": "Mealworms",
+      "card_kind": "material",
+      "role": "protein insect stock"
+    },
+    {
+      "id": "bone_meal",
+      "label": "Bone Meal",
+      "card_kind": "material",
+      "role": "powdered mineral bio stock"
     },
     {
       "id": "biomass",
@@ -179,7 +282,7 @@
       "id": "ruin",
       "label": "Ruin",
       "card_kind": "location",
-      "generated_by_scan": false
+      "generated_by_scan": true
     }
   ],
   "enemies": [
@@ -230,69 +333,16 @@
     }
   ],
   "crafted_results": [
-    "SCRAP FRAME",
-    "ROUTE PIN",
-    "WOUND CORE",
-    "TRIP LATCH",
-    "MEDIA STOCK",
-    "FIELD DOSSIER",
-    "ENERGY BAR",
-    "MEDICINE",
-    "BAIT PASTE",
-    "GROWTH MEDIUM",
-    "PADDED WRAP",
-    "HIDE SATCHEL",
-    "BONE NEEDLE",
-    "BONE CHARM",
-    "REED FILTER",
-    "BAIT BROTH",
-    "DUST SIEVE",
-    "IMPACT BRACE",
-    "SIGNAL MAST",
-    "WATCH GLASS",
-    "BLIND BANNER",
-    "SCRAMBLE KITE",
-    "PRESS FRAME",
+    "TANK",
+    "KNIFE",
+    "BOW",
+    "PLATE MAIL",
+    "HIDE CLOAK",
+    "TOOL KIT",
     "TOOL CHEST",
-    "SEALED LOCKER",
-    "HATCH BRACE",
-    "DRY RATIONS",
-    "FIBER BUNDLE",
-    "SCRAP BUNDLE",
-    "SORT BIN",
-    "ARCHIVE SATCHEL",
-    "SUPPLY WRAP",
-    "REPELLENT PASTE",
     "BROOD CAGE",
-    "MASON BRACE",
     "ARCHIVE SHELF",
-    "BLIND LENS",
-    "SIGNAL SCRAMBLER",
-    "ARMOR PATCH",
-    "SPRING BOLT",
-    "TRAIL NOTES",
-    "QUIET HARNESS",
-    "HIDE MANTLE",
-    "BONE HOOK",
-    "HIDE LEASH",
-    "PACK CALLER",
-    "CODE STRIP",
-    "ARCHIVE COPY",
-    "SURVEY MAP",
-    "ROUTE SLIP",
-    "WOUND PACK",
-    "RESERVE CHARGE",
-    "PULP SHEET",
-    "SCRAP SORTER",
-    "TRIP RIG",
-    "CLAW BRACE",
-    "GLIDE VANE",
-    "SCOUT SAIL",
-    "LOOP STRIP",
-    "ARCHIVE STRIP",
-    "FRESH TAPE",
-    "CLEAN STRIP",
-    "WOUND SPRING"
+    "FRESH TAPE"
   ],
   "card_classes": [
     "machine",

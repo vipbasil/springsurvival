@@ -82,6 +82,13 @@ const CARD_VARIANTS := {
 		"art_border": PANEL_BORDER,
 		"info_rule_color": Color(0.55, 0.49, 0.31),
 	},
+	"equipment": {
+		"card_class": "material",
+		"face_fill": null,
+		"art_fill": PAPER_PANEL,
+		"art_border": PANEL_BORDER,
+		"info_rule_color": Color(0.48, 0.41, 0.24),
+	},
 	"blueprint": {
 		"card_class": "medium",
 		"face_fill": TAPE,
@@ -115,6 +122,7 @@ const BLUEPRINT_MATERIAL_TOKENS := {
 	"METAL": "metal",
 	"SPRING": "spring",
 	"BIOMASS": "biomass",
+	"FIBER": "fiber",
 	"HIDE": "hide",
 	"BONE": "bone",
 	"PAPER": "paper",
@@ -165,8 +173,20 @@ static var _enemy_wolf_pack_art: Texture2D = null
 static var _material_hide_art: Texture2D = null
 static var _material_biomass_art: Texture2D = null
 static var _material_bone_art: Texture2D = null
+static var _material_dry_rations_art: Texture2D = null
+static var _material_medicine_art: Texture2D = null
+static var _material_algae_art: Texture2D = null
+static var _material_fiber_art: Texture2D = null
 static var _material_paper_art: Texture2D = null
 static var _material_metal_art: Texture2D = null
+static var _material_mushrooms_art: Texture2D = null
+static var _equipment_knife_art: Texture2D = null
+static var _equipment_bow_art: Texture2D = null
+static var _equipment_plate_mail_art: Texture2D = null
+static var _equipment_tool_kit_art: Texture2D = null
+static var _attack_stat_icon_art: Texture2D = null
+static var _armor_stat_icon_art: Texture2D = null
+static var _hp_stat_icon_art: Texture2D = null
 
 static func load_svg_texture(path: String) -> Texture2D:
 	if not FileAccess.file_exists(path):
@@ -241,6 +261,126 @@ static func _draw_text_token(canvas: Control, rect: Rect2, label: String, font_s
 	var font := ThemeDB.fallback_font
 	var baseline := rect.position.y + (rect.size.y - font.get_height(font_size)) * 0.5 + font.get_ascent(font_size)
 	canvas.draw_string(font, Vector2(rect.position.x, baseline), text, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, font_size, color)
+
+static func _draw_equipment_slot_row(canvas: Control, rect: Rect2, slots: Array) -> void:
+	if rect.size.x <= 12.0 or rect.size.y <= 8.0:
+		return
+	var slot_count: int = 3
+	var gap: float = 4.0
+	var cell_side: float = floor(minf(rect.size.y, (rect.size.x - gap * float(slot_count - 1)) / float(slot_count)))
+	if cell_side < 8.0:
+		return
+	var row_width: float = cell_side * float(slot_count) + gap * float(slot_count - 1)
+	var start: Vector2 = Vector2(rect.position.x + (rect.size.x - row_width) * 0.5, rect.position.y + (rect.size.y - cell_side) * 0.5)
+	for slot_index in range(slot_count):
+		var cell_rect := Rect2(start + Vector2(float(slot_index) * (cell_side + gap), 0.0), Vector2.ONE * cell_side)
+		canvas.draw_rect(cell_rect, Color(0.90, 0.85, 0.73, 0.92))
+		canvas.draw_rect(cell_rect, PANEL_BORDER, false, 1.0)
+		var slot_item_type := ""
+		var slot_display_name := ""
+		if slot_index < slots.size() and typeof(slots[slot_index]) == TYPE_DICTIONARY:
+			var slot_data: Dictionary = slots[slot_index]
+			slot_item_type = str(slot_data.get("item_type", ""))
+			slot_display_name = str(slot_data.get("display_name", ""))
+		if slot_item_type.is_empty():
+			canvas.draw_rect(cell_rect.grow(-2.0), Color(0.63, 0.57, 0.43, 0.18))
+			continue
+		var item_label := slot_display_name if not slot_display_name.is_empty() else slot_item_type
+		if not _draw_texture_fit(canvas, _get_equipment_texture(slot_item_type), cell_rect, 1.0):
+			_draw_text_token(canvas, cell_rect, _get_equipment_slot_label(item_label), FONT_SIZE_CARD_META, STEEL_DARK)
+
+static func _get_equipment_slot_label(item_name: String) -> String:
+	var normalized := item_name.strip_edges().to_upper()
+	if normalized.is_empty():
+		return ""
+	var words := normalized.split(" ", false)
+	if words.size() >= 2:
+		return "%s%s" % [words[0].substr(0, 1), words[1].substr(0, 1)]
+	return normalized.substr(0, mini(normalized.length(), 2))
+
+static func _get_machine_card_title(kind: String) -> String:
+	match kind:
+		"bench":
+			return "BENCH"
+		"route":
+			return "ROUTE TABLE"
+		"charge":
+			return "CHARGE"
+		"journal":
+			return "JOURNAL"
+		"trash":
+			return "TRASH"
+		_:
+			return kind.replace("_", " ").to_upper()
+
+static func _get_drone_card_title(slot: Dictionary) -> String:
+	var explicit_type := str(slot.get("drone_type", ""))
+	if explicit_type.is_empty():
+		explicit_type = "spider" if int(slot.get("index", 0)) == 0 else "butterfly"
+	match explicit_type:
+		"spider":
+			return "SPIDER DRONE"
+		"butterfly":
+			return "BUTTERFLY"
+		_:
+			return explicit_type.replace("_", " ").to_upper()
+
+static func _get_band_title_rect(face_rect: Rect2) -> Rect2:
+	return Rect2(Vector2(face_rect.position.x + 8.0, face_rect.position.y + 1.0), Vector2(face_rect.size.x - 16.0, 10.0))
+
+static func _draw_band_title(canvas: Control, face_rect: Rect2, label: String, color: Color) -> void:
+	var title := _trim_card_label(label.to_upper(), 18)
+	if title.is_empty():
+		return
+	_draw_card_text(canvas, _get_band_title_rect(face_rect), title, "title_center", color)
+
+static func _get_stat_icon_texture(stat_name: String) -> Texture2D:
+	match stat_name:
+		"energy":
+			if _spring_icon_art == null:
+				_spring_icon_art = load_svg_texture("res://assets/cards/power_icon.svg")
+			return _spring_icon_art
+		"attack":
+			if _attack_stat_icon_art == null:
+				_attack_stat_icon_art = load_svg_texture("res://assets/cards/swordicon.svg")
+			return _attack_stat_icon_art
+		"armor":
+			if _armor_stat_icon_art == null:
+				_armor_stat_icon_art = load_svg_texture("res://assets/cards/shieldicon.svg")
+			return _armor_stat_icon_art
+		"hp":
+			if _hp_stat_icon_art == null:
+				_hp_stat_icon_art = load_svg_texture("res://assets/cards/hearticon.svg")
+			return _hp_stat_icon_art
+		_:
+			return null
+
+static func _draw_stat_icon_value(canvas: Control, rect: Rect2, stat_icon: String, value_text: String, color: Color) -> void:
+	var icon_side := minf(rect.size.y - 1.0, 12.0)
+	var icon_rect := Rect2(Vector2(rect.position.x + 2.0, rect.position.y + (rect.size.y - icon_side) * 0.5), Vector2(icon_side, icon_side))
+	if not _draw_texture_fit(canvas, _get_stat_icon_texture(stat_icon), icon_rect):
+		_draw_text_token(canvas, icon_rect, stat_icon, FONT_SIZE_CARD_META, color)
+	var value_rect := Rect2(Vector2(icon_rect.end.x + 2.0, rect.position.y), Vector2(rect.end.x - icon_rect.end.x - 4.0, rect.size.y))
+	var font := ThemeDB.fallback_font
+	var font_size := FONT_SIZE_CARD_VALUE
+	var baseline := value_rect.position.y + (value_rect.size.y - font.get_height(font_size)) * 0.5 + font.get_ascent(font_size)
+	canvas.draw_string(font, Vector2(value_rect.position.x, baseline), value_text, HORIZONTAL_ALIGNMENT_LEFT, value_rect.size.x, font_size, color)
+
+static func _draw_stat_icon_pair_row(canvas: Control, rect: Rect2, left_icon: String, left_value: String, right_icon: String, right_value: String, color: Color) -> void:
+	var half_width := rect.size.x * 0.5
+	_draw_stat_icon_value(canvas, Rect2(rect.position, Vector2(half_width, rect.size.y)), left_icon, left_value, color)
+	_draw_stat_icon_value(canvas, Rect2(Vector2(rect.position.x + half_width, rect.position.y), Vector2(half_width, rect.size.y)), right_icon, right_value, color)
+
+static func _draw_stat_icon_triplet_row(canvas: Control, rect: Rect2, left_icon: String, left_value: String, middle_icon: String, middle_value: String, right_icon: String, right_value: String, color: Color) -> void:
+	var third_width := rect.size.x / 3.0
+	_draw_stat_icon_value(canvas, Rect2(rect.position, Vector2(third_width, rect.size.y)), left_icon, left_value, color)
+	_draw_stat_icon_value(canvas, Rect2(Vector2(rect.position.x + third_width, rect.position.y), Vector2(third_width, rect.size.y)), middle_icon, middle_value, color)
+	_draw_stat_icon_value(canvas, Rect2(Vector2(rect.position.x + third_width * 2.0, rect.position.y), Vector2(third_width, rect.size.y)), right_icon, right_value, color)
+
+static func _draw_operator_meta_row(canvas: Control, rect: Rect2, energy: int, hp: int, color: Color) -> void:
+	var half_width := rect.size.x * 0.5
+	_draw_stat_icon_value(canvas, Rect2(rect.position, Vector2(half_width, rect.size.y)), "energy", str(energy), color)
+	_draw_stat_icon_value(canvas, Rect2(Vector2(rect.position.x + half_width, rect.position.y), Vector2(half_width, rect.size.y)), "hp", str(hp), color)
 
 static func _get_location_blueprint_token_label(location_type: String) -> String:
 	match location_type:
@@ -376,7 +516,7 @@ static func _get_material_texture(material_type: String) -> Texture2D:
 	match material_type:
 		"spring":
 			if _spring_icon_art == null:
-				_spring_icon_art = load_svg_texture("res://assets/cards/spring_icon.svg")
+				_spring_icon_art = load_svg_texture("res://assets/cards/power_icon.svg")
 			return _spring_icon_art
 		"hide":
 			if _material_hide_art == null:
@@ -384,12 +524,28 @@ static func _get_material_texture(material_type: String) -> Texture2D:
 			return _material_hide_art
 		"biomass":
 			if _material_biomass_art == null:
-				_material_biomass_art = load_svg_texture("res://assets/cards/meat.svg")
+				_material_biomass_art = load_svg_texture("res://assets/cards/biomass-1.svg")
 			return _material_biomass_art
 		"bone":
 			if _material_bone_art == null:
 				_material_bone_art = load_svg_texture("res://assets/cards/bone.svg")
 			return _material_bone_art
+		"dry_rations":
+			if _material_dry_rations_art == null:
+				_material_dry_rations_art = load_svg_texture("res://assets/cards/drymeal.svg")
+			return _material_dry_rations_art
+		"algae":
+			if _material_algae_art == null:
+				_material_algae_art = load_svg_texture("res://assets/cards/algaes.svg")
+			return _material_algae_art
+		"fiber":
+			if _material_fiber_art == null:
+				_material_fiber_art = load_svg_texture("res://assets/cards/fiber.svg")
+			return _material_fiber_art
+		"medicine":
+			if _material_medicine_art == null:
+				_material_medicine_art = load_svg_texture("res://assets/cards/medicine.svg")
+			return _material_medicine_art
 		"paper":
 			if _material_paper_art == null:
 				_material_paper_art = load_svg_texture("res://assets/cards/paper.svg")
@@ -398,6 +554,10 @@ static func _get_material_texture(material_type: String) -> Texture2D:
 			if _material_metal_art == null:
 				_material_metal_art = load_svg_texture("res://assets/cards/metal.svg")
 			return _material_metal_art
+		"mushrooms":
+			if _material_mushrooms_art == null:
+				_material_mushrooms_art = load_svg_texture("res://assets/cards/moushrooms.svg")
+			return _material_mushrooms_art
 		_:
 			return null
 
@@ -414,10 +574,33 @@ static func _get_drone_texture(drone_type: String) -> Texture2D:
 		_:
 			return null
 
+static func _get_equipment_texture(equipment_type: String) -> Texture2D:
+	match equipment_type:
+		"knife":
+			if _equipment_knife_art == null:
+				_equipment_knife_art = load_svg_texture("res://assets/cards/knife.svg")
+			return _equipment_knife_art
+		"bow":
+			if _equipment_bow_art == null:
+				_equipment_bow_art = load_svg_texture("res://assets/cards/bow.svg")
+			return _equipment_bow_art
+		"plate_mail":
+			if _equipment_plate_mail_art == null:
+				_equipment_plate_mail_art = load_svg_texture("res://assets/cards/platemail.svg")
+			return _equipment_plate_mail_art
+		"tool_kit":
+			if _equipment_tool_kit_art == null:
+				_equipment_tool_kit_art = load_svg_texture("res://assets/cards/tools.svg")
+			return _equipment_tool_kit_art
+		_:
+			return null
+
 static func draw_machine_card(canvas: Control, rect: Rect2, kind: String, route_overlay: Callable = Callable()) -> void:
 	var shell := _draw_card_variant(canvas, rect, "machine")
+	var face_rect: Rect2 = shell["face_rect"]
 	var art_rect: Rect2 = shell["art_rect"]
 	var machine_art_rect := _fit_rect(art_rect, 6.0)
+	_draw_band_title(canvas, face_rect, _get_machine_card_title(kind), TEXT)
 	match kind:
 		"bench":
 			_draw_programming_bench_art(canvas, machine_art_rect)
@@ -448,16 +631,16 @@ static func draw_tape_card(canvas: Control, rect: Rect2, programmed: bool, label
 	var info_rect: Rect2 = shell["info_rect"]
 	var side_strip := Rect2(face_rect.position + Vector2(5.0, 8.0), Vector2(4.0, face_rect.size.y - 16.0))
 	var suit_rect := _fit_rect(art_rect, 8.0)
-	var label_rect := _get_info_slot(info_rect, "title")
+	var band_label := "BLANK TAPE"
 	canvas.draw_rect(side_strip, ACCENT if programmed else STEEL_LIGHT)
 	if _tape_device_art == null:
 		_tape_device_art = load_svg_texture("res://assets/cards/device_pixelperfect_fixed.svg")
 	if not _draw_texture_fit(canvas, _tape_device_art, suit_rect):
 		_draw_art_label(canvas, art_rect, "programmed tape" if programmed else "blank tape")
 	if programmed and not label.is_empty():
-		var short_label := _trim_card_label(label, 10).to_upper()
-		_draw_card_text(canvas, label_rect, short_label, "title_center", STEEL_DARK)
-	elif not programmed:
+		band_label = _trim_card_label(label, 18).to_upper()
+	_draw_band_title(canvas, face_rect, band_label, STEEL_DARK)
+	if not programmed:
 		canvas.draw_line(
 			Vector2(info_rect.position.x + 4.0, info_rect.position.y + 10.0),
 			Vector2(info_rect.end.x - 4.0, info_rect.position.y + 10.0),
@@ -475,6 +658,7 @@ static func draw_power_card(canvas: Control, rect: Rect2, charge: int, max_charg
 	var suit_rect := _fit_rect(art_rect, 8.0)
 	var meter_rect := Rect2(Vector2(info_rect.position.x, info_rect.end.y - 2.0), Vector2(info_rect.size.x, 3.0))
 	var fill_rect := Rect2(meter_rect.position, Vector2(meter_rect.size.x * fill_ratio, meter_rect.size.y))
+	_draw_band_title(canvas, face_rect, "POWER UNIT", STEEL_DARK)
 	if not _draw_texture_fit(canvas, _get_material_texture("spring"), suit_rect):
 		_draw_art_label(canvas, art_rect, "power unit")
 	_draw_card_text(canvas, _get_info_slot(info_rect, "value"), number_text, "value_right", STEEL_DARK)
@@ -494,19 +678,23 @@ static func draw_disabled_hatch(canvas: Control, rect: Rect2) -> void:
 
 static func draw_operator_card(canvas: Control, rect: Rect2, operator_state: Dictionary, operator_name: String, focus: String, photo: Texture2D) -> void:
 	var shell := _draw_card_variant(canvas, rect, "operator")
+	var face_rect: Rect2 = shell["face_rect"]
 	var art_rect: Rect2 = shell["art_rect"]
 	var info_rect: Rect2 = shell["info_rect"]
 	var dossier_rect := _draw_framed_panel(canvas, art_rect, 8.0, TAPE, Color(0.58, 0.50, 0.30))
 	_draw_texture_fit(canvas, photo, dossier_rect)
+	_draw_equipment_slot_row(canvas, Rect2(Vector2(art_rect.position.x + 18.0, art_rect.end.y - 30.0), Vector2(art_rect.size.x - 36.0, 24.0)), Array(operator_state.get("equipment_slots", [])))
 	var clip_rect := Rect2(Vector2(dossier_rect.end.x - 18.0, dossier_rect.position.y + 8.0), Vector2(8.0, 18.0))
 	canvas.draw_rect(clip_rect, ACCENT_DIM)
 	canvas.draw_rect(clip_rect.grow(-1.0), ACCENT)
-	_draw_card_text(canvas, _get_info_slot(info_rect, "title"), operator_name, "title_center", TEXT)
-	_draw_card_text(canvas, _get_info_slot(info_rect, "meta"), "EN %d  HP %d" % [int(operator_state.get("energy", 0)), int(operator_state.get("hp", 0))], "title_center", TAPE)
-	_draw_card_text(canvas, _get_info_slot(info_rect, "foot"), focus, "meta_center", TAPE_SHADE)
+	_draw_band_title(canvas, face_rect, operator_name, TAPE)
+	_draw_operator_meta_row(canvas, Rect2(Vector2(info_rect.position.x, info_rect.position.y + 10.0), Vector2(info_rect.size.x, 10.0)), int(operator_state.get("energy", 0)), int(operator_state.get("hp", 0)), TAPE)
+	var combat_totals: Dictionary = Dictionary(operator_state.get("equipment_totals", {}))
+	_draw_stat_icon_pair_row(canvas, Rect2(Vector2(info_rect.position.x, info_rect.position.y + 20.0), Vector2(info_rect.size.x, 10.0)), "attack", str(int(combat_totals.get("attack", 0))), "armor", str(int(combat_totals.get("armor", 0))), TAPE_SHADE)
 
 static func draw_location_card(canvas: Control, rect: Rect2, card_data: Dictionary, bunker_texture: Texture2D, cache_texture: Texture2D, pond_texture: Texture2D, crater_texture: Texture2D, tower_texture: Texture2D, surveillance_texture: Texture2D, facility_texture: Texture2D, field_texture: Texture2D, dump_texture: Texture2D, nest_texture: Texture2D, ruin_texture: Texture2D) -> void:
 	var shell := _draw_card_variant(canvas, rect, "location")
+	var face_rect: Rect2 = shell["face_rect"]
 	var art_rect: Rect2 = shell["art_rect"]
 	var info_rect: Rect2 = shell["info_rect"]
 	var location_type := str(card_data.get("type", "site"))
@@ -515,11 +703,12 @@ static func draw_location_card(canvas: Control, rect: Rect2, card_data: Dictiona
 	var pos: Dictionary = card_data.get("position", {"x": 0, "y": 0})
 	var coords := Vector2(int(pos.get("x", 0)), int(pos.get("y", 0)))
 	draw_location_glyph(canvas, _fit_rect(art_rect, 4.0), location_type, image_seed, bunker_texture, cache_texture, pond_texture, crater_texture, tower_texture, surveillance_texture, facility_texture, field_texture, dump_texture, nest_texture, ruin_texture)
-	_draw_card_text(canvas, _get_info_slot(info_rect, "title"), _trim_card_label(type_label.to_upper(), 16), "title_center", STEEL_DARK)
+	_draw_band_title(canvas, face_rect, _trim_card_label(type_label.to_upper(), 18), STEEL_DARK)
 	_draw_card_text(canvas, _get_info_slot(info_rect, "meta"), "(%d,%d)" % [int(coords.x), int(coords.y)], "meta_center", Color(0.24, 0.26, 0.30))
 
 static func draw_enemy_card(canvas: Control, rect: Rect2, card_data: Dictionary) -> void:
 	var shell := _draw_card_variant(canvas, rect, "enemy")
+	var face_rect: Rect2 = shell["face_rect"]
 	var art_rect: Rect2 = shell["art_rect"]
 	var info_rect: Rect2 = shell["info_rect"]
 	var enemy_type := str(card_data.get("type", "hostile_creature"))
@@ -527,23 +716,51 @@ static func draw_enemy_card(canvas: Control, rect: Rect2, card_data: Dictionary)
 	var threat_level := int(card_data.get("threat_level", 1))
 	var enemy_hp := int(card_data.get("hp", 1))
 	_draw_enemy_glyph(canvas, _fit_rect(art_rect, 8.0), enemy_type)
-	_draw_card_text(canvas, _get_info_slot(info_rect, "title"), _trim_card_label(display_name.to_upper(), 16), "title_center", TAPE)
-	_draw_card_text(canvas, _get_info_slot(info_rect, "meta"), "ATK %d  HP %d" % [threat_level, enemy_hp], "meta_center", Color(0.93, 0.78, 0.54))
+	_draw_band_title(canvas, face_rect, _trim_card_label(display_name.to_upper(), 18), TAPE)
+	_draw_stat_icon_pair_row(canvas, Rect2(Vector2(info_rect.position.x, info_rect.position.y + 10.0), Vector2(info_rect.size.x, 10.0)), "attack", str(threat_level), "hp", str(enemy_hp), Color(0.93, 0.78, 0.54))
 
 static func draw_material_card(canvas: Control, rect: Rect2, card_data: Dictionary) -> void:
 	var shell := _draw_card_variant(canvas, rect, "material")
+	var face_rect: Rect2 = shell["face_rect"]
 	var art_rect: Rect2 = shell["art_rect"]
 	var info_rect: Rect2 = shell["info_rect"]
 	var material_type := str(card_data.get("type", "metal"))
+	var display_name := str(card_data.get("display_name", material_type.replace("_", " ").capitalize()))
 	var quantity := maxi(int(card_data.get("quantity", 1)), 1)
-	_draw_material_glyph(canvas, _fit_rect(art_rect, 6.0), material_type)
-	_draw_card_text(canvas, _get_info_slot(info_rect, "title"), _trim_card_label(material_type.replace("_", " ").to_upper(), 16), "title_center", STEEL_DARK)
+	match material_type:
+		"energy_bar":
+			_draw_crafted_energy_bar_art(canvas, art_rect)
+		"medicine":
+			_draw_material_glyph(canvas, _fit_rect(art_rect, 6.0), material_type)
+		"dry_rations":
+			_draw_material_glyph(canvas, _fit_rect(art_rect, 6.0), material_type)
+		"growth_medium":
+			_draw_material_growth_medium_art(canvas, art_rect)
+		_:
+			_draw_material_glyph(canvas, _fit_rect(art_rect, 6.0), material_type)
+	_draw_band_title(canvas, face_rect, _trim_card_label(display_name.to_upper(), 18), STEEL_DARK)
 	_draw_card_text(canvas, _get_info_slot(info_rect, "qty_label"), "QTY", "meta_center", TAPE_SHADE)
 	_draw_card_text(canvas, _get_info_slot(info_rect, "qty_value"), str(quantity), "value_right", STEEL_DARK)
 
+static func draw_equipment_card(canvas: Control, rect: Rect2, card_data: Dictionary) -> void:
+	var shell := _draw_card_variant(canvas, rect, "equipment")
+	var face_rect: Rect2 = shell["face_rect"]
+	var art_rect: Rect2 = shell["art_rect"]
+	var info_rect: Rect2 = shell["info_rect"]
+	var equipment_type := str(card_data.get("type", "equipment"))
+	var display_name := str(card_data.get("display_name", equipment_type.replace("_", " ").capitalize()))
+	_draw_framed_panel(canvas, art_rect, 8.0, Color(0.90, 0.84, 0.69))
+	if not _draw_texture_fit(canvas, _get_equipment_texture(equipment_type), _fit_rect(art_rect, 6.0)):
+		_draw_art_label(canvas, Rect2(Vector2(art_rect.position.x + 16.0, art_rect.position.y + 20.0), Vector2(art_rect.size.x - 32.0, 42.0)), _get_equipment_token_text(equipment_type), null, null, FONT_SIZE_CARD_TITLE + 2)
+	_draw_card_text(canvas, Rect2(Vector2(art_rect.position.x + 6.0, art_rect.end.y - 26.0), Vector2(art_rect.size.x - 12.0, 16.0)), _format_equipment_stat_summary(_get_equipment_stats(equipment_type)), "meta_center", TAPE_SHADE)
+	_draw_band_title(canvas, face_rect, _trim_card_label(display_name.to_upper(), 18), STEEL_DARK)
+	_draw_card_text(canvas, _get_info_slot(info_rect, "meta"), "EQUIPMENT", "meta_center", TAPE_SHADE)
+
 static func draw_blueprint_card(canvas: Control, rect: Rect2, card_data: Dictionary) -> void:
 	var shell := _draw_card_variant(canvas, rect, "blueprint")
+	var face_rect: Rect2 = shell["face_rect"]
 	var art_rect: Rect2 = shell["art_rect"]
+	_draw_band_title(canvas, face_rect, "BLUEPRINT", STEEL_DARK)
 	_draw_framed_panel(canvas, art_rect, 6.0, Color(0.90, 0.84, 0.69))
 	var page_rect := _draw_framed_panel(canvas, art_rect, 8.0, Color(0.92, 0.87, 0.73))
 	var fold_poly := PackedVector2Array([
@@ -663,9 +880,11 @@ static func _get_blueprint_token_spec(token_name: String) -> Dictionary:
 
 static func draw_crafted_card(canvas: Control, rect: Rect2, card_data: Dictionary) -> void:
 	var shell := _draw_card_variant(canvas, rect, "crafted")
+	var face_rect: Rect2 = shell["face_rect"]
 	var art_rect: Rect2 = shell["art_rect"]
 	var info_rect: Rect2 = shell["info_rect"]
-	var result_name := str(card_data.get("result", "Crafted Item")).to_upper()
+	var crafted_type := str(card_data.get("type", ""))
+	var result_name := str(card_data.get("display_name", card_data.get("result", "Crafted Item"))).to_upper()
 	var result_label := _trim_card_label(result_name, 16)
 	_draw_framed_panel(canvas, art_rect, 8.0, Color(0.90, 0.84, 0.69))
 	_draw_crafted_banner(canvas, art_rect)
@@ -675,8 +894,14 @@ static func draw_crafted_card(canvas: Control, rect: Rect2, card_data: Dictionar
 		_draw_crafted_medicine_art(canvas, art_rect)
 	else:
 		_draw_crafted_generic_art(canvas, art_rect)
-	_draw_card_text(canvas, _get_info_slot(info_rect, "title"), result_label, "title_center", STEEL_DARK)
-	_draw_card_text(canvas, _get_info_slot(info_rect, "meta"), "CRAFTED", "meta_center", TAPE_SHADE)
+	_draw_band_title(canvas, face_rect, result_label, STEEL_DARK)
+	var meta_text := "CRAFTED"
+	if crafted_type in ["tool_chest", "archive_shelf"]:
+		meta_text = "STORAGE %d" % Array(card_data.get("stored_cards", [])).size()
+	elif crafted_type == "tank":
+		var tank_batch: Dictionary = Dictionary(card_data.get("tank_batch", {}))
+		meta_text = "TANK RUNNING" if not tank_batch.is_empty() else "TANK IDLE"
+	_draw_card_text(canvas, _get_info_slot(info_rect, "meta"), meta_text, "meta_center", TAPE_SHADE)
 
 static func _draw_crafted_banner(canvas: Control, art_rect: Rect2) -> void:
 	canvas.draw_rect(Rect2(Vector2(art_rect.position.x + 12.0, art_rect.position.y + 12.0), Vector2(art_rect.size.x - 24.0, 18.0)), ACCENT_DIM)
@@ -704,9 +929,79 @@ static func _draw_crafted_medicine_art(canvas: Control, art_rect: Rect2) -> void
 	canvas.draw_rect(cross_v, DANGER)
 	_draw_card_text(canvas, Rect2(Vector2(art_rect.position.x, art_rect.position.y + 16.0), Vector2(art_rect.size.x, 10.0)), "AID", "title_center", TAPE)
 
+static func _draw_material_dry_rations_art(canvas: Control, art_rect: Rect2) -> void:
+	var pouch_rect := Rect2(Vector2(art_rect.position.x + 18.0, art_rect.position.y + 42.0), Vector2(art_rect.size.x - 36.0, 42.0))
+	canvas.draw_rect(pouch_rect, Color(0.68, 0.58, 0.36))
+	canvas.draw_rect(pouch_rect.grow(-2.0), Color(0.87, 0.81, 0.66))
+	canvas.draw_rect(Rect2(pouch_rect.position, Vector2(pouch_rect.size.x, 12.0)), ACCENT_DIM)
+	canvas.draw_rect(Rect2(Vector2(pouch_rect.position.x + 10.0, pouch_rect.position.y + 18.0), Vector2(pouch_rect.size.x - 20.0, 8.0)), STEEL_DARK)
+	canvas.draw_rect(Rect2(Vector2(pouch_rect.position.x + 14.0, pouch_rect.position.y + 30.0), Vector2(pouch_rect.size.x - 28.0, 4.0)), ACCENT)
+	_draw_card_text(canvas, Rect2(Vector2(art_rect.position.x, art_rect.position.y + 16.0), Vector2(art_rect.size.x, 10.0)), "RATIONS", "title_center", TAPE)
+
+static func _draw_material_growth_medium_art(canvas: Control, art_rect: Rect2) -> void:
+	var tray_rect := Rect2(Vector2(art_rect.position.x + 18.0, art_rect.position.y + 48.0), Vector2(art_rect.size.x - 36.0, 26.0))
+	canvas.draw_rect(tray_rect, STEEL_DARK)
+	canvas.draw_rect(tray_rect.grow(-2.0), Color(0.32, 0.29, 0.17))
+	canvas.draw_rect(Rect2(Vector2(tray_rect.position.x + 6.0, tray_rect.position.y + 8.0), Vector2(tray_rect.size.x - 12.0, 10.0)), Color(0.56, 0.49, 0.22))
+	canvas.draw_circle(Vector2(tray_rect.position.x + 18.0, tray_rect.position.y + 13.0), 3.0, TAPE)
+	canvas.draw_circle(Vector2(tray_rect.position.x + 34.0, tray_rect.position.y + 14.0), 2.0, TAPE)
+	canvas.draw_circle(Vector2(tray_rect.end.x - 18.0, tray_rect.position.y + 13.0), 3.0, TAPE)
+	_draw_card_text(canvas, Rect2(Vector2(art_rect.position.x, art_rect.position.y + 16.0), Vector2(art_rect.size.x, 10.0)), "MEDIUM", "title_center", TAPE)
+
 static func _draw_crafted_generic_art(canvas: Control, art_rect: Rect2) -> void:
 	_draw_framed_panel(canvas, Rect2(Vector2(art_rect.position.x + 16.0, art_rect.position.y + 42.0), Vector2(art_rect.size.x - 32.0, art_rect.size.y - 58.0)), 0.0, Color(0.83, 0.76, 0.58))
 	_draw_card_text(canvas, Rect2(Vector2(art_rect.position.x, art_rect.position.y + 16.0), Vector2(art_rect.size.x, 10.0)), "MADE", "title_center", TAPE)
+
+static func _get_equipment_token_text(equipment_type: String) -> String:
+	match equipment_type:
+		"knife":
+			return "KNF"
+		"bow":
+			return "BOW"
+		"plate_mail":
+			return "PLT"
+		"hide_cloak":
+			return "HIDE"
+		"tool_kit":
+			return "TOOLS"
+		_:
+			return equipment_type.replace("_", " ").to_upper()
+
+static func _format_equipment_stat_summary(stats: Dictionary) -> String:
+	var parts: Array[String] = []
+	var attack := int(stats.get("attack", 0))
+	var armor := int(stats.get("armor", 0))
+	var stealth := int(stats.get("stealth", 0))
+	var utility := int(stats.get("utility", 0))
+	if attack != 0:
+		parts.append("ATK %s" % _format_signed_stat(attack))
+	if armor != 0:
+		parts.append("ARM %s" % _format_signed_stat(armor))
+	if stealth != 0:
+		parts.append("STL %s" % _format_signed_stat(stealth))
+	if utility != 0:
+		parts.append("UTL %s" % _format_signed_stat(utility))
+	return "  ".join(parts)
+
+static func _format_signed_stat(value: int) -> String:
+	if value >= 0:
+		return "+%d" % value
+	return str(value)
+
+static func _get_equipment_stats(equipment_type: String) -> Dictionary:
+	match equipment_type:
+		"knife":
+			return {"attack": 1, "armor": 0, "stealth": 0, "utility": 0}
+		"bow":
+			return {"attack": 3, "armor": -1, "stealth": 0, "utility": 0}
+		"plate_mail":
+			return {"attack": 0, "armor": 3, "stealth": -1, "utility": 0}
+		"hide_cloak":
+			return {"attack": 0, "armor": 0, "stealth": 3, "utility": 0}
+		"tool_kit":
+			return {"attack": 0, "armor": 0, "stealth": 0, "utility": 3}
+		_:
+			return {}
 
 static func draw_table_drone_card(canvas: Control, rect: Rect2, slot: Dictionary, selected: bool, drag_ready: bool) -> void:
 	var loaded_cartridge: Dictionary = slot.get("loaded_cartridge", {})
@@ -718,15 +1013,29 @@ static func draw_table_drone_card(canvas: Control, rect: Rect2, slot: Dictionary
 	var shell := _draw_card_variant(canvas, rect, "drone", selected, drag_ready)
 	var face_rect: Rect2 = shell["face_rect"]
 	var art_rect: Rect2 = shell["art_rect"]
+	var info_rect: Rect2 = shell["info_rect"]
+	_draw_band_title(canvas, face_rect, _get_drone_card_title(slot), TAPE)
 	if available_in_workshop:
 		if int(slot.get("index", 0)) == 0:
 			_draw_spider_drone_art(canvas, _fit_rect(art_rect, 4.0))
 		else:
 			_draw_butterfly_drone_art(canvas, _fit_rect(art_rect, 4.0))
 		_draw_drone_tape_badge(canvas, tape_badge_rect, loaded_cartridge, selected)
-		_draw_drone_power_badge(canvas, Rect2(Vector2(face_rect.end.x - 46.0, face_rect.end.y - 28.0), Vector2(34.0, 16.0)), power_charge, power_card_count > 0)
 	else:
 		_draw_empty_drone_card_face(canvas, art_rect, outside_status)
+	_draw_equipment_slot_row(canvas, Rect2(Vector2(art_rect.position.x + 18.0, art_rect.end.y - 30.0), Vector2(art_rect.size.x - 36.0, 24.0)), Array(slot.get("equipment_slots", [])))
+	var drone_combat_totals: Dictionary = Dictionary(slot.get("equipment_totals", {}))
+	_draw_stat_icon_triplet_row(
+		canvas,
+		Rect2(Vector2(info_rect.position.x, info_rect.position.y + 16.0), Vector2(info_rect.size.x, 12.0)),
+		"energy",
+		str(maxi(power_charge, 0)),
+		"attack",
+		str(int(drone_combat_totals.get("attack", 0))),
+		"armor",
+		str(int(drone_combat_totals.get("armor", 0))),
+		TAPE
+	)
 	var status_light := Rect2(Vector2(rect.end.x - 16.0, rect.position.y + 10.0), Vector2(6.0, 6.0))
 	canvas.draw_circle(status_light.get_center(), 3.0, Color(0.46, 0.77, 0.46) if available_in_workshop else Color(0.76, 0.44, 0.24))
 

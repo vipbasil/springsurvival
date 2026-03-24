@@ -1,607 +1,276 @@
-# Mechanical Drone Concept Design & Vector Bone Animation Specification
+# Drone Design
 
-## Purpose
+This file documents the current drone model as it exists in the game now: command set, mission role, energy logic, and current constraints.
 
-This document defines the **concept design rules and animation pipeline for mechanical drones** used in the game world. These drones are small autonomous machines built using **analog mechanical engineering** rather than advanced electronics.
+It is not only an art note. It is the gameplay behavior reference for drones.
 
-All drone characters must be designed as **vector-based modular assets** intended for **bone (skeletal) animation**, not raster frame animation.
+## 1. Current Drone Types
 
-The goal is to create machines that feel:
+There are currently two drones:
 
-- believable
-- repairable
-- modular
-- mechanically understandable
-- suitable for a post-electronic technological world
+- `Spider Drone`
+- `Butterfly Drone`
 
-These drones should look like **clockwork machines, mechanical automata, and engineering prototypes**, not futuristic sci-fi robots.
+Both are physical tabletop cards that can carry:
 
----
+- one programmed tape
+- accumulated power
+- three future equipment slots
 
-# Design Philosophy
+## 2. Shared Drone State
 
-The drones must follow three main principles:
+Both drones track:
 
-### 1. Mechanical Logic
+- `outside_status`
+- `outside_position`
+- `outside_facing`
+- `outside_ptr`
+- `outside_acc`
+- `power_charge`
+- `outside_trail`
+- `pending discoveries`
+- `pending salvage`
+- `mission location`
+- `activity log`
+- `combat_ptr`
 
-Every visible element should imply a **real mechanical function**:
+The persistent source of truth is [GameState.gd](/Users/vasilibraga/springsurvival/scripts/core/GameState.gd).
 
-- gears
-- linkages
-- springs
-- pulleys
-- cams
-- winding systems
-- simple optical sensors
+## 3. Shared Control Commands
 
-Avoid unexplained smooth surfaces or purely decorative elements.
+Both drones support these non-role-specific commands:
 
-### 2. Modular Construction
+- `NOP`
+- `JMP`
+- `JNZ`
+- `DEC`
+- `INC`
+- `SET`
+- `DIE`
 
-All drones should appear **assembled from replaceable modules**:
+These are control-flow and accumulator operations.
 
-- central chassis
-- actuator units
-- sensor module
-- locomotion modules
-- cargo tools
+## 4. Butterfly Drone
 
-This reinforces the idea that the machines are **maintained and repaired in a survival environment**.
+### Role
 
-### 3. Readable Silhouette
+The butterfly is the low-risk scout.
 
-The drone must remain recognizable even when scaled down.
+It is intended for:
 
-Good silhouettes include:
+- route discovery
+- remote survey
+- pending location detection
+- non-aggressive observation
 
-- walker drones
-- spider drones
-- rolling scouts
-- tracked micro-carriers
-- hovering balloon scouts
+### Action Commands
 
-Avoid shapes that become visually confusing at small size.
+- `MOV`
+- `ROT`
+- `SCN`
 
----
+### Scan Behavior
 
-# Art Direction
+Butterfly `SCN`:
 
-## Style
+- scans a radius of `4`
+- rolls discovery per cell
+- queues pending location findings
+- does not immediately materialize those findings
+- does not trigger aggressive mobs through scanning
 
-The overall aesthetic combines:
+The findings only appear as real location cards when the butterfly returns.
 
-- industrial mechanical devices
-- Victorian engineering instruments
-- laboratory prototypes
-- survival engineering
+### What It Does Not Do
 
-The visual language should feel similar to:
+- no `PCK`
+- no `DRP`
+- no `ATK`
 
-- mechanical toys
-- clockwork devices
-- surveying instruments
-- field laboratory tools
+It is not the salvage/combat platform.
 
-Not:
+## 5. Spider Drone
 
-- glossy sci-fi drones
-- military robots
-- AI androids
+### Role
 
----
+The spider is the work drone.
 
-# Materials
+It is intended for:
 
-Preferred material palette:
+- targeted salvage
+- rough terrain operation
+- location pickup
+- direct combat participation
 
-- dark iron
-- oxidized steel
-- brass components
-- glass optics
-- ceramic insulators
-- paper or punch-tape mechanisms
+### Action Commands
 
-### Example color palette
+- `MOV`
+- `ROT`
+- `SCN`
+- `PCK`
+- `DRP`
+- `ATK`
 
-- iron black `#1c1c1c`
-- machine grey `#2b2b2b`
-- brass `#b58c4c`
-- rust `#8f3a2b`
-- aged paper `#d9c9a5`
-- signal green `#3dbf6f`
+### Pickup Behavior
 
-Because assets are vector-based, materials should be represented with:
+`PCK` only matters if:
 
-- layered shapes
-- simple shading
-- engraved mechanical linework
+- the spider is on a location mission
+- and it is physically standing at the exact mission location
 
-Avoid painted textures.
+Then it can:
 
----
+- roll location-specific salvage
+- roll location-specific encounters
+- add salvage to pending return inventory
 
-# Drone Categories
+Salvage is committed only on return to shelter.
 
-Designers may build multiple drone types following the same structural philosophy.
+### Combat Behavior
 
-### Walker Drone
+Spider combat reads the loaded tape.
 
-Legged machines using mechanical linkages.
+During a fight cycle:
 
-Possible roles:
+- if the current combat instruction is `ATK`, the spider deals damage
+- otherwise it does not attack and only receives damage
 
-- exploration
-- inspection
-- climbing terrain
+So spider tapes can be:
 
-### Rolling Drone
+- combat-capable
+- or effectively non-combat tapes
 
-Wheeled or spherical locomotion.
+depending on whether `ATK` is actually present in the loop.
 
-Possible roles:
+## 6. Power Rules
 
-- cargo transport
-- courier
-- fast scouting
+All executed instructions cost power.
 
-### Tracked Drone
+This includes:
 
-Small tracked chassis.
-
-Possible roles:
-
-- heavy hauling
-- terrain stability
-
-### Hover / Balloon Drone
-
-Buoyant scout units.
-
-Possible roles:
-
-- observation
-- mapping
-
-### Micro Utility Drone
-
-Small repair or maintenance automata.
-
-Possible roles:
-
-- manipulating objects
-- resource gathering
-
----
-
-# Current Workshop Exemplars
-
-The current prototype uses two cabinet drones as style anchors for future designs.
-
-### Mechanical Spider
-
-This drone should read as a **repairable walker**, not a toy creature.
-
-Current visual rules:
-
-- dark steel chassis as the main body
-- brass reserved for hardware accents rather than full body panels
-- front optical sensor module
-- visible spring or service hatch
-- four articulated legs per side
-- rigid segmented limbs with exposed joints
-- crouched industrial silhouette
-
-Use this as the baseline for:
-
-- walker drones
-- inspection drones
-- climbing utility machines
-
-### Wind-Up Butterfly
-
-This drone should read as a **mechanical toy-instrument hybrid**.
-
-Current visual rules:
-
-- upright central body with visible spring core
-- explicit wind-up key at the center of the body
-- paper-like wings using the same material language as punch tape
-- strong dark outlines and restrained internal rib lines
-- small optical head
-- decorative but believable mechanical construction
-
-Use this as the baseline for:
-
-- observation drones
-- signaling drones
-- delicate scout automata
-
-These two examples define an important project rule:
-
-- **body structures are mechanical**
-- **surfaces use the established machine materials**
-- **ornamental forms must still show a believable actuator or winding logic**
-
----
-
-# Exterior Functional Elements
-
-Every drone should visually expose parts of its mechanical system.
-
-Include at least several of the following elements:
-
-- winding key
-- exposed gears
-- mechanical drive shafts
-- cable pulleys
-- spring tension indicators
-- service hatches
-- inspection panels
-- mechanical sensor eye
-- rotating optic lens
-- cargo clamp or hook
-
-Optional components:
-
-- punch-tape slot
-- indicator lamps
-- mechanical gauges
-- stamped serial numbers
-
-These features help communicate the drone's function.
-
----
-
-# Vector Asset Construction
-
-All drones must be produced as **clean vector assets** with separated rigid parts.
-
-### Construction Rules
-
-- each moving element must be its own vector layer
-- rigid components should not deform
-- joints must be separate pieces
-- avoid excessive anchor points
-
-### Suggested Part Structure
-
-Typical drone asset structure:
-
-Main body:
-
-- chassis_core
-- chassis_plate_front
-- chassis_plate_side_left
-- chassis_plate_side_right
-- chassis_bottom
-
-Sensors:
-
-- sensor_mount
-- optic_lens
-- optic_shutter
-
-Mechanisms:
-
-- gear_visible
-- gear_cover
-- spring_gauge
-- winding_key
-
-Locomotion:
-
-Examples depending on drone type:
-
-Legged drone:
-
-- leg_upper
-- leg_mid
-- leg_lower
-- foot
-
-Wheeled drone:
-
-- wheel
-- wheel_arm
-
-Tracked drone:
-
-- track
-- suspension_arm
-
-Tools:
-
-- cargo_hook
-- manipulator_arm
-
----
-
-# Bone Animation System
-
-The animation system should use **skeletal animation with rigid parts**.
-
-### Animation Principles
-
-- mechanical movement
-- precise rotations
-- limited elastic deformation
-- visible mechanical timing
-
-Parts should rotate around **explicit mechanical pivots**.
-
-Avoid rubber-like bending typical of organic characters.
-
----
-
-# Rig Structure
-
-Minimum skeleton example:
-
-- root
-- body
-- sensor
-- key
-
-For locomotion modules:
-
-Leg example:
-
-- leg_root
-- leg_mid
-- leg_lower
-- leg_foot
-
-Wheel example:
-
-- wheel_axis
-
-Tool example:
-
-- arm_base
-- arm_mid
-- arm_claw
-
----
-
-# Pivot Placement
-
-Correct pivot placement is essential for believable mechanics.
-
-Pivots should be located at:
-
-- hinge joints
-- wheel axles
-- gear rotation centers
-- key rotation axis
-- manipulator joints
-
-Bad pivot placement breaks the illusion of a real machine.
-
----
-
-# Animation Language
-
-Drone movement should feel:
-
-- mechanical
-- deliberate
-- energy efficient
-- spring-driven
-
-Keywords describing motion style:
-
-- tick
-- click
-- wind
-- pause
-- tension
-- release
-
-Avoid fluid organic movement.
-
----
-
-# Core Animation Set
-
-Every drone should support a minimal animation library.
-
-### Idle
-
-Subtle mechanical tension.
-
-Possible details:
-
-- tiny vibration
-- optic adjustment
-- indicator flicker
-
-### Activate
-
-Machine powering up.
-
-Possible actions:
-
-- winding key turn
-- gears engaging
-- sensor opening
-
-### Move
-
-Primary locomotion animation.
-
-Depends on drone type.
-
-Examples:
-
-- walk cycle
-- rolling motion
-- track movement
-
-### Turn
-
-Directional change.
-
-Often includes small mechanical pauses.
-
-### Scan
-
-Observation behavior.
-
-Possible features:
-
-- sensor rotation
-- optical aperture
-- head tilt
-
-### Interact
-
-Interaction with objects.
-
-Possible actions:
-
-- cargo hook
-- manipulator arm
-
-### Damage
-
-Low power or malfunction.
-
-Possible effects:
-
-- stuttering movement
-- unstable posture
-
-### Shutdown
-
-Complete power loss.
-
-Machine collapses or locks into resting position.
-
----
-
-# Vector Shading Rules
-
-Because assets are vector-based, shading should remain simple.
-
-Recommended shading style:
-
-- 2-3 tone cel shading
-- hard metallic highlights
-- small shadow wedges under plates
-
-Avoid heavy gradients unless supported by the entire asset pipeline.
-
----
-
-# Concept Art Deliverables
-
-Each drone design should include the following sheets.
-
-### Character Sheet
-
-- neutral pose
-- clear readable silhouette
-- colored design
-
-### Construction Sheet
-
-- exploded modules
-- labeled moving parts
-
-### Rig Sheet
-
-- bone locations
-- pivot points
-
-### Motion Sheet
-
-- idle pose
-- locomotion poses
-- interaction pose
-
----
-
-# Production Pipeline
-
-Recommended workflow:
-
-1. concept sketch
-2. mechanical logic pass
-3. vector construction drawing
-4. part separation
-5. pivot placement
-6. skeleton rig
-7. test animation
-8. export to engine
-
----
-
-# Suggested Tools
-
-Possible software pipeline:
-
-Vector creation:
-
-- Illustrator
-- Inkscape
-- Figma
-
-Rigging and animation:
-
-- Spine
-- Moho
-- Creature
-- After Effects
-- Godot 2D skeleton
-
----
-
-# Engine Integration
-
-Export assets as:
-
-- layered SVG
-- separated vector parts
-
-Requirements:
-
-- consistent naming
-- mirrored modules where possible
-- shared scale across drones
-
-Runtime states:
-
-- idle
-- move
-- turn
+- movement
 - scan
-- interact
-- damage
-- shutdown
+- pickup
+- attack
+- control flow
 
----
+If the drone starts a tick at zero power:
 
-# What to Avoid
+- it halts immediately
 
-Do not design drones as:
+If it reaches zero after an instruction:
 
-- organic animals
-- humanoid robots
-- sleek sci-fi machines
-- complex deformable characters
+- it halts after that instruction
 
-The design strength should come from:
+The current capacity baseline is:
 
-- clarity
-- believable mechanics
-- modular construction
+- `50` per power unit scale
 
----
+## 7. Tape Rules
 
-# Final Statement
+Drone behavior is determined by loaded programmed tape.
 
-Mechanical drones in this project represent **small autonomous machines built from analog engineering principles**.
+Important runtime rules:
 
-They should appear as practical devices constructed from gears, springs, and mechanical linkages. Every part must feel purposeful and understandable.
+- unsupported action commands halt the drone
+- control commands are shared
+- mission outcome depends heavily on tape structure
 
-From the beginning, these machines must be designed as **vector-based modular puppets** optimized for **bone animation**, ensuring efficient production and clear mechanical motion.
+This means the tape is not flavor. It is the real drone brain.
+
+## 8. Mission Return Rule
+
+Drones can carry pending world effects while outside:
+
+- pending discoveries
+- pending salvage
+
+Those only become real tabletop state when the drone returns to shelter.
+
+Return currently commits:
+
+- discovered locations
+- pending salvage
+- mission summary
+- cleared mission state
+
+## 9. Activity Log
+
+Each bot keeps a persistent activity log.
+
+Log lines include:
+
+- tick index
+- position
+- current energy
+- accumulator value
+- action result
+
+This is currently the main debugging and interpretation surface for field behavior.
+
+## 10. Current Programming Language Reference
+
+### Shared control
+
+- `NOP`
+- `JMP`
+- `JNZ`
+- `DEC`
+- `INC`
+- `SET`
+- `DIE`
+
+### Butterfly action language
+
+- `MOV`
+- `ROT`
+- `SCN`
+
+### Spider action language
+
+- `MOV`
+- `ROT`
+- `SCN`
+- `PCK`
+- `DRP`
+- `ATK`
+
+The punch/binary opcode view is exposed in the journal for researched drone pages.
+
+## 11. Current Role Split
+
+This is the intended gameplay split right now:
+
+- `Butterfly`
+  - scout first
+  - safer
+  - information-heavy
+  - low direct interaction
+
+- `Spider`
+  - salvage first
+  - more dangerous
+  - combat-capable
+  - mission-output drone
+
+## 12. Current Design Limits
+
+Not implemented yet:
+
+- different equipment affecting drone stats
+- drone-specific repair/build modifiers from equipment
+- field-side `DRP` logic with real world consequences
+- advanced combat behaviors beyond tape-driven `ATK`
+
+## 13. Art Direction Constraint
+
+The visual rule remains:
+
+- drones are readable mechanical devices
+- not clean futuristic robots
+- SVG/icon readability matters more than high detail
+
+Current visual anchors:
+
+- spider: grounded mechanical worker
+- butterfly: lightweight scout / instrument hybrid

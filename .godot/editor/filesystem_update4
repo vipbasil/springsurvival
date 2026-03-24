@@ -4,3 +4,5 @@ res://scripts/core/GameState.gd
 res://scripts/automaton/InstructionLibrary.gd
 res://scripts/data/InstructionLibrary.gd
 res://scripts/data/PunchEncoding.gd
+res://scripts/ui/WorkshopCardRuntime.gd
+res://scripts/ui/WorkshopTableController.gd

@@ -1,412 +1,308 @@
-# Location And Scan Model
+# Location Model
 
-This file defines how map locations, scanning, and returned field knowledge should work.
+This document describes the current implemented location system: how locations are generated, how they are discovered, what they can yield, and what can attack during scavenging.
 
-It exists to keep three things separate:
+## 1. Core Rule
 
-- a place on the map
-- what is known about that place
-- when that knowledge becomes a real card
+Locations are world sites, not loot cards.
 
-## Core Rule
+A location card means:
 
-**Map detects sites. Exploration reveals contents. Return creates cards.**
+- a place exists
+- that place has a type
+- that place can be researched
+- that place can be targeted by a drone mission
+- that place has its own salvage and threat logic
 
-That means:
+## 2. Current Generated Location Types
 
-- scans detect whether a site exists in a scanned territory
-- scans do not immediately create permanent knowledge cards
-- detected knowledge stays attached to the current field mission first
-- only a successful return materializes that knowledge as cards
+The active generated location pool is:
 
-## Location Versus Contents
+- `CACHE`
+- `CRATER`
+- `TOWER`
+- `SURVEILLANCE ZONE`
+- `FACILITY`
+- `POND`
+- `BUNKER`
+- `FIELD`
+- `DUMP`
+- `NEST`
+- `RUIN`
 
-A location is not the resource itself.
+`RUIN` is now in the live generation pool, not just in design data.
 
-A location is a **site on the map** that may contain:
+## 3. How Locations Enter Play
 
-- resources
-- infrastructure
-- biological potential
-- threats
-- anomalies
-- knowledge value
+### Operator generation
 
-Examples:
+The operator can generate random location cards through current workshop-side discovery logic.
 
-- `pond` may contain water, algae, insects
-- `facility` may contain machinery, archive fragments, danger
-- `nest` may contain biomass and hostile life
-- `dump` may contain scrap, contamination, chemical waste
-- `tower` may contain visibility, signal risk, and salvage
+### Drone scan generation
 
-## Detectable Location Types
+Drone scans can create pending location findings.
 
-These are the first recommended map-detectable site types:
+Important current behavior:
 
-- shelter
-- ruin
-- facility
-- tower
-- bunker
-- settlement
-- mine
-- dump
-- pond
-- field
-- forest_patch
-- cavern
-- road_node
-- bridge
-- nest
-- crater
-- anomaly_zone
+- butterfly scan queues findings first
+- findings become real location cards when the drone returns
 
-These are map site categories, not direct loot categories.
+## 4. Location Mission Model
 
-## Location Icon Sheet
+If a drone is dropped onto a location card:
 
-Location cards must read as **sites**, not abstract glyphs.
+- that location becomes the drone’s mission target
+- the target position is stored on the drone
+- `PCK` only works at that exact target
 
-The rule is:
+This makes location cards actionable mission objects, not just knowledge cards.
 
-- recognition first
-- variation second
+## 5. Scavenge Resolution Rules
 
-Every site type should be built from:
+Current scavenge logic:
 
-- one canonical silhouette
-- one defining cue
-- one supporting cue
+- each location has its own loot table
+- each location has its own base pickup chance
+- repeated pickup attempts on one mission get worse through diminishing success chance
+- salvage stays pending while the drone is outside
+- salvage is only committed on return to shelter
 
-At card scale, the image should still be understandable if:
+Current supported loot kinds:
 
-- color is removed
-- internal detail is reduced
-- only the main dark masses remain
+- `material`
+- `power`
+- direct `crafted/equipment-style` salvage
 
-### Core Archetypes
+## 6. Current Live Loot By Location
 
-These are the first fixed icon families the renderer should use.
+### Pond
 
-#### tower
+Loot:
 
-- canonical silhouette: tall vertical mast
-- defining cue: antenna or signal head at the top
-- supporting cue: grounded tripod, struts, or service base
-- family accent: cold brass / steel
+- `Biomass`
+- `Algae`
+- `Mushrooms`
 
-#### bunker
+Threats:
 
-- canonical silhouette: low buried structure
-- defining cue: dark entrance or hatch
-- supporting cue: earth berm, slope, or reinforced lip
-- family accent: muted concrete / brass
+- `Wolf Pack`
+- `Stalker`
+- `Grizzly`
 
-#### pond
+### Crater
 
-- canonical silhouette: shallow basin
-- defining cue: visible water surface line
-- supporting cue: reeds, shore lip, or small bank
-- family accent: faded blue-grey
+Loot:
 
-#### facility
+- `Metal`
+- `Bone`
+- `Biomass`
 
-- canonical silhouette: industrial block or low building mass
-- defining cue: vent, chimney, annex, or tank
-- supporting cue: paved base, side box, or pipe rhythm
-- family accent: steel / oxidized brass
+Threats:
 
-#### ruin
+- `Stalker`
+- `Wolf Pack`
+- `Grizzly`
 
-- canonical silhouette: broken wall or collapsed building shell
-- defining cue: missing top edge, broken corner, or open doorway
-- supporting cue: rubble line or fractured side panel
-- family accent: dusty stone / rust
+### Tower
 
-#### nest
+Loot:
 
-- canonical silhouette: organic mound
-- defining cue: clustered holes, cavities, or egg-like forms
-- supporting cue: small spines, tendrils, or uneven rim
-- family accent: muted organic brown-green
+- `Metal`
+- `Power Unit`
+- `Knife`
+- `Bow`
+- `Plate Mail`
 
-#### dump
+Threats:
 
-- canonical silhouette: low debris heap
-- defining cue: stacked scrap masses, drums, or box forms
-- supporting cue: broken posts, tilted panel, or contamination spill line
-- family accent: rust / waste orange
+- `Surveillance Drone`
+- `Infantry Drone`
+- `Stalker`
 
-#### field
+### Surveillance Zone
 
-- canonical silhouette: flat cultivated or worked ground
-- defining cue: repeated rows, stakes, or crop rhythm
-- supporting cue: boundary line, irrigation trench, or growth patch
-- family accent: dry soil / muted green
+Loot:
 
-### Extended Archetypes
+- `Metal`
+- `Power Unit`
+- `Bow`
 
-These can come after the core sheet is readable:
+Threats:
 
-- bridge
-- road_node
-- crater
-- anomaly_zone
-- settlement
-- mine
-- forest_patch
-- cavern
+- `Surveillance Drone`
+- `Infantry Drone`
+- rare `Stalker`
 
-### Composition Rules
+### Facility
 
-Each location image should use three layers:
+Loot:
 
-1. ground or horizon
-2. main site mass
-3. one defining secondary cue
+- `Metal`
+- `Power Unit`
+- `Dry Rations`
+- `Mushrooms`
+- `Algae`
 
-Example:
+Threats:
 
-- bunker = ground + buried block + doorway
-- tower = ground + mast + antenna head
-- pond = bank + basin + waterline
-- ruin = ground + broken wall + rubble
+- `Infantry Drone`
+- `Surveillance Drone`
+- `Stalker`
 
-### Variation Rules
+### Bunker
 
-Do not procedurally invent silhouettes from scratch.
+Loot:
 
-Variation should be limited to:
+- `Paper`
+- `Metal`
+- `Power Unit`
+- `Medicine`
+- `Dry Rations`
+- `Mushrooms`
+- `Algae`
+- `Knife`
+- `Bow`
+- `Plate Mail`
+- `Tool Kit`
 
-- width or height
-- left/right placement of one detail
-- one damage mark or break
-- one secondary attachment
-- one accent-color family
+Threats:
 
-The variation must never destroy the core read.
+- `Stalker`
+- `Infantry Drone`
+- `Surveillance Drone`
+- rare `Wolf Pack`
 
-So:
+### Field
 
-- every bunker still looks like bunker
-- every tower still looks like tower
-- every pond still looks like pond
+Loot:
 
-### Readability Test
+- `Biomass`
+- `Fiber`
+- `Hide`
+- rare `Mushrooms`
 
-A location icon is good enough only if all three are true:
+Threats:
 
-1. it is recognizable without reading the text label
-2. it is still readable when shrunk to current card art size
-3. it still reads if rendered as a simplified dark silhouette with one accent
+- `Wolf Pack`
+- `Grizzly`
+- `Stalker`
 
-If it fails those tests, it is too abstract for the card system.
+### Dump
 
-## Minimum Internal Location Model
+Loot:
 
-Every location should have at least:
+- `Metal`
+- `Fiber`
+- `Bone`
+- `Power Unit`
+- `Knife`
+- `Plate Mail`
+- `Tool Kit`
 
-- `id`
-- `type`
-- `position`
+Threats:
 
-Recommended structure:
+- `Stalker`
+- `Wolf Pack`
+- `Grizzly`
+- `Infantry Drone`
 
-```json
-{
-  "id": "loc_old_tower_01",
-  "type": "tower",
-  "position": { "x": 8, "y": 2 }
-}
-```
+### Cache
 
-Recommended extended structure:
+Loot:
 
-```json
-{
-  "id": "loc_old_tower_01",
-  "type": "tower",
-  "position": { "x": 8, "y": 2 },
-  "detected": true,
-  "identified": false,
-  "survey_level": 1,
-  "known_contents": [],
-  "threat_level": "unknown",
-  "source": "drone_scan",
-  "pending": true
-}
-```
+- `Medicine`
+- `Dry Rations`
+- `Paper`
+- `Knife`
+- `Bow`
+- `Plate Mail`
 
-## Survey Levels
+Threats:
 
-Scanning should reveal knowledge in stages.
+- `Stalker`
+- `Wolf Pack`
+- `Infantry Drone`
 
-- `survey_level 0`
-  - unknown
-- `survey_level 1`
-  - something is there
-- `survey_level 2`
-  - rough category is known
-  - example: structure, biological cluster, hazard zone
-- `survey_level 3`
-  - exact site type is known
-  - example: tower, pond, facility, nest
-- `survey_level 4+`
-  - deeper contents, risks, and special properties become known
+### Nest
 
-This keeps scanning valuable without making it omniscient.
+Loot:
 
-## Remote Drone Scan
+- `Biomass`
+- `Bone`
+- `Hide`
+- `Bacteria`
+- `Mealworms`
+- rare `Mushrooms`
 
-Drone scan is the safe, indirect survey method.
+Threats:
 
-For the current command language:
+- `Wolf Pack`
+- `Grizzly`
+- `Stalker`
 
-- `SCN` or `SKN` should scan an area, not only the tile directly on the path
-- the result should answer:
-  - is there a site here
-  - what rough kind of site might it be
-  - how certain is that information
+### Ruin
 
-Drone scan rules:
+Loot:
 
-- safer than direct operator fieldwork
-- lower fidelity than direct operator fieldwork
-- produces **pending mission intel**
-- does not create permanent cards until return
+- `Metal`
+- `Paper`
+- `Bone`
+- `Fiber`
+- `Mushrooms`
+- `Knife`
 
-So:
+Threats:
 
-- drone scan discovers
-- drone return records
+- `Stalker`
+- `Wolf Pack`
+- `Grizzly`
+- occasional `Infantry Drone`
 
-## Direct Operator Scan
+## 7. Research Value Of Locations
 
-The operator may also scan directly in the field.
+Researching a location page currently gives:
 
-Direct operator scan rules:
+- a durable journal page for that location type
+- the current extract list
+- the current scavenging risk list
+- related recipes that reference that location
 
-- higher fidelity
-- richer results faster
-- higher personal risk
+This means location cards are both:
 
-Direct operator scan may:
+- mission targets
+- research subjects
 
-- increase survey level faster
-- reveal contents earlier
-- trigger hazards
-- trigger immediate hostile encounters
-- create new location occurrences directly, without relying on a fixed finite site pool
+## 8. Relationship To Other Systems
 
-That means direct operator scan can generate:
+Locations feed the larger economy:
 
-- location knowledge on successful return
-- immediate encounter state while the operator is exposed
-- hostile creature cards or hazard cards when contact actually happens
+- `FIELD -> FIBER`
+- `POND -> ALGAE / MUSHROOMS`
+- `FACILITY -> TANK / TOOL CHEST / equipment-adjacent salvage`
+- `NEST -> BROOD CAGE / BACTERIA / MEALWORMS`
+- `RUIN -> ARCHIVE SHELF / mushrooms / mixed salvage`
 
-For the current tabletop prototype, operator scan on the route card behaves as current knowledge generation:
+## 9. Current Design Intent
 
-- each completed scan can generate either a new location card or a hostile card
-- location cards represent the currently known scan occurrences
-- if a location card is forgotten or trashed, it disappears from current route-card map knowledge
-- later scans can generate new location cards again
+Location types should feel distinct:
 
-## Pending Intel Rule
+- `POND`, `FIELD`, `NEST` support the biological economy
+- `FACILITY`, `TOWER`, `SURVEILLANCE ZONE` support machine and power economy
+- `CACHE`, `BUNKER`, `DUMP`, `RUIN` are mixed-value salvage sites
 
-Detected locations should first live in mission state, not in durable world knowledge.
+## 10. Current Known Gaps
 
-Recommended flow:
+Still missing or partial:
 
-1. a scan checks the scanned area
-2. if a site exists, add a pending location record to the current mission
-3. if the drone or operator is lost before return, that pending intel may be lost
-4. if the mission returns, convert pending intel into persistent knowledge
+- survey depth beyond the current card-level discovery model
+- special one-off location modifiers
+- unique instance traits per site
+- non-loot location functions such as rescued operators or major map events
 
-This supports the main game rule:
+## 11. Documentation Rule
 
-**knowledge is fragile until recovered**
+Whenever location loot or threats change, update:
 
-## Card Materialization Rule
-
-Location cards should be created only when the drone or operator returns with the information.
-
-So:
-
-- field scan = temporary mission intel
-- return = permanent card creation
-
-On successful return, the game may create:
-
-- a `Location` card
-- a journal entry
-- map knowledge updates
-
-Example returned card payload:
-
-```json
-{
-  "id": "loc_old_tower_01",
-  "type": "tower",
-  "position": { "x": 8, "y": 2 },
-  "survey_level": 2,
-  "known_contents": [],
-  "source_mission": "mission_12",
-  "pending": false
-}
-```
-
-## Immediate Encounter Exception
-
-There is one deliberate exception:
-
-If a direct operator scan triggers contact right now, the game may generate immediate encounter cards such as:
-
-- hostile creature
-- hazard
-- anomaly event
-
-This is not the same as durable returned knowledge.
-
-So the clean distinction is:
-
-- **returned site knowledge** becomes durable location cards
-- **live operator contact** may generate immediate encounter cards
-
-## UI / UX Implications
-
-The map should show:
-
-- detected site presence
-- partial classification
-- exact type only after enough survey
-
-The journal should store:
-
-- returned locations
-- returned interpretations
-- later discovered contents
-
-The table can then hold:
-
-- location cards
-- knowledge cards
-- encounter cards
-
-but only after the information has been materially recovered.
-
-## Recommended First Implementation
-
-For the first usable version:
-
-- store location records with:
-  - `id`
-  - `type`
-  - `position.x`
-  - `position.y`
-  - `survey_level`
-  - `pending`
-- let drone `SCN` detect if a site exists in scanned territory
-- keep detections attached to the mission until return
-- create location cards only on return
-- let direct operator scan reveal more but risk hostile card generation
+- [GameState.gd](/Users/vasilibraga/springsurvival/scripts/core/GameState.gd)
+- [LOCATION_MODEL.md](/Users/vasilibraga/springsurvival/LOCATION_MODEL.md)
+- journal-facing descriptions indirectly through runtime if needed

@@ -50,6 +50,8 @@ static func is_dragging_table_card(active_drag: Dictionary, kind: String, identi
 			return str(active_drag.get("identifier", active_drag.get("blueprint_id", ""))) == str(identifier)
 		"crafted":
 			return str(active_drag.get("identifier", active_drag.get("crafted_id", ""))) == str(identifier)
+		"equipment":
+			return str(active_drag.get("identifier", active_drag.get("equipment_id", ""))) == str(identifier)
 		_:
 			return CONTROL_CARD_KINDS.has(kind)
 
@@ -98,7 +100,7 @@ static func build_top_card_drag_state(root_point: Vector2, top_card: Dictionary)
 			base["identifier"] = slot_index
 			base["source"] = "table"
 			base["slot_index"] = slot_index
-		"location", "enemy", "material", "blueprint", "crafted":
+		"location", "enemy", "material", "blueprint", "crafted", "equipment":
 			var card_id := str(top_card.get("%s_id" % kind, ""))
 			if card_id.is_empty():
 				return {}
@@ -121,7 +123,7 @@ static func is_valid_drop_target(active_drag: Dictionary, drop_rect: Rect2, opti
 			return bool(options.get("has_drop_drone", false)) or bool(options.get("in_tape_hand", false)) or bool(options.get("in_recycle_zone", false))
 		"power":
 			return bool(options.get("has_drop_drone", false)) or bool(options.get("in_charge_machine", false)) or bool(options.get("in_table_workspace", false)) or bool(options.get("in_recycle_zone", false))
-		"location", "material", "blueprint":
+		"location", "material", "blueprint", "equipment":
 			return bool(options.get("in_table_workspace", false)) or bool(options.get("in_recycle_zone", false))
 		"crafted":
 			return bool(options.get("in_table_workspace", false)) or bool(options.get("in_recycle_zone", false)) or bool(options.get("overlaps_operator", false))

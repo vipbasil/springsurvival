@@ -9,12 +9,13 @@ const FEEDBACK_PHASES := {
 	"merge": {"timer": "merge_timer", "duration": "merge_duration"},
 	"failure": {"timer": "failure_timer", "duration": "failure_duration"},
 }
-const STATE_TABLE_CARD_KINDS := ["location", "enemy", "material", "blueprint", "crafted"]
+const STATE_TABLE_CARD_KINDS := ["location", "enemy", "material", "blueprint", "crafted", "equipment"]
 const STATE_TABLE_CARD_RECYCLE_MESSAGES := {
 	"location": "Location card forgotten",
 	"material": "Material discarded",
 	"blueprint": "Blueprint discarded",
 	"crafted": "Crafted card discarded",
+	"equipment": "Equipment discarded",
 }
 
 static func build_drag_payload(kind: String, rect: Rect2, extra: Dictionary = {}) -> Dictionary:

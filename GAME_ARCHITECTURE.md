@@ -1,456 +1,353 @@
-# Game Architecture Notes — Last Spring
+# Game Architecture
 
-This file captures the current high-level product and systems decisions that should guide implementation.
+This file describes the current implemented architecture of `Last Spring`. It is not a long-term speculative design document. If the code and this file disagree, the code wins, and this file should be updated.
 
-It is intentionally short and practical. If a future feature conflicts with this file, treat this file as the working design default until a newer decision replaces it.
+## 1. Product Shape
 
----
+The current game is a single-workshop management prototype built around:
 
-## 1. Core Game Definition
+- a table of cards
+- fixed machine cards
+- indirect field action through drones
+- a persistent journal and recipe system
+- survival production based on scavenged matter
 
-**Last Spring** is a knowledge-driven mechanical and biological survival roguelite.
+The player does not directly walk the world. The world is acted on through:
 
-The player selects an operator from the Ark, enters an Earth shelter, prepares mechanical drones through punch-tape programming, explores the outside world indirectly, and preserves only what can be recorded before the deployment fails or ends.
+- drone tape programs
+- route-table launches
+- returned discoveries
+- returned salvage
 
-The game is built on three equal progression pillars:
+## 2. Main Runtime Authority
 
-- mechanical knowledge
-- world / cartographic knowledge
-- biological / genetic knowledge
+The main gameplay authority is [GameState.gd](/Users/vasilibraga/springsurvival/scripts/core/GameState.gd).
 
-Material tools are finite.
-Knowledge is the main durable victory.
+It owns:
 
----
-
-## 2. Run Structure
-
-A run is one **Earth deployment cycle**.
-
-Recommended structure:
-
-1. Select an operator on the Ark
-2. Enter a shelter workshop
-3. Create / store / load punch-tape cartridges
-4. Install power into drones
-5. Launch drones into the outside world
-6. Observe routes, discoveries, and failures
-7. Record useful knowledge in the journal
-8. End the run through failure, collapse, evacuation, or deliberate closure
-
-### Run Persistence Rule
-
-By default, only **recorded knowledge** persists between runs.
-
-This includes:
-
-- journal entries
-- discovered categories and interpreted findings
-- archived program records as knowledge
-- map knowledge
-- operator notes
-- biological and genetic records
-
-This does **not** include by default:
-
-- physical cartridges
-- shelf stock
-- bot loadouts
-- installed power units
-- local material state of the shelter
-
----
-
-## 3. Layer Separation
-
-The game has four top-level layers.
-
-### Ark Layer
-
-Purpose:
-
-- choose the next operator
-- frame the deployment
-- expose strategic long-term R&D direction
-
-### Workshop Layer
-
-Purpose:
-
-- physical preparation
-- programming
-- cartridge and power handling
-- bot launch
-
-### Route Table Layer
-
-Purpose:
-
-- live operational display
-- show what active bots are doing now
-- show predicted vs executed movement
-- show detected site presence before durable knowledge is recovered
-
-### Large Map Layer
-
-Purpose:
-
-- strategic Earth planning surface
-- place and review landmarks, routes, sites, risks
-
-### Journal Layer
-
-Purpose:
-
-- canonical knowledge archive
-- manual and automatic record keeping
-- cross-run progression
-
-Short rule:
-
-- route table = what is happening now
-- large map = what we think the world looks like
-- journal = what we know, believe, and preserve
-
-### Scan And Return Rule
-
-Scanning should follow one strict knowledge rule:
-
-- scan detects whether a site exists in scanned territory
-- scan may partially classify that site
-- scan does not immediately create durable location cards
-- successful return converts pending mission intel into persistent location cards and journal/map knowledge
-
-This applies to both drones and operators, with one difference:
-
-- drone scan is safer and lower-fidelity
-- direct operator scan is richer but can trigger immediate encounters such as hostile creatures or hazards
-
----
-
-## 3A. Entity Form Rule
-
-The project uses one strict interaction and presentation rule:
-
-**All movable entities are cards. All fixed infrastructure is machinery.**
-
-### Cards
-
-Cards are used for anything that can be moved, stored, stacked, archived, or assigned.
-
-Examples:
-
-- drones
-- cartridges
+- operator state
+- tapes
 - power units
-- saved programs
-- discoveries
-- biological samples and cultures
-- genetic strains
-- operator profiles
+- drones and their field state
+- location cards
+- enemy cards
+- material cards
+- blueprint cards
+- crafted cards
+- journal entries
+- storage contents
+- workshop layout persistence
 
-Cards are the default form for:
+The workshop scene mostly orchestrates UI and drag/drop around that state.
 
-- inventory
-- drag and drop
-- assignment
-- workshop composition
-- archival knowledge objects
+## 3. Source Of Truth Split
 
-### Composite Drone Cards
+### Runtime Code
 
-Drone cards are not just identity cards. They are **composite cards** that accumulate loadout state.
+- [GameState.gd](/Users/vasilibraga/springsurvival/scripts/core/GameState.gd)
+- [workshop_main.gd](/Users/vasilibraga/springsurvival/scripts/workshop_main.gd)
+- [WorkshopArt.gd](/Users/vasilibraga/springsurvival/scripts/ui/WorkshopArt.gd)
+- [WorkshopCardRuntime.gd](/Users/vasilibraga/springsurvival/scripts/ui/WorkshopCardRuntime.gd)
+- [WorkshopTableController.gd](/Users/vasilibraga/springsurvival/scripts/ui/WorkshopTableController.gd)
 
-Recommended rule:
+### Data Files
 
-- one drone card may carry **one tape assignment**
-- one drone card may carry **multiple power cards**
-- attached power values are **additive**
+- [recipes.json](/Users/vasilibraga/springsurvival/resources/instructions/recipes.json)
+- [enemy_loot.json](/Users/vasilibraga/springsurvival/resources/instructions/enemy_loot.json)
+- [entities.json](/Users/vasilibraga/springsurvival/resources/instructions/entities.json)
 
-This means the workshop preparation loop should read as:
+The intention is:
 
-- drag a tape card onto a drone card
-- drag one or more charged power cards onto the same drone card
-- launch only after the drone card shows both a tape assignment and positive total power
+- code owns behavior
+- JSON owns design-facing catalogs
 
-### Tape Assignment Rule
+## 4. Tabletop Entity Rule
 
-Tape should not remain a second loose object once assigned.
+The project uses one consistent tabletop interaction model:
 
-Instead:
+- movable things are cards
+- fixed workstations are machine cards
 
-- the tape card is consumed into the drone card loadout
-- the drone card then shows a visible tape label, badge, or symbol
+### Current movable card families
 
-The player should read the drone card as “this drone is carrying program X”.
+- operator
+- drone
+- tape
+- resource
+- material
+- location
+- enemy
+- blueprint
+- crafted
 
-### Power Card Rule
+### Current fixed workstations
 
-Power cards are additive charge objects.
+- bench
+- route
+- charge
+- journal
+- trash
 
-- each charged power card adds its charge to the drone card
-- multiple power cards may be attached
-- when power is exhausted, the card is spent
-- an empty power card should not be treated as a valid loadable unit
+## 5. Scene Responsibility
 
-The player should read the drone card as “this drone is carrying N total power”.
+### [workshop_main.gd](/Users/vasilibraga/springsurvival/scripts/workshop_main.gd)
 
-### Machinery
+Responsible for:
 
-Machinery is used for anything that is fixed, installed, or spatially rooted in the shelter or Ark.
+- collecting visual cards from state
+- drag/drop handling
+- process start detection
+- active progress overlays
+- journal modal
+- bot log modal
+- map rendering and marker feedback
+- combat/research/crafting/tank process feedback
 
-Examples:
+### [WorkshopArt.gd](/Users/vasilibraga/springsurvival/scripts/ui/WorkshopArt.gd)
 
-- programming bench
-- route table
-- large map table
-- recycle press
-- reactors
-- storage racks
-- cabinets
+Responsible for:
 
-Machinery is the default form for:
+- card shells
+- card art layout
+- text slot layout
+- SVG/image loading
+- visual fallback handling
 
-- stations
-- launch systems
-- processing devices
-- fixed displays
-- shelter infrastructure
+It should not own gameplay state transitions.
 
-### Design Consequence
+### [GameState.gd](/Users/vasilibraga/springsurvival/scripts/core/GameState.gd)
 
-If an interaction can be expressed either as:
+Responsible for:
 
-- clicking tiny shapes inside a machine
-- or moving a card onto a machine
+- persistence
+- mission simulation
+- tape execution
+- salvage resolution
+- encounter generation
+- research
+- blueprint crafting resolution
+- storage operations
+- tank resolution
 
-prefer the card version unless the action is clearly a machine-only action such as:
+## 6. Persistence Model
 
-- launch
-- recover
-- open bench
-- activate reactor
+Persistence currently lives in:
 
-So in the workshop:
+- [GameState.gd](/Users/vasilibraga/springsurvival/scripts/core/GameState.gd)
 
-- assign tape by moving a tape card onto a drone card
-- assign power by moving one or more power cards onto a drone card
-- use fixed machine controls only for machine actions such as launch and recovery
+Main save file:
 
----
+- `user://programmed_cartridges.json`
 
-## 4. Main Victory Currency
+Saved state includes:
 
-The main victory currency is **preserved operational knowledge**.
+- operator
+- drone cabinet / loadouts / field state
+- tapes
+- blank tapes
+- power units
+- discovered locations
+- enemies
+- material cards
+- blueprint cards
+- crafted cards
+- journal pages
+- storage contents
+- workshop card positions
 
-That knowledge has three equal branches:
+## 7. Drone Execution Model
 
-- mechanical / programming knowledge
-- Earth / route / discovery knowledge
-- biological / genetic knowledge
+Drone execution is tape-driven and stateful.
 
-Resources, drones, and shelter systems matter because they allow the player to produce knowledge under dangerous conditions.
+Each bot tracks:
 
-They are not the ultimate long-term score by themselves.
+- position
+- facing
+- accumulator
+- program pointer
+- power charge
+- trail
+- mission location
+- pending discoveries
+- pending salvage
+- activity log
 
----
+### Energy rule
 
-## 5. Operator Selection
+Every executed instruction costs `1` power.
 
-Operator selection is a **strategic research choice**, not a combat-class choice.
+If power reaches zero:
 
-### Design Rule
+- the bot halts
+- it does not continue executing
 
-**Operator = research lens for the run**
+### Shared and per-drone commands
 
-Each operator should begin with:
+Shared control:
 
-- different starting journal knowledge
-- different practical familiarity with systems
-- different research biases
-- different notes, interpretations, or archival priorities
+- `NOP`
+- `JMP`
+- `JNZ`
+- `DEC`
+- `INC`
+- `SET`
+- `DIE`
 
-### Example Operator Biases
+Butterfly actions:
 
-- mechanical programming
-- field surveying / cartography
-- insect farming
-- fungal cultivation
-- bacterial / algal systems
-- genetics / strain selection
-- repair / salvage engineering
-- stealth / low-signature survival
+- `MOV`
+- `ROT`
+- `SCN`
 
-### What Operator Choice Should Change
+Spider actions:
 
-- what the player understands earlier
-- what research paths advance faster
-- what records are easier to interpret
-- what kinds of discoveries are more valuable in that run
+- `MOV`
+- `ROT`
+- `SCN`
+- `PCK`
+- `DRP`
+- `ATK`
 
-### What Operator Choice Should Not Primarily Be
+## 8. Mission Flow
 
-- raw combat stats
-- generic RPG strength/dexterity classes
-- arbitrary numerical bonuses detached from the fiction
+### Scan flow
 
----
+Butterfly scan:
 
-## 6. Journal Definition
+- scans a radius
+- can queue location finds
+- does not create immediate hostile encounters from scan
+- discoveries materialize when the drone returns
 
-The journal is the main roguelite progression layer.
+Spider scan:
 
-It is both:
+- forward-facing scan
+- can queue pending discoveries
 
-- archive
-- laboratory notebook
-- run history
-- codex
+### Location mission flow
 
-### Journal Domains
+If a drone is dropped onto a location card:
 
-The journal should eventually store at least:
+- the bot stores that location as the mission target
+- `PCK` only works when the bot is physically at that target position
+- salvage is stored as pending mission salvage
+- encounter rolls can generate real enemy cards
+- pending salvage is committed only on return to shelter
 
-- Earth observations
-- discovered places
-- discovered object classes
-- route records
-- programming-language knowledge
-- known instruction meanings
-- previously created programs as archived knowledge
-- biological systems knowledge
-- genetic / strain knowledge
-- operator notes
-- Ark / cryo-bank / deployment records
+### Return rule
 
-### Journal Entry Types
+When a bot reaches shelter in a terminal or completed mission state:
 
-The system should support:
+- pending discoveries are committed
+- pending salvage is committed
+- mission state is cleared
+- bot status becomes `returned`
 
-- automatic factual entries
-- player-edited notes
-- operator-authored notes
-- linked records between map, program, and biology domains
+## 9. Combat Model
 
----
+Enemies are represented as cards. Combat can be initiated through card stacking.
 
-## 7. Biology As A First-Class Pillar
+Important current drone combat rule:
 
-Biology is not secondary flavor. It is one of the three core progression pillars.
+- spider drone attack output depends on tape
+- only `ATK` instructions cause drone damage output during the fight loop
+- non-`ATK` instructions mean the drone takes damage but does not deal it
 
-### Biological Knowledge Domains
+## 10. Research Model
 
-- algae reactors
-- insect farming
-- mushroom systems
-- bacterial cultures
-- bioluminescent cultures
-- later genetics / strain selection / gene alteration
+The journal is a live gameplay system, not just flavor text.
 
-### Biology In The Game
+Research:
 
-Biology should eventually support:
+- starts from `operator + subject + journal`
+- consumes one quantity from researchable quantity-bearing cards
+- can succeed or fail
+- can create a new subject page
+- can reveal recipes
+- stores unread state
 
-- food
-- oxygen
-- waste reduction
-- stealth / low-signature survival
-- shelter resilience
-- long-term adaptive research
+The journal currently supports:
 
-### Important Rule
+- discovered pages
+- locked pages
+- partial locked recipes
+- discovered recipes on related pages
+- blueprint spawning from discovered recipes
 
-The game is not “mechanics first, biology later.”
+## 11. Crafting Model
 
-It is a **bio-mechanical survival civilization**.
+Blueprint crafting is stack-based.
 
----
+Required participants can include:
 
-## 8. Detection / Stealth Rule
+- blueprint
+- operator
+- machine
+- location subject
+- material cards
 
-Earth survival is constrained by residual orbital detection.
+Rules:
 
-Important signature types:
+- ingredient quantity can exceed the recipe requirement
+- only the required amount is consumed
+- the blueprint is destroyed on success
 
-- heat
-- CO2
-- noise
-- magnetic anomalies
+Current craft outputs resolve into:
 
-This means low-signature survival is a systems rule, not only flavor.
+- real blank tape
+- stackable material cards
+- crafted structure/equipment cards
 
-It should eventually influence:
+## 12. Storage Model
 
-- shelter design
-- machine choice
-- field operations
-- biology loops
-- waste handling
+Storage is currently implemented through crafted storage cards:
 
----
+- `TOOL CHEST`
+- `ARCHIVE SHELF`
 
-## 9. Bot Execution Rule
+They can persist stored entries and later return them to the table.
 
-There should be **one canonical tape interpreter**.
+## 13. Tank Model
 
-The same instruction semantics should govern:
+`TANK` is the current bio-processing structure.
 
-- programming-scene execution
-- route prediction
-- outside bot execution
+Implemented processes:
 
-Different scenes may present the data differently, but they should not invent separate program logic.
+- `ALGAE -> FIBER x2`
+- `BACTERIA + BONE MEAL -> MEDICINE`
+- `MEALWORMS -> BIOMASS x2`
 
----
+This is the start of the biological production chain.
 
-## 10. Product-Level Core Loop
+## 14. Current Architectural Strengths
 
-The intended top-level loop is:
+The current build already has a coherent spine:
 
-1. Choose operator on the Ark
-2. Enter workshop
-3. Program and store cartridge
-4. Load cartridge into bot
-5. Install power
-6. Launch bot
-7. Observe route and discoveries
-8. Interpret results on map and in journal
-9. Preserve knowledge
-10. Lose the run, keep the record, deploy again
+- card/table interaction
+- drone mission loop
+- returned knowledge
+- journal research
+- blueprint crafting
+- consumable survival economy
+- storage
+- tank processing
 
-Within that loop:
+## 15. Current Architectural Gaps
 
-- preparation and assignment should increasingly happen through cards
-- execution and monitoring should happen through machinery
+These are still partial or missing:
 
----
+- real equipment card behavior and stat application
+- second operator / rescued operator systems
+- cage-specific enemy research gating
+- stronger recipe completion rules in the journal
+- broader biological structure network beyond the tank
 
-## 11. Long-Term Direction
+## 16. Documentation Rule
 
-The long-term world progression should support:
+When changing behavior, update at least:
 
-- better understanding of Earth
-- richer program archives
-- stronger biological systems
-- genetic and strain knowledge
-- operator specialization
-- cryo-bank / deployment continuity
-- later colony-network or distributed knowledge growth
+- [README.md](/Users/vasilibraga/springsurvival/README.md)
+- [GAME_ARCHITECTURE.md](/Users/vasilibraga/springsurvival/GAME_ARCHITECTURE.md)
+- relevant JSON catalogs in [resources/instructions](/Users/vasilibraga/springsurvival/resources/instructions)
 
-The future civilization should not grow primarily through stockpiled items.
-
-It should grow through **better preserved knowledge and better system understanding**.
-
----
-
-## 12. Working Design Principles
-
-When a future feature is ambiguous, prefer the version that:
-
-- makes knowledge more valuable than material
-- keeps machines physical and finite
-- preserves readable mechanical causality
-- supports low-signature survival
-- treats biology as equal to mechanics
-- makes operator choice about understanding, not power fantasy
-- strengthens the journal as the true persistence layer
+This keeps the design documentation tied to the live runtime. 

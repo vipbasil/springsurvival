@@ -1,178 +1,295 @@
 # Last Spring
 
-A Godot 4.x prototype for a knowledge-driven mechanical and biological survival game.
+`Last Spring` is a Godot 4 prototype about surviving through indirect action, recorded knowledge, and low-tech systems. The player manages a shelter worktable, programs drones with punch tape, scavenges locations, researches what is found, and turns field matter into usable supplies.
 
-## Purpose
+This document is the current project overview for the implemented build. It intentionally describes what exists now, not older long-term design notes.
 
-"Last Spring" is a systems-driven post-electronic survival prototype about physical programming, analog drones, low-signature survival, and persistent knowledge.
+## Current Play Loop
 
-The current game direction is:
+1. Manage the workshop table.
+2. Program a tape on the bench.
+3. Load a drone with a tape and power.
+4. Send the drone to scan or scavenge.
+5. Let the drone return with pending discoveries and salvage.
+6. Fight enemies with the operator or drones when needed.
+7. Research cards in the journal to reveal recipes and subject knowledge.
+8. Copy blueprints from discovered recipes.
+9. Craft food, medicine, tape media, storage, and bio-processing structures.
+10. Store cards in containers and keep the shelter economy stable.
 
-- select an operator from the Ark
-- enter an Earth shelter workshop
-- program drones through punch-tape cartridges
-- install physical power units and launch drones
-- observe routes and discoveries on mechanical map displays
-- preserve knowledge in a journal that survives between runs
+## What Exists Right Now
 
-The long-term design is built on three equal progression pillars:
+### Workshop Machines
 
-- mechanical / programming knowledge
-- world / cartographic knowledge
-- biological / genetic knowledge
+- `Programming Bench`
+- `Route Table`
+- `Charge Machine`
+- `Journal`
+- `Trash`
 
-One important current architecture rule:
+These are all represented as machine cards on the workshop table.
 
-- all movable entities are cards
-- all fixed infrastructure is machinery
+### Card Families
 
-More specifically for the workshop:
+- `operator`
+- `machine`
+- `drone`
+- `tape`
+- `resource`
+- `material`
+- `location`
+- `enemy`
+- `blueprint`
+- `crafted`
 
-- the workshop is now a single table surface
-- movable entities live freely on that table as cards
-- drones are composite cards
-- tape cards attach to drone cards as tape labels/badges
-- charged power cards add into the drone card's total available power
-- the programming bench and route table are currently represented as machinery cards on the table for interaction clarity
-- launching/recovery currently happens by dragging drone cards onto the route-table card
+### Drones
 
-## Where To Look
+- `Spider Drone`
+  - role: ground salvage / combat drone
+  - action commands: `MOV`, `ROT`, `SCN`, `PCK`, `DRP`, `ATK`
+- `Butterfly Drone`
+  - role: scout / passive survey drone
+  - action commands: `MOV`, `ROT`, `SCN`
 
-If you are continuing development, use these files as the main entry points:
+Shared control commands for both drones:
 
-- `README.md`: quick project overview, active scene/script structure, and current prototype loop
-- `TODO.md`: backlog, Scrum-style ordering, done vs next work, and feature priorities
-- `LORE.md`: canonical setting, fiction, Ark/Earth relationship, journal meaning, and world rules
-- `GAME_ARCHITECTURE.md`: top-level product/system decisions, run structure, persistence rules, and layer separation
-- `ARTSTYLE.md`: visual language, materials, mood, and UI style rules
-- `DRONE_DESIGN.md`: drone design rules, visual exemplars, and future drone direction
-- `LOCATION_MODEL.md`: map-site taxonomy, scan rules, survey levels, and when detected places become cards
+- `NOP`
+- `JMP`
+- `JNZ`
+- `DEC`
+- `INC`
+- `SET`
+- `DIE`
 
-If you want the current playable scenes:
+### Locations
 
-- `scenes/main/Main.tscn`: workshop hub
-- `scenes/main/ProgrammingMain.tscn`: full programming / punch-machine scene
+Currently generated location cards:
 
-If you want the most important gameplay state and logic:
+- `CACHE`
+- `CRATER`
+- `TOWER`
+- `SURVEILLANCE ZONE`
+- `FACILITY`
+- `POND`
+- `BUNKER`
+- `FIELD`
+- `DUMP`
+- `NEST`
+- `RUIN`
 
-- `scripts/core/GameState.gd`: persistent state, cartridges, power units, bot loadouts, outside-world state
-- `scripts/core/EventBus.gd`: cross-scene signals
-- `scripts/workshop_main.gd`: workshop rendering and interaction logic
-- `scripts/main.gd`: programming-scene flow, save-on-exit, and workshop return
-- `scripts/machines/PunchMachine.gd`: punch-machine behavior and tape authoring
+### Enemies
 
-If you want instruction / language behavior:
+- `Surveillance Drone`
+- `Infantry Drone`
+- `Stalker`
+- `Wolf Pack`
+- `Grizzly`
 
-- `scripts/data/InstructionLibrary.gd`: canonical instruction definitions
-- `scripts/data/TapeDecoder.gd`: mnemonic parsing and decode path
-- `scripts/data/PunchEncoding.gd`: 5-bit keyboard / opcode labeling model
-- `scripts/systems/TapeExecutionSystem.gd`: execution logic used by the automaton scene
+### Materials And Resources
 
-If you want world / route-table behavior:
+Core material/resource economy:
 
-- `scripts/core/GameState.gd`: outside bot execution and persistent discoveries
-- `scripts/workshop_main.gd`: route-table display and cabinet/workshop presentation
+- `Metal`
+- `Paper`
+- `Fiber`
+- `Biomass`
+- `Hide`
+- `Bone`
+- `Dry Rations`
+- `Medicine`
+- `Growth Medium`
+- `Mushrooms`
+- `Algae`
+- `Bacteria`
+- `Mealworms`
+- `Bone Meal`
+- `Power Unit`
 
-## Scene Structure
+### Crafted / Structure Outputs
 
-- `scenes/main/Main.tscn`: Startup workshop scene. The current workshop is a single tabletop card space rather than separate active shelf/cabinet regions.
-- `scenes/main/ProgrammingMain.tscn`: Full punch-machine programming scene.
-- `scenes/world/`: World container and grid map.
-- `scenes/automata/`: Automaton entity with components.
-- `scenes/machines/`: Punch machine UI/mechanical programmer.
-- `scenes/ui/`: Tape editor, automaton status, and log panels.
+Important crafted outputs currently in the active recipe catalog:
 
-## Script Structure
+- `FRESH TAPE`
+- `TOOL CHEST`
+- `ARCHIVE SHELF`
+- `BROOD CAGE`
+- `TANK`
+- `KNIFE`
+- `BOW`
+- `PLATE MAIL`
+- `HIDE CLOAK`
+- `TOOL KIT`
 
-- `scripts/core/`: EventBus (signals), GameState (persistent and run state), WorldObject (base).
-- `scripts/components/`: SpringEnergyComponent, TapeProgramComponent, GridPositionComponent, InventoryComponent.
-- `scripts/systems/`: TapeExecutionSystem (execution logic), AutomatonSystem (actions), EnergySystem (energy).
-- `scripts/automata/`: Automaton.gd (entity script).
-- `scripts/machines/`: PunchMachine.gd (visual 5-channel tape puncher).
-- `scripts/ui/`: Panel scripts for UI interaction.
-- `scripts/world/`: World.gd, GridMap.gd.
-- `scripts/data/`: InstructionLibrary.gd (instruction definitions), TapeDecoder.gd (parsing), PunchEncoding.gd (5-bit row map).
+## Current Implemented Systems
 
-## Tape Execution
+### Tape Programming
 
-Tape programs can be authored as mnemonics in the `TapeEditorPanel` or punched physically in `PunchMachine.tscn`.
+- Blank tapes are real physical media on the table.
+- Programmed tapes are saved and persist.
+- A tape is loaded onto a drone by drag-and-drop.
+- Every executed instruction spends power.
 
-The canonical tape model is:
+### Drone Missions
 
-- one 5-bit row = one physical symbol
-- opcode rows identify actions such as `MOV`, `ROT`, `SET`, `JMP`, `JNZ`, `DIE`
-- if an opcode needs an argument, the following row is read as numeric data
-- `ROT` reads its argument as signed 5-bit data; other current argument-bearing instructions read unsigned values
+- Drones can be launched from the `Route Table`.
+- `Butterfly` scan discovers pending location intel in a radius and reveals it only after return.
+- `Spider` can scavenge with `PCK` only when it is physically at the assigned location.
+- Salvage is kept pending until the drone returns to shelter.
+- Drones halt on zero power.
+- Drones keep an activity log with position, instruction, energy, and accumulator state.
 
-`TapeDecoder.gd` parses mnemonic programs, while `PunchEncoding.gd` drives the 5-bit keyboard and row labeling model. `TapeExecutionSystem.gd` is the main interpreter used by the programming scene.
+### Combat
 
-## Punch Machine
+- Enemies are real cards on the table.
+- The operator or a powered drone can be stacked onto an enemy card to start combat.
+- Spider drone combat reads the loaded tape:
+  - if the current combat instruction is `ATK`, the spider deals damage
+  - otherwise it only takes damage
 
-`PunchMachine.tscn` provides a visual 5-channel punch-tape composer alongside the text editor.
+### Journal Research
 
-Current important rules:
+- Research starts when the operator and a valid subject card are stacked on the `Journal`.
+- Research consumes one quantity from the researched subject each attempt if that subject uses quantities.
+- Research can succeed or fail.
+- Success writes knowledge into the journal and may reveal a recipe.
+- Failure costs operator energy and may also cost HP.
+- The journal supports:
+  - discovered pages
+  - locked pages
+  - partial / locked recipe visibility
+  - unread markers
+  - blueprint copying from discovered recipes
 
-- each punched row is a 5-bit slice such as `10100`
-- tape capacity is currently `48` rows
-- rows are stored physically and later saved as labeled cartridges
-- cartridges are finite paper media and are intended to wear over time
-- the punch machine is part of the workshop preparation loop, not the whole game
+### Crafting
 
-## Workshop Loop
+- Crafting starts when a blueprint, the operator, and the required ingredients are stacked correctly.
+- Material cards only need to meet or exceed the required quantity.
+- Only the required quantity is consumed.
+- The blueprint is destroyed on successful craft.
+- `FRESH TAPE` creates a real blank tape instead of a generic crafted card.
+- Food and medicine craft into real stackable material cards.
 
-The workshop is now the main preparation hub:
+### Storage
 
-- leaving the programming bench saves a new programmed tape card and consumes one blank tape card
-- programmed tape cards, blank tape cards, power cards, drone cards, and the trash card all live on the workshop table
-- tape cards are dragged onto drone cards
-- power cards are dragged onto drone cards and add to total available power
-- launched drones execute their saved tape through the route-table card
-- the route table shows the shelter origin, executed trails, predicted paths, and discovered outside objects
-- drone scans are intended to detect sites in scanned territory first, then create location cards only when the drone returns with the information
-- operator scanning on the route-table card currently generates random location or hostile cards directly; location cards are current known scan occurrences and disappear from the route-card map when forgotten
+Current storage structures:
 
-The current interaction grammar is:
+- `TOOL CHEST`
+- `ARCHIVE SHELF`
 
-- movable entities are cards and are manipulated by drag and drop
-- workshop preparation happens by composing cards onto drone cards, not by tiny slot widgets
-- the bench and route table are the main machinery-facing tabletop cards in the current build
+They can store:
 
-The intended longer-term interaction grammar remains:
+- material cards
+- cage-type crafted cards
 
-- cards for movable entities such as drones, media, power, materials, and archived program objects
-- machinery for fixed stations such as the programming bench, route table, large map, and shelter devices
+Stored cards persist and can be withdrawn later.
 
-This workshop is only one layer of the intended architecture:
+### Tank Processing
 
-- Ark layer: operator selection and long-term strategic progression
-- Workshop layer: physical preparation, programming, loading, launching
-- Route-table layer: live operational monitoring
-- Large-map layer: strategic Earth planning
-- Journal layer: cross-run preserved knowledge
+`TANK` is now a working processing station.
 
-## Persistence Rule
+Current tank processes:
 
-The current design rule is:
+- `ALGAE -> FIBER x2`
+- `BACTERIA + BONE MEAL -> MEDICINE x1`
+- `MEALWORMS -> BIOMASS x2`
 
-- physical state is run-based
-- recorded knowledge is meta-progress
+## Important Active Recipe Chain
 
-In practice, this means the long-term target is for the journal to preserve:
+The most coherent survival-production chain in the current build is:
 
-- Earth observations
-- route history
-- program knowledge
-- archived programs as knowledge
-- biological and genetic research
-- operator and deployment records
+- `FIELD -> FIBER`
+- `FIBER -> PAPER`
+- `BIOMASS + FIBER -> DRY RATIONS`
+- `BIOMASS + FIBER + BONE -> MEDICINE`
+- `BIOMASS + FIBER -> GROWTH MEDIUM`
+- `POND + GROWTH MEDIUM -> ALGAE / MUSHROOMS`
+- `BIOMASS + GROWTH MEDIUM -> BACTERIA`
+- `BIOMASS + FIBER -> MEALWORMS`
+- `BONE -> BONE MEAL`
+- `ALGAE / BACTERIA / MEALWORMS -> TANK processing`
+- `PAPER -> FRESH TAPE`
 
-while physical cartridges, power units, bot loadouts, and local shelf state are treated as run material.
+## Source Of Truth Files
 
-## Next Steps
+### Runtime
 
-- Add recovery and return logic for halted or stranded bots.
-- Add the journal as the main cross-run progression entity.
-- Expand the large map and separate it cleanly from the live route table.
-- Add detection / zero-waste survival systems.
-- Add biological survival systems and later genetic progression.
-- Add the Ark operator-selection layer above the workshop.
+- [GameState.gd](/Users/vasilibraga/springsurvival/scripts/core/GameState.gd)
+  - persistent state
+  - location generation
+  - drone execution
+  - enemy loot
+  - research
+  - crafting
+  - tank processing
+  - storage persistence
+- [workshop_main.gd](/Users/vasilibraga/springsurvival/scripts/workshop_main.gd)
+  - workshop orchestration
+  - drag/drop interactions
+  - progress bars
+  - journal overlay
+  - map display
+- [WorkshopArt.gd](/Users/vasilibraga/springsurvival/scripts/ui/WorkshopArt.gd)
+  - card drawing
+  - SVG loading
+  - card variants and layouts
+- [InstructionLibrary.gd](/Users/vasilibraga/springsurvival/scripts/data/InstructionLibrary.gd)
+  - instruction definitions
+- [PunchEncoding.gd](/Users/vasilibraga/springsurvival/scripts/data/PunchEncoding.gd)
+  - 5-bit punch encoding
+
+### Design Data
+
+- [recipes.json](/Users/vasilibraga/springsurvival/resources/instructions/recipes.json)
+  - active recipe catalog
+- [enemy_loot.json](/Users/vasilibraga/springsurvival/resources/instructions/enemy_loot.json)
+  - enemy death loot tables
+- [entities.json](/Users/vasilibraga/springsurvival/resources/instructions/entities.json)
+  - current entity catalog for design/reference
+
+## Persistence
+
+Persistence authority is:
+
+- [GameState.gd](/Users/vasilibraga/springsurvival/scripts/core/GameState.gd)
+
+Main save file:
+
+- `user://programmed_cartridges.json`
+
+Saved state currently includes:
+
+- operator state
+- programmed tapes
+- blank tapes
+- power units
+- drones and mission state
+- discovered locations
+- enemies
+- materials
+- blueprints
+- crafted cards
+- journal entries
+- storage contents
+- workshop layout
+
+## Current Known Gaps
+
+These systems are partially defined but not fully live yet:
+
+- equipment cards can exist in recipes/journal, but real equipping/stat application is not finished
+- enemy-in-cage research rules are not enforced yet
+- the journal still needs stronger partial-vs-complete recipe gating
+- the second-operator idea does not exist in runtime yet
+
+## Other Docs
+
+- [GAME_ARCHITECTURE.md](/Users/vasilibraga/springsurvival/GAME_ARCHITECTURE.md)
+  - current system architecture and data ownership
+- [DRONE_DESIGN.md](/Users/vasilibraga/springsurvival/DRONE_DESIGN.md)
+  - current drone behavior model and command rules
+- [LOCATION_MODEL.md](/Users/vasilibraga/springsurvival/LOCATION_MODEL.md)
+  - current location generation, loot, threat, and mission model
+- [ARTSTYLE.md](/Users/vasilibraga/springsurvival/ARTSTYLE.md)
+  - visual language
+- [CARD_UX.md](/Users/vasilibraga/springsurvival/CARD_UX.md)
+  - card UI notes
