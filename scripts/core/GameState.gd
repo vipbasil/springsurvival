@@ -49,6 +49,37 @@ const RESEARCH_DRONE_TYPES := ["spider", "butterfly"]
 const RESEARCH_TAPE_TYPES := ["programmed", "blank"]
 const RESEARCH_RESOURCE_TYPES := ["spring_charge"]
 const RESEARCH_EQUIPMENT_TYPES := ["knife", "bow", "plate_mail", "hide_cloak", "tool_kit"]
+const RESEARCH_CRAFTED_TYPES := ["tank", "tool_chest", "brood_cage", "archive_shelf"]
+const START_OPERATOR_PROFILES := [
+	{
+		"id": "lera",
+		"name": "OP. LERA",
+		"focus": "MECH / ARCHIVE",
+		"summary": "Balanced mechanic with a cleaner start on paper, tapes, and workshop handling.",
+		"starting_equipment": "tool_kit",
+		"extra_materials": [{"type": "paper", "quantity": 1}],
+		"known_subjects": ["material_paper"],
+	},
+	{
+		"id": "mira",
+		"name": "OP. MIRA",
+		"focus": "BIO / SURVEY",
+		"summary": "Stealth-biased surveyor with better early biomass and substrate intuition.",
+		"starting_equipment": "hide_cloak",
+		"extra_materials": [{"type": "biomass", "quantity": 1}, {"type": "fiber", "quantity": 1}],
+		"known_subjects": ["material_mushrooms"],
+	},
+	{
+		"id": "dren",
+		"name": "OP. DREN",
+		"focus": "SALVAGE / SECURITY",
+		"summary": "Harder salvage start with better metal handling and rough hostile containment prep.",
+		"starting_equipment": "knife",
+		"extra_materials": [{"type": "metal", "quantity": 1}],
+		"known_subjects": ["material_metal", "crafted_tool_chest", "crafted_brood_cage"],
+	},
+]
+const STARTER_DISCOVERED_SUBJECT_KEYS := ["location_field", "location_pond", "material_fiber", "material_biomass"]
 
 const ENEMY_TYPE_DEFS := {
 	"grizzly": {
@@ -344,6 +375,152 @@ func is_run_active() -> bool:
 
 func get_operator_state() -> Dictionary:
 	return operator_state.duplicate(true)
+
+func get_start_operator_profiles() -> Array:
+	return START_OPERATOR_PROFILES.duplicate(true)
+
+func has_persistent_run_data() -> bool:
+	return FileAccess.file_exists(CARTRIDGE_STORAGE_PATH)
+
+func needs_operator_selection() -> bool:
+	return not has_persistent_run_data() and str(operator_state.get("profile_id", "")).is_empty()
+
+func start_new_run_with_operator(profile_id: String) -> bool:
+	var profile := _get_start_operator_profile(profile_id)
+	if profile.is_empty():
+		return false
+	var persistent_journal_entries := Array(journal_entries).duplicate(true)
+	programmed_cartridges.clear()
+	_initialize_operator_state()
+	_initialize_bot_loadouts()
+	_initialize_outside_objects()
+	location_cards = []
+	enemy_cards = []
+	material_cards = []
+	blueprint_cards = []
+	crafted_cards = []
+	equipment_cards = []
+	journal_entries = persistent_journal_entries
+	workshop_layout = {}
+	_initialize_power_unit_slots()
+	_initialize_blank_slots()
+	selected_cartridge_id = ""
+	_apply_start_operator_profile(profile)
+	_seed_starter_shelter()
+	_refresh_bot_predictions()
+	save_programmed_cartridges()
+	EventBus.operator_state_changed.emit(get_operator_state())
+	EventBus.cartridges_changed.emit(programmed_cartridges)
+	EventBus.cartridge_selected.emit(selected_cartridge_id)
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	EventBus.outside_world_changed.emit()
+	return true
+
+func _get_start_operator_profile(profile_id: String) -> Dictionary:
+	var normalized_id := profile_id.strip_edges().to_lower()
+	if normalized_id.is_empty():
+		return {}
+	for profile_variant in START_OPERATOR_PROFILES:
+		if typeof(profile_variant) != TYPE_DICTIONARY:
+			continue
+		var profile: Dictionary = profile_variant
+		if str(profile.get("id", "")).to_lower() == normalized_id:
+			return profile.duplicate(true)
+	return {}
+
+func _apply_operator_profile_defaults() -> void:
+	var profile_id := str(operator_state.get("profile_id", "")).strip_edges().to_lower()
+	if profile_id.is_empty():
+		return
+	var profile := _get_start_operator_profile(profile_id)
+	if profile.is_empty():
+		return
+	if str(operator_state.get("display_name", "")).strip_edges().is_empty():
+		operator_state["display_name"] = str(profile.get("name", "OPERATOR"))
+	if str(operator_state.get("focus", "")).strip_edges().is_empty():
+		operator_state["focus"] = str(profile.get("focus", ""))
+
+func _apply_start_operator_profile(profile: Dictionary) -> void:
+	operator_state["profile_id"] = str(profile.get("id", ""))
+	operator_state["display_name"] = str(profile.get("name", "OPERATOR"))
+	operator_state["focus"] = str(profile.get("focus", ""))
+	operator_state["equipment_slots"] = _default_equipment_slots()
+	var equipment_type := str(profile.get("starting_equipment", "")).strip_edges().to_lower()
+	if not equipment_type.is_empty():
+		var spec := _get_equipment_type_spec(equipment_type)
+		if not spec.is_empty():
+			var slots := _default_equipment_slots()
+			slots[0] = {
+				"slot_index": 0,
+				"item_type": equipment_type,
+				"display_name": str(spec.get("display_name", _get_equipment_display_name(equipment_type))),
+			}
+			operator_state["equipment_slots"] = slots
+
+func _seed_starter_shelter() -> void:
+	for power_index in range(2):
+		power_unit_slots.append({
+			"id": "power_unit_%d" % power_index,
+			"charge": BOT_POWER_CAPACITY,
+			"max_charge": BOT_POWER_CAPACITY,
+		})
+	_add_material_card({"type": "metal", "quantity": 2})
+	_add_material_card({"type": "biomass", "quantity": 2})
+	_add_material_card({"type": "fiber", "quantity": 2})
+	_add_material_card({"type": "paper", "quantity": 1})
+	var profile := _get_start_operator_profile(str(operator_state.get("profile_id", "")))
+	for extra_variant in Array(profile.get("extra_materials", [])):
+		if typeof(extra_variant) != TYPE_DICTIONARY:
+			continue
+		var extra_material: Dictionary = extra_variant
+		_add_material_card({
+			"type": str(extra_material.get("type", "")),
+			"quantity": maxi(int(extra_material.get("quantity", 0)), 0),
+		})
+	for subject_key in STARTER_DISCOVERED_SUBJECT_KEYS:
+		_seed_journal_subject(str(subject_key))
+	for subject_key_variant in Array(profile.get("known_subjects", [])):
+		_seed_journal_subject(str(subject_key_variant))
+	save_programmed_cartridge("START LOOP", _build_starter_demo_cartridge_rows())
+
+func _seed_journal_subject(subject_key: String, unread: bool = false) -> void:
+	if subject_key.is_empty():
+		return
+	if _get_journal_entry_index(subject_key) != -1:
+		return
+	var subject_def := _get_research_subject_definition_by_key(subject_key)
+	if subject_def.is_empty():
+		return
+	journal_entries.append({
+		"subject_key": subject_key,
+		"subject_kind": str(subject_def.get("subject_kind", "")),
+		"subject_type": str(subject_def.get("subject_type", "")),
+		"title": str(subject_def.get("title", subject_key.replace("_", " ").to_upper())),
+		"description": str(subject_def.get("description", "")),
+		"notes_sections": Array(subject_def.get("notes_sections", [])).duplicate(true),
+		"recipe_ids": _get_related_recipe_ids(subject_key),
+		"recipes": [],
+		"related_subjects": [],
+		"unread": unread,
+		"attempts": 0,
+	})
+
+func _build_starter_demo_cartridge_rows() -> Array:
+	var row_indices := [
+		5,   # SCN
+		1,   # MOV
+		2,   # ROT
+		4,   # arg 4
+		17,  # DIE
+	]
+	var rows: Array = []
+	for row_number in range(row_indices.size()):
+		var opcode_index := int(row_indices[row_number])
+		rows.append({
+			"index": row_number,
+			"bits": PunchEncodingData.bits_for_index(opcode_index),
+		})
+	return rows
 
 func can_open_programming_bench() -> bool:
 	return has_blank_cartridge_available()
@@ -797,8 +974,14 @@ func can_recover_bot(bot_index: int) -> bool:
 	var status := str(bot_loadouts[bot_index].get("outside_status", "cabinet"))
 	return status == "halted" or status == "stranded"
 
+func can_operator_retrieve_bot(bot_index: int) -> bool:
+	if bot_index < 0 or bot_index >= bot_loadouts.size():
+		return false
+	var status := str(bot_loadouts[bot_index].get("outside_status", "cabinet"))
+	return status == "active" or status == "halted" or status == "stranded"
+
 func get_bot_recovery_distance(bot_index: int) -> int:
-	if not can_recover_bot(bot_index):
+	if not can_operator_retrieve_bot(bot_index):
 		return 0
 	var bot_state: Dictionary = bot_loadouts[bot_index]
 	var bot_position := Vector2(bot_state.get("outside_position", get_shelter_position()))
@@ -810,14 +993,15 @@ func get_bot_recovery_energy_cost(bot_index: int) -> int:
 	return maxi(1, int(ceil(float(distance) / 2.0)) + 1)
 
 func resolve_bot_recovery(bot_index: int) -> Dictionary:
-	if not can_recover_bot(bot_index):
+	if not can_operator_retrieve_bot(bot_index):
 		return {"ok": false, "message": "Recovery unavailable"}
 	var bot_name := _bot_display_name(bot_index)
+	var bot_state: Dictionary = bot_loadouts[bot_index]
+	var retrieval_from_active := str(bot_state.get("outside_status", "cabinet")) == "active"
 	var energy_before := int(operator_state.get("energy", 0))
 	var hp_before := int(operator_state.get("hp", 0))
 	var energy_cost := get_bot_recovery_energy_cost(bot_index)
 	_apply_operator_loss(energy_cost)
-	var bot_state: Dictionary = bot_loadouts[bot_index]
 	bot_state["outside_position"] = get_shelter_position()
 	var trail: Array = bot_state.get("outside_trail", []).duplicate()
 	if trail.is_empty() or trail[-1] != get_shelter_position():
@@ -838,7 +1022,8 @@ func resolve_bot_recovery(bot_index: int) -> Dictionary:
 		"energy_loss": maxi(energy_before - int(operator_state.get("energy", 0)), 0),
 		"hp_loss": maxi(hp_before - int(operator_state.get("hp", 0)), 0),
 		"collapsed": str(operator_state.get("status", "")) == "dead",
-		"summary": str(bot_state.get("last_mission_summary", "%s recovered" % bot_name)),
+		"retrieval_from_active": retrieval_from_active,
+		"summary": str(bot_state.get("last_mission_summary", "%s %s" % [bot_name, "retrieved" if retrieval_from_active else "recovered"])),
 	}
 
 func recover_bot(bot_index: int) -> bool:
@@ -951,6 +1136,7 @@ func get_journal_display_entries() -> Array:
 				continue
 			discovered_recipes_by_id[recipe_id] = recipe
 		discovered_by_key[subject_key] = entry
+	var visible_by_key := _build_formula_known_journal_entries(discovered_by_key)
 	var display_entries: Array = []
 	var seen_subject_keys := {}
 	for subject in _get_all_research_subjects():
@@ -962,32 +1148,133 @@ func get_journal_display_entries() -> Array:
 		if subject_def.is_empty():
 			continue
 		var related_recipe_ids := _get_related_recipe_ids(subject_key)
-		if discovered_by_key.has(subject_key):
-			var discovered_entry: Dictionary = Dictionary(discovered_by_key[subject_key]).duplicate(true)
-			discovered_entry["recipes"] = _build_journal_recipe_display_list(
+		if visible_by_key.has(subject_key):
+			var visible_entry: Dictionary = Dictionary(visible_by_key[subject_key]).duplicate(true)
+			visible_entry["recipes"] = _build_journal_recipe_display_list(
 				subject_key,
 				discovered_recipes_by_id,
-				related_recipe_ids
+				related_recipe_ids,
+				visible_by_key
 			)
-			discovered_entry["recipe_ids"] = related_recipe_ids.duplicate()
-			discovered_entry["locked"] = false
-			display_entries.append(discovered_entry)
+			visible_entry["recipe_ids"] = related_recipe_ids.duplicate()
+			visible_entry["related_subjects"] = _build_journal_related_subjects(subject_key, related_recipe_ids, visible_by_key)
+			visible_entry["locked"] = false
+			visible_entry = _apply_live_journal_subject_fields(visible_entry, subject_def)
+			display_entries.append(visible_entry)
 			continue
 		var locked_entry := _build_locked_journal_entry(subject_key, subject_def)
-		locked_entry["recipes"] = _build_journal_recipe_display_list(subject_key, discovered_recipes_by_id, related_recipe_ids)
+		locked_entry["recipes"] = _build_journal_recipe_display_list(subject_key, discovered_recipes_by_id, related_recipe_ids, visible_by_key)
 		locked_entry["recipe_ids"] = related_recipe_ids.duplicate()
+		locked_entry["related_subjects"] = _build_journal_related_subjects(subject_key, related_recipe_ids, visible_by_key)
 		display_entries.append(locked_entry)
-	for subject_key_variant in discovered_by_key.keys():
+	for subject_key_variant in visible_by_key.keys():
 		var subject_key := str(subject_key_variant)
 		if seen_subject_keys.has(subject_key):
 			continue
-		var fallback_entry: Dictionary = Dictionary(discovered_by_key[subject_key]).duplicate(true)
+		var fallback_entry: Dictionary = Dictionary(visible_by_key[subject_key]).duplicate(true)
 		var fallback_recipe_ids := _get_related_recipe_ids(subject_key)
 		fallback_entry["recipe_ids"] = fallback_recipe_ids.duplicate()
-		fallback_entry["recipes"] = _build_journal_recipe_display_list(subject_key, discovered_recipes_by_id, fallback_recipe_ids)
+		fallback_entry["recipes"] = _build_journal_recipe_display_list(subject_key, discovered_recipes_by_id, fallback_recipe_ids, visible_by_key)
+		fallback_entry["related_subjects"] = _build_journal_related_subjects(subject_key, fallback_recipe_ids, visible_by_key)
 		fallback_entry["locked"] = false
 		display_entries.append(fallback_entry)
 	return display_entries
+
+func _apply_live_journal_subject_fields(entry: Dictionary, subject_def: Dictionary) -> Dictionary:
+	var result := entry.duplicate(true)
+	if subject_def.has("notes_sections"):
+		result["notes_sections"] = Array(subject_def.get("notes_sections", [])).duplicate(true)
+	return result
+
+func _build_formula_known_journal_entries(discovered_by_key: Dictionary) -> Dictionary:
+	var visible_by_key := {}
+	for subject_key_variant in discovered_by_key.keys():
+		var subject_key := str(subject_key_variant)
+		visible_by_key[subject_key] = Dictionary(discovered_by_key[subject_key]).duplicate(true)
+	var changed := true
+	while changed:
+		changed = false
+		for recipe_variant in _get_all_loaded_research_recipes():
+			if typeof(recipe_variant) != TYPE_DICTIONARY:
+				continue
+			var recipe: Dictionary = Dictionary(recipe_variant)
+			var result_subject_key := _get_named_subject_key(str(recipe.get("result", "")))
+			if result_subject_key.is_empty() or visible_by_key.has(result_subject_key):
+				continue
+			var formula_parts: Array = _normalize_recipe_result_parts(str(recipe.get("result", "")).to_upper(), _sanitize_recipe_parts(Array(recipe.get("formula_parts", [])).duplicate(true)))
+			if _get_journal_recipe_state(result_subject_key, formula_parts, visible_by_key) != "complete":
+				continue
+			var subject_def := _get_research_subject_definition_by_key(result_subject_key)
+			if subject_def.is_empty():
+				continue
+			visible_by_key[result_subject_key] = _build_formula_known_journal_entry(result_subject_key, subject_def)
+			changed = true
+	return visible_by_key
+
+func _build_formula_known_journal_entry(subject_key: String, subject_def: Dictionary) -> Dictionary:
+	return {
+		"subject_key": subject_key,
+		"subject_kind": str(subject_def.get("subject_kind", "")),
+		"subject_type": str(subject_def.get("subject_type", "")),
+		"title": str(subject_def.get("title", "UNKNOWN ENTRY")),
+		"description": str(subject_def.get("description", "")),
+		"recipe_ids": _get_related_recipe_ids(subject_key),
+		"recipes": [],
+		"unread": false,
+		"attempts": 0,
+		"locked": false,
+		"known_from_formula": true,
+	}
+
+func _build_journal_related_subjects(subject_key: String, related_recipe_ids: Array, discovered_by_key: Dictionary) -> Array:
+	var related_keys: Array[String] = []
+	for recipe_id_variant in related_recipe_ids:
+		var recipe_id := str(recipe_id_variant)
+		if recipe_id.is_empty():
+			continue
+		var live_recipe := _get_loaded_recipe_by_id(recipe_id)
+		if live_recipe.is_empty():
+			continue
+		for related_subject_key_variant in _get_recipe_related_subject_keys(live_recipe):
+			var related_subject_key := str(related_subject_key_variant)
+			if related_subject_key.is_empty() or related_subject_key == subject_key:
+				continue
+			related_keys.append(related_subject_key)
+	var related_subjects: Array = []
+	for related_subject_key in _dedupe_strings(related_keys):
+		var subject_def := _get_research_subject_definition_by_key(related_subject_key)
+		var discovered := discovered_by_key.has(related_subject_key)
+		var title := ""
+		if discovered:
+			title = str(Dictionary(discovered_by_key[related_subject_key]).get("title", "")).strip_edges()
+		if title.is_empty() and not subject_def.is_empty():
+			title = str(subject_def.get("title", "")).strip_edges()
+		if title.is_empty():
+			continue
+		related_subjects.append({
+			"subject_key": related_subject_key,
+			"title": title if discovered else _mask_locked_journal_label(title),
+			"locked": not discovered,
+			"subject_kind": str(subject_def.get("subject_kind", "")),
+			"subject_type": str(subject_def.get("subject_type", "")),
+			"unread": is_journal_entry_unread(related_subject_key),
+		})
+	return related_subjects
+
+func _get_research_subject_definition_by_key(subject_key: String) -> Dictionary:
+	var subject := _build_research_subject_from_key(subject_key)
+	if subject.is_empty():
+		return {}
+	return _get_research_subject_definition(subject)
+
+func _build_research_subject_from_key(subject_key: String) -> Dictionary:
+	var split_index := subject_key.find("_")
+	if split_index == -1 or split_index >= subject_key.length() - 1:
+		return {}
+	return {
+		"kind": subject_key.substr(0, split_index),
+		"type": subject_key.substr(split_index + 1, subject_key.length() - split_index - 1),
+	}
 
 func has_unread_journal_entries() -> bool:
 	for entry_variant in journal_entries:
@@ -1217,6 +1504,18 @@ func is_storage_crafted_card(card_id: String) -> bool:
 		return false
 	return _is_storage_crafted_type(str(crafted_cards[crafted_index].get("type", "")))
 
+func is_tool_chest_crafted_card(card_id: String) -> bool:
+	var crafted_index := _find_crafted_card_index(card_id)
+	if crafted_index == -1:
+		return false
+	return str(crafted_cards[crafted_index].get("type", "")) == "tool_chest"
+
+func is_archive_shelf_crafted_card(card_id: String) -> bool:
+	var crafted_index := _find_crafted_card_index(card_id)
+	if crafted_index == -1:
+		return false
+	return str(crafted_cards[crafted_index].get("type", "")) == "archive_shelf"
+
 func get_crafted_storage_contents(card_id: String) -> Array:
 	var crafted_index := _find_crafted_card_index(card_id)
 	if crafted_index == -1:
@@ -1231,6 +1530,8 @@ func store_card_in_crafted_storage(container_id: String, source_kind: String, ca
 	var container_type := str(container.get("type", ""))
 	if not _is_storage_crafted_type(container_type):
 		return {"ok": false, "message": "Card is not storage"}
+	if container_type == "tool_chest":
+		return _store_card_in_tool_chest(container_index, container, source_kind, card_id)
 	var stored_cards := Array(container.get("stored_cards", [])).duplicate(true)
 	if source_kind == "material":
 		for card_index in range(material_cards.size()):
@@ -1291,6 +1592,7 @@ func store_card_in_crafted_storage(container_id: String, source_kind: String, ca
 			"result": str(crafted_card.get("result", "")),
 			"recipe_id": str(crafted_card.get("recipe_id", "")),
 			"formula": str(crafted_card.get("formula", "")),
+			"captive_enemy": _normalize_saved_captive_enemy(Dictionary(crafted_card.get("captive_enemy", {}))),
 		})
 		crafted_cards.remove_at(source_index)
 		if source_index < container_index:
@@ -1326,29 +1628,69 @@ func withdraw_crafted_storage_item(container_id: String, entry_id: String) -> Di
 		var entry_kind := str(stored_entry.get("kind", ""))
 		var created_card: Dictionary = {}
 		if entry_kind == "material":
-			created_card = _add_material_card({
-				"type": str(stored_entry.get("type", "")),
-				"display_name": str(stored_entry.get("display_name", "")),
-				"quantity": maxi(int(stored_entry.get("quantity", 1)), 1),
-			})
+			if typeof(stored_entry.get("card", {})) == TYPE_DICTIONARY and not Dictionary(stored_entry.get("card", {})).is_empty():
+				created_card = Dictionary(stored_entry.get("card", {})).duplicate(true)
+				material_cards.append(created_card)
+			else:
+				created_card = _add_material_card({
+					"type": str(stored_entry.get("type", "")),
+					"display_name": str(stored_entry.get("display_name", "")),
+					"quantity": maxi(int(stored_entry.get("quantity", 1)), 1),
+				})
 			if not created_card.is_empty():
 				created_card["kind"] = "material"
 		elif entry_kind == "crafted":
-			created_card = {
-				"id": "crafted_%d_%d" % [int(Time.get_unix_time_from_system()), crafted_cards.size()],
-				"type": str(stored_entry.get("type", "")),
-				"display_name": str(stored_entry.get("display_name", stored_entry.get("result", "Item"))),
-				"result": str(stored_entry.get("result", "Crafted Item")),
-				"recipe_id": str(stored_entry.get("recipe_id", "")),
-				"formula": str(stored_entry.get("formula", "")),
-				"stored_cards": [],
-			}
+			if typeof(stored_entry.get("card", {})) == TYPE_DICTIONARY and not Dictionary(stored_entry.get("card", {})).is_empty():
+				created_card = Dictionary(stored_entry.get("card", {})).duplicate(true)
+			else:
+				created_card = {
+					"id": "crafted_%d_%d" % [int(Time.get_unix_time_from_system()), crafted_cards.size()],
+					"type": str(stored_entry.get("type", "")),
+					"display_name": str(stored_entry.get("display_name", stored_entry.get("result", "Item"))),
+					"result": str(stored_entry.get("result", "Crafted Item")),
+					"recipe_id": str(stored_entry.get("recipe_id", "")),
+					"formula": str(stored_entry.get("formula", "")),
+					"stored_cards": [],
+					"captive_enemy": _normalize_saved_captive_enemy(Dictionary(stored_entry.get("captive_enemy", {}))),
+				}
 			crafted_cards.append(created_card)
 			created_card["kind"] = "crafted"
+		elif entry_kind == "blueprint":
+			if typeof(stored_entry.get("card", {})) == TYPE_DICTIONARY and not Dictionary(stored_entry.get("card", {})).is_empty():
+				created_card = Dictionary(stored_entry.get("card", {})).duplicate(true)
+			else:
+				created_card = {
+					"id": "blueprint_%d_%d" % [int(Time.get_unix_time_from_system()), blueprint_cards.size()],
+					"recipe_id": str(stored_entry.get("recipe_id", "")),
+					"result": str(stored_entry.get("result", "Blueprint")),
+					"formula": str(stored_entry.get("formula", "")),
+					"formula_parts": Array(stored_entry.get("formula_parts", [])).duplicate(true),
+					"subject_key": str(stored_entry.get("subject_key", "")),
+				}
+			blueprint_cards.append(created_card)
+			created_card["kind"] = "blueprint"
+		elif entry_kind == "equipment":
+			if typeof(stored_entry.get("card", {})) == TYPE_DICTIONARY and not Dictionary(stored_entry.get("card", {})).is_empty():
+				created_card = Dictionary(stored_entry.get("card", {})).duplicate(true)
+				equipment_cards.append(created_card)
+			else:
+				created_card = _add_equipment_card({
+					"type": str(stored_entry.get("type", "")),
+					"display_name": str(stored_entry.get("display_name", "")),
+				})
+			if not created_card.is_empty():
+				created_card["kind"] = "equipment"
 		save_programmed_cartridges()
 		EventBus.outside_world_changed.emit()
 		return created_card.duplicate(true)
 	return {}
+
+func withdraw_latest_crafted_storage_item(container_id: String) -> Dictionary:
+	var stored_cards := get_crafted_storage_contents(container_id)
+	if stored_cards.is_empty():
+		return {}
+	var latest_entry: Dictionary = Dictionary(stored_cards[stored_cards.size() - 1]).duplicate(true)
+	return withdraw_crafted_storage_item(container_id, str(latest_entry.get("entry_id", "")))
 
 func forget_state_table_card(kind: String, card_id: String) -> bool:
 	if card_id.is_empty():
@@ -1389,8 +1731,131 @@ func _find_crafted_card_index(card_id: String) -> int:
 			return card_index
 	return -1
 
+func _find_blueprint_card_index(card_id: String) -> int:
+	if card_id.is_empty():
+		return -1
+	for card_index in range(blueprint_cards.size()):
+		if str(blueprint_cards[card_index].get("id", "")) == card_id:
+			return card_index
+	return -1
+
+func _find_enemy_card_index(card_id: String) -> int:
+	if card_id.is_empty():
+		return -1
+	for card_index in range(enemy_cards.size()):
+		if str(enemy_cards[card_index].get("id", "")) == card_id:
+			return card_index
+	return -1
+
 func _is_storage_crafted_type(crafted_type: String) -> bool:
 	return crafted_type in STORAGE_CRAFTED_TYPES
+
+func _is_cage_crafted_type(crafted_type: String) -> bool:
+	return crafted_type.contains("cage")
+
+func is_enemy_cage_crafted_card(card_id: String) -> bool:
+	var crafted_index := _find_crafted_card_index(card_id)
+	if crafted_index == -1:
+		return false
+	return _is_cage_crafted_type(str(crafted_cards[crafted_index].get("type", "")))
+
+func is_enemy_cage_occupied(card_id: String) -> bool:
+	var crafted_index := _find_crafted_card_index(card_id)
+	if crafted_index == -1:
+		return false
+	return not Dictionary(crafted_cards[crafted_index].get("captive_enemy", {})).is_empty()
+
+func get_caged_enemy(card_id: String) -> Dictionary:
+	var crafted_index := _find_crafted_card_index(card_id)
+	if crafted_index == -1:
+		return {}
+	return Dictionary(crafted_cards[crafted_index].get("captive_enemy", {})).duplicate(true)
+
+func capture_enemy_in_cage(cage_id: String, enemy_id: String) -> Dictionary:
+	var cage_index := _find_crafted_card_index(cage_id)
+	if cage_index == -1:
+		return {"ok": false, "message": "Cage not found"}
+	var cage_card := Dictionary(crafted_cards[cage_index]).duplicate(true)
+	if not _is_cage_crafted_type(str(cage_card.get("type", ""))):
+		return {"ok": false, "message": "Card is not a cage"}
+	if not Dictionary(cage_card.get("captive_enemy", {})).is_empty():
+		return {"ok": false, "message": "Cage already occupied"}
+	var enemy_index := -1
+	for card_index in range(enemy_cards.size()):
+		if str(enemy_cards[card_index].get("id", "")) == enemy_id:
+			enemy_index = card_index
+			break
+	if enemy_index == -1:
+		return {"ok": false, "message": "Enemy not found"}
+	var enemy_card: Dictionary = Dictionary(enemy_cards[enemy_index]).duplicate(true)
+	enemy_cards.remove_at(enemy_index)
+	cage_card["captive_enemy"] = enemy_card
+	crafted_cards[cage_index] = cage_card
+	save_programmed_cartridges()
+	EventBus.outside_world_changed.emit()
+	return {
+		"ok": true,
+		"enemy": enemy_card.duplicate(true),
+		"message": "%s captured" % str(enemy_card.get("display_name", "Enemy")),
+	}
+
+func release_enemy_from_cage(cage_id: String) -> Dictionary:
+	var cage_index := _find_crafted_card_index(cage_id)
+	if cage_index == -1:
+		return {"ok": false, "message": "Cage not found"}
+	var cage_card := Dictionary(crafted_cards[cage_index]).duplicate(true)
+	var captive_enemy: Dictionary = Dictionary(cage_card.get("captive_enemy", {})).duplicate(true)
+	if captive_enemy.is_empty():
+		return {"ok": false, "message": "Cage is empty"}
+	cage_card["captive_enemy"] = {}
+	crafted_cards[cage_index] = cage_card
+	enemy_cards.append(captive_enemy)
+	save_programmed_cartridges()
+	EventBus.outside_world_changed.emit()
+	return {
+		"ok": true,
+		"enemy": captive_enemy.duplicate(true),
+		"message": "%s released" % str(captive_enemy.get("display_name", "Enemy")),
+	}
+
+func resolve_enemy_cage_capture(cage_id: String, enemy_id: String) -> Dictionary:
+	var cage_index := _find_crafted_card_index(cage_id)
+	if cage_index == -1:
+		return {"ok": false, "message": "Cage not found"}
+	var cage_card := Dictionary(crafted_cards[cage_index]).duplicate(true)
+	if not _is_cage_crafted_type(str(cage_card.get("type", ""))):
+		return {"ok": false, "message": "Card is not a cage"}
+	if not Dictionary(cage_card.get("captive_enemy", {})).is_empty():
+		return {"ok": false, "message": "Cage already occupied"}
+	var enemy_index := _find_enemy_card_index(enemy_id)
+	if enemy_index == -1:
+		return {"ok": false, "message": "Enemy not found"}
+	var enemy_card: Dictionary = Dictionary(enemy_cards[enemy_index]).duplicate(true)
+	var operator_energy := maxi(int(operator_state.get("energy", 0)), 0)
+	var enemy_hp := maxi(int(enemy_card.get("hp", 1)), 1)
+	var enemy_attack := maxi(int(enemy_card.get("attack", 1)), 1)
+	var success_chance := clampf(0.52 + float(operator_energy) * 0.04 - float(enemy_hp) * 0.03 - float(enemy_attack) * 0.05, 0.12, 0.92)
+	if randf() <= success_chance:
+		var capture_result := capture_enemy_in_cage(cage_id, enemy_id)
+		capture_result["success"] = true
+		capture_result["chance"] = success_chance
+		capture_result["enemy"] = enemy_card.duplicate(true)
+		capture_result["enemy_hp"] = enemy_hp
+		capture_result["enemy_attack"] = enemy_attack
+		capture_result["operator_energy"] = operator_energy
+		return capture_result
+	forget_state_table_card("crafted", cage_id)
+	return {
+		"ok": true,
+		"success": false,
+		"chance": success_chance,
+		"enemy": enemy_card.duplicate(true),
+		"enemy_hp": enemy_hp,
+		"enemy_attack": enemy_attack,
+		"operator_energy": operator_energy,
+		"cage_destroyed": true,
+		"message": "%s broke the cage" % str(enemy_card.get("display_name", "Enemy")),
+	}
 
 func use_crafted_card_on_operator(card_id: String) -> Dictionary:
 	if card_id.is_empty():
@@ -1441,7 +1906,12 @@ func use_material_card_on_operator(card_id: String) -> Dictionary:
 func create_blueprint_card(recipe: Dictionary) -> Dictionary:
 	if recipe.is_empty():
 		return {}
+	var recipe_id := str(recipe.get("id", ""))
 	var formula_parts: Array = _sanitize_recipe_parts(Array(recipe.get("formula_parts", [])).duplicate(true))
+	if formula_parts.is_empty() and not recipe_id.is_empty():
+		var live_recipe := _get_loaded_recipe_by_id(recipe_id)
+		if not live_recipe.is_empty():
+			formula_parts = _sanitize_recipe_parts(Array(live_recipe.get("formula_parts", [])).duplicate(true))
 	if formula_parts.is_empty():
 		formula_parts = _sanitize_recipe_parts(_formula_parts_from_formula_string(str(recipe.get("formula", ""))))
 	var blueprint_card := {
@@ -1527,6 +1997,7 @@ func resolve_blueprint_craft(blueprint_id: String, material_consumptions: Array)
 		"recipe_id": str(blueprint_card.get("recipe_id", "")),
 		"formula": str(blueprint_card.get("formula", "")),
 		"stored_cards": [],
+		"captive_enemy": {},
 	}
 	blueprint_cards.remove_at(blueprint_index)
 	crafted_cards.append(crafted_card)
@@ -1806,7 +2277,11 @@ func load_programmed_cartridges():
 		operator_state["max_hp"] = maxi(int(saved_operator_state.get("max_hp", OPERATOR_MAX_HP)), OPERATOR_MAX_HP)
 		operator_state["hp"] = clampi(int(saved_operator_state.get("hp", OPERATOR_MAX_HP)), 0, int(operator_state["max_hp"]))
 		operator_state["status"] = str(saved_operator_state.get("status", "active"))
+		operator_state["profile_id"] = str(saved_operator_state.get("profile_id", ""))
+		operator_state["display_name"] = str(saved_operator_state.get("display_name", ""))
+		operator_state["focus"] = str(saved_operator_state.get("focus", ""))
 		operator_state["equipment_slots"] = _normalize_equipment_slots(Array(saved_operator_state.get("equipment_slots", [])))
+		_apply_operator_profile_defaults()
 
 	var object_data: Array = parsed.get("outside_objects", [])
 	if typeof(object_data) == TYPE_ARRAY:
@@ -1915,6 +2390,9 @@ func _initialize_operator_state():
 		"hp": OPERATOR_MAX_HP,
 		"max_hp": OPERATOR_MAX_HP,
 		"status": "active",
+		"profile_id": "",
+		"display_name": "OPERATOR",
+		"focus": "",
 		"equipment_slots": _default_equipment_slots(),
 	}
 
@@ -2928,6 +3406,22 @@ func _normalize_saved_location_cards(cards: Array) -> Array:
 		})
 	return result
 
+func _normalize_saved_captive_enemy(entry: Dictionary) -> Dictionary:
+	if entry.is_empty():
+		return {}
+	var enemy_type := str(entry.get("type", "hostile_creature"))
+	var enemy_def := _get_enemy_type_definition(enemy_type)
+	var threat := maxi(int(entry.get("threat_level", int(enemy_def.get("threat_level", 1)))), 1)
+	return {
+		"id": str(entry.get("id", "enemy_%d" % int(Time.get_unix_time_from_system()))),
+		"type": enemy_type,
+		"display_name": str(entry.get("display_name", str(enemy_def.get("label", _default_enemy_display_name(enemy_type))))),
+		"threat_level": threat,
+		"attack": maxi(int(entry.get("attack", int(enemy_def.get("attack", threat)))), 1),
+		"hp": maxi(int(entry.get("hp", int(enemy_def.get("hp", 3 + threat)))), 1),
+		"source": str(entry.get("source", "operator_scan")),
+	}
+
 func _normalize_saved_enemy_cards(cards: Array) -> Array:
 	var result: Array = []
 	for entry in cards:
@@ -3020,6 +3514,7 @@ func _normalize_saved_crafted_cards(cards: Array) -> Array:
 			"formula": str(entry.get("formula", "")),
 			"stored_cards": _normalize_saved_storage_entries(Array(entry.get("stored_cards", []))),
 			"tank_batch": _normalize_saved_tank_batch(Dictionary(entry.get("tank_batch", {}))),
+			"captive_enemy": _normalize_saved_captive_enemy(Dictionary(entry.get("captive_enemy", {}))),
 		})
 	return result
 
@@ -3095,7 +3590,8 @@ func _normalize_saved_storage_entries(entries: Array) -> Array:
 		var entry_type := str(entry.get("type", ""))
 		if entry_kind == "material":
 			var quantity := maxi(int(entry.get("quantity", 0)), 0)
-			if quantity <= 0 or entry_type.is_empty():
+			var material_card := Dictionary(entry.get("card", {}))
+			if material_card.is_empty() and (quantity <= 0 or entry_type.is_empty()):
 				continue
 			normalized.append({
 				"entry_id": str(entry.get("entry_id", "stored_%d" % normalized.size())),
@@ -3103,6 +3599,7 @@ func _normalize_saved_storage_entries(entries: Array) -> Array:
 				"type": entry_type,
 				"display_name": str(entry.get("display_name", _default_material_display_name(entry_type))),
 				"quantity": quantity,
+				"card": material_card.duplicate(true),
 			})
 		elif entry_kind == "crafted":
 			normalized.append({
@@ -3113,8 +3610,122 @@ func _normalize_saved_storage_entries(entries: Array) -> Array:
 				"result": str(entry.get("result", "Crafted Item")),
 				"recipe_id": str(entry.get("recipe_id", "")),
 				"formula": str(entry.get("formula", "")),
+				"captive_enemy": _normalize_saved_captive_enemy(Dictionary(entry.get("captive_enemy", {}))),
+				"card": Dictionary(entry.get("card", {})).duplicate(true),
+			})
+		elif entry_kind == "blueprint":
+			var blueprint_card := Dictionary(entry.get("card", {}))
+			if blueprint_card.is_empty() and str(entry.get("result", "")).is_empty():
+				continue
+			normalized.append({
+				"entry_id": str(entry.get("entry_id", "stored_%d" % normalized.size())),
+				"kind": "blueprint",
+				"type": "blueprint",
+				"display_name": str(entry.get("display_name", entry.get("result", "Blueprint"))),
+				"result": str(entry.get("result", "Blueprint")),
+				"recipe_id": str(entry.get("recipe_id", "")),
+				"formula": str(entry.get("formula", "")),
+				"formula_parts": Array(entry.get("formula_parts", [])).duplicate(true),
+				"subject_key": str(entry.get("subject_key", "")),
+				"card": blueprint_card.duplicate(true),
+			})
+		elif entry_kind == "equipment":
+			var equipment_card := Dictionary(entry.get("card", {}))
+			if equipment_card.is_empty() and entry_type.is_empty():
+				continue
+			normalized.append({
+				"entry_id": str(entry.get("entry_id", "stored_%d" % normalized.size())),
+				"kind": "equipment",
+				"type": entry_type,
+				"display_name": str(entry.get("display_name", _get_equipment_display_name(entry_type))),
+				"card": equipment_card.duplicate(true),
 			})
 	return normalized
+
+func _store_card_in_tool_chest(container_index: int, container: Dictionary, source_kind: String, card_id: String) -> Dictionary:
+	var stored_cards := Array(container.get("stored_cards", [])).duplicate(true)
+	var entry_id := "stored_%d_%d" % [int(Time.get_unix_time_from_system()), stored_cards.size()]
+	match source_kind:
+		"material":
+			for card_index in range(material_cards.size()):
+				var material_card: Dictionary = Dictionary(material_cards[card_index]).duplicate(true)
+				if str(material_card.get("id", "")) != card_id:
+					continue
+				stored_cards.append({
+					"entry_id": entry_id,
+					"kind": "material",
+					"type": str(material_card.get("type", "")),
+					"display_name": str(material_card.get("display_name", _default_material_display_name(str(material_card.get("type", ""))))),
+					"quantity": maxi(int(material_card.get("quantity", 1)), 1),
+					"card": material_card,
+				})
+				material_cards.remove_at(card_index)
+				container["stored_cards"] = stored_cards
+				crafted_cards[container_index] = container
+				save_programmed_cartridges()
+				EventBus.outside_world_changed.emit()
+				return {"ok": true, "kind": "material", "message": "%s stored" % str(container.get("display_name", container.get("result", "Storage")))}
+			return {"ok": false, "message": "Resource card not found"}
+		"blueprint":
+			var blueprint_index := _find_blueprint_card_index(card_id)
+			if blueprint_index == -1:
+				return {"ok": false, "message": "Blueprint card not found"}
+			var blueprint_card: Dictionary = Dictionary(blueprint_cards[blueprint_index]).duplicate(true)
+			stored_cards.append({
+				"entry_id": entry_id,
+				"kind": "blueprint",
+				"type": "blueprint",
+				"display_name": str(blueprint_card.get("result", "Blueprint")),
+				"result": str(blueprint_card.get("result", "Blueprint")),
+				"recipe_id": str(blueprint_card.get("recipe_id", "")),
+				"formula": str(blueprint_card.get("formula", "")),
+				"formula_parts": Array(blueprint_card.get("formula_parts", [])).duplicate(true),
+				"subject_key": str(blueprint_card.get("subject_key", "")),
+				"card": blueprint_card,
+			})
+			blueprint_cards.remove_at(blueprint_index)
+		"equipment":
+			var equipment_index := _find_equipment_card_index(card_id)
+			if equipment_index == -1:
+				return {"ok": false, "message": "Equipment card not found"}
+			var equipment_card: Dictionary = Dictionary(equipment_cards[equipment_index]).duplicate(true)
+			stored_cards.append({
+				"entry_id": entry_id,
+				"kind": "equipment",
+				"type": str(equipment_card.get("type", "")),
+				"display_name": str(equipment_card.get("display_name", _get_equipment_display_name(str(equipment_card.get("type", ""))))),
+				"card": equipment_card,
+			})
+			equipment_cards.remove_at(equipment_index)
+		"crafted":
+			var source_index := _find_crafted_card_index(card_id)
+			if source_index == -1 or source_index == container_index:
+				return {"ok": false, "message": "Crafted card not found"}
+			var crafted_card := Dictionary(crafted_cards[source_index]).duplicate(true)
+			if _is_storage_crafted_type(str(crafted_card.get("type", ""))):
+				return {"ok": false, "message": "Cannot nest storage"}
+			stored_cards.append({
+				"entry_id": entry_id,
+				"kind": "crafted",
+				"type": str(crafted_card.get("type", "")),
+				"display_name": str(crafted_card.get("display_name", crafted_card.get("result", "Item"))),
+				"result": str(crafted_card.get("result", "")),
+				"recipe_id": str(crafted_card.get("recipe_id", "")),
+				"formula": str(crafted_card.get("formula", "")),
+				"captive_enemy": _normalize_saved_captive_enemy(Dictionary(crafted_card.get("captive_enemy", {}))),
+				"card": crafted_card,
+			})
+			crafted_cards.remove_at(source_index)
+			if source_index < container_index:
+				container_index -= 1
+				container = Dictionary(crafted_cards[container_index])
+		_:
+			return {"ok": false, "message": "Card type cannot be stored"}
+	container["stored_cards"] = stored_cards
+	crafted_cards[container_index] = container
+	save_programmed_cartridges()
+	EventBus.outside_world_changed.emit()
+	return {"ok": true, "kind": source_kind, "message": "%s stored" % str(container.get("display_name", container.get("result", "Storage")))}
 
 func _normalize_saved_journal_entries(entries: Array) -> Array:
 	var result: Array = []
@@ -3180,7 +3791,8 @@ func _sanitize_recipe_parts(parts: Array) -> Array:
 		var normalized := str(part_variant).strip_edges()
 		if normalized.is_empty():
 			continue
-		if normalized.to_upper() == "JOURNAL":
+		var upper := normalized.to_upper()
+		if upper == "JOURNAL" or upper == "BLUEPRINT":
 			continue
 		sanitized.append(normalized)
 	return sanitized
@@ -3239,7 +3851,9 @@ func _get_loaded_enemy_loot_table(enemy_type: String) -> Array:
 func _get_loaded_recipe_by_id(recipe_id: String) -> Dictionary:
 	if recipe_id.is_empty() or recipe_catalog.is_empty():
 		return {}
-	for recipe_list_variant in recipe_catalog.values():
+	for subject_key_variant in recipe_catalog.keys():
+		var subject_key := str(subject_key_variant)
+		var recipe_list_variant: Variant = recipe_catalog[subject_key_variant]
 		if typeof(recipe_list_variant) != TYPE_ARRAY:
 			continue
 		for recipe_variant in Array(recipe_list_variant):
@@ -3247,7 +3861,12 @@ func _get_loaded_recipe_by_id(recipe_id: String) -> Dictionary:
 				continue
 			var recipe := Dictionary(recipe_variant)
 			if str(recipe.get("id", "")) == recipe_id:
-				return recipe.duplicate(true)
+				return _build_recipe(
+					str(recipe.get("id", "")),
+					str(recipe.get("result", "")),
+					Array(recipe.get("parts", [])).duplicate(true),
+					subject_key,
+				)
 	return {}
 
 func _get_all_research_subjects() -> Array:
@@ -3268,6 +3887,8 @@ func _get_all_research_subjects() -> Array:
 		subjects.append({"kind": "resource", "type": resource_type})
 	for equipment_type in RESEARCH_EQUIPMENT_TYPES:
 		subjects.append({"kind": "equipment", "type": equipment_type})
+	for crafted_type in RESEARCH_CRAFTED_TYPES:
+		subjects.append({"kind": "crafted", "type": crafted_type})
 	return subjects
 
 func _get_all_loaded_research_recipes() -> Array:
@@ -3300,7 +3921,7 @@ func _get_related_recipe_ids(subject_key: String) -> Array:
 				related_ids.append(recipe_id)
 	return _dedupe_strings(related_ids)
 
-func _build_journal_recipe_display_list(subject_key: String, discovered_recipes_by_id: Dictionary, related_recipe_ids: Array) -> Array:
+func _build_journal_recipe_display_list(subject_key: String, discovered_recipes_by_id: Dictionary, related_recipe_ids: Array, discovered_by_key: Dictionary) -> Array:
 	var display_recipes: Array = []
 	var seen_recipe_ids := {}
 	for recipe_id_variant in related_recipe_ids:
@@ -3311,21 +3932,72 @@ func _build_journal_recipe_display_list(subject_key: String, discovered_recipes_
 		if live_recipe.is_empty():
 			continue
 		seen_recipe_ids[recipe_id] = true
+		var discovered_recipe := {}
 		if discovered_recipes_by_id.has(recipe_id):
-			var discovered_recipe: Dictionary = Dictionary(discovered_recipes_by_id[recipe_id]).duplicate(true)
-			discovered_recipe["locked"] = false
-			display_recipes.append(discovered_recipe)
-			continue
-		display_recipes.append(_build_locked_journal_recipe(subject_key, live_recipe))
+			discovered_recipe = Dictionary(discovered_recipes_by_id[recipe_id]).duplicate(true)
+		display_recipes.append(_build_journal_recipe_entry(subject_key, live_recipe, discovered_by_key, discovered_recipe))
 	for recipe_id_variant in discovered_recipes_by_id.keys():
 		var recipe_id := str(recipe_id_variant)
 		if seen_recipe_ids.has(recipe_id):
 			continue
 		var discovered_recipe: Dictionary = Dictionary(discovered_recipes_by_id[recipe_id]).duplicate(true)
 		if subject_key in _get_recipe_related_subject_keys(discovered_recipe):
-			discovered_recipe["locked"] = false
-			display_recipes.append(discovered_recipe)
+			display_recipes.append(_build_journal_recipe_entry(subject_key, discovered_recipe, discovered_by_key, discovered_recipe))
 	return display_recipes
+
+func _build_journal_recipe_entry(subject_key: String, recipe_source: Dictionary, discovered_by_key: Dictionary, discovered_recipe: Dictionary = {}) -> Dictionary:
+	var recipe := recipe_source.duplicate(true)
+	var recipe_id := str(recipe.get("id", ""))
+	var result_name := str(recipe.get("result", "UNKNOWN")).to_upper()
+	var formula_parts: Array = _sanitize_recipe_parts(Array(recipe.get("formula_parts", [])).duplicate(true))
+	if formula_parts.is_empty():
+		formula_parts = _sanitize_recipe_parts(_formula_parts_from_formula_string(str(recipe.get("formula", ""))))
+	formula_parts = _normalize_recipe_result_parts(result_name, formula_parts)
+	var state := _get_journal_recipe_state(subject_key, formula_parts, discovered_by_key)
+	var formula_text := _build_journal_recipe_formula_text(result_name, formula_parts, discovered_by_key, state)
+	return {
+		"id": recipe_id,
+		"result": result_name,
+		"formula_parts": formula_parts,
+		"formula": formula_text,
+		"subject_key": subject_key,
+		"unread": bool(discovered_recipe.get("unread", false)),
+		"locked": state == "locked",
+		"state": state,
+		"copyable": state == "complete",
+	}
+
+func _get_journal_recipe_state(subject_key: String, formula_parts: Array, discovered_by_key: Dictionary) -> String:
+	var has_known_subject := discovered_by_key.has(subject_key)
+	var has_unknown_subject := false
+	for part_variant in formula_parts:
+		var part_subject_key := _get_formula_part_subject_key(str(part_variant))
+		if part_subject_key.is_empty():
+			continue
+		if discovered_by_key.has(part_subject_key):
+			has_known_subject = true
+		else:
+			has_unknown_subject = true
+	if not has_unknown_subject:
+		return "complete"
+	return "partial" if has_known_subject else "locked"
+
+func _build_journal_recipe_formula_text(result_name: String, formula_parts: Array, discovered_by_key: Dictionary, state: String) -> String:
+	if state == "locked":
+		return _build_locked_formula_text(result_name, formula_parts)
+	var display_parts: Array[String] = []
+	for part_variant in formula_parts:
+		display_parts.append(_build_journal_formula_part_display(str(part_variant), discovered_by_key))
+	return "%s = %s" % [result_name, " + ".join(display_parts)]
+
+func _build_journal_formula_part_display(part: String, discovered_by_key: Dictionary) -> String:
+	var normalized := part.strip_edges()
+	if normalized.is_empty():
+		return "??"
+	var part_subject_key := _get_formula_part_subject_key(normalized)
+	if part_subject_key.is_empty() or discovered_by_key.has(part_subject_key):
+		return normalized
+	return _mask_locked_formula_part(normalized)
 
 func _get_recipe_related_subject_keys(recipe: Dictionary) -> Array:
 	var related_keys: Array[String] = []
@@ -3442,6 +4114,14 @@ func _get_named_subject_key(token: String) -> String:
 			return "equipment_hide_cloak"
 		"TOOL KIT":
 			return "equipment_tool_kit"
+		"TANK":
+			return "crafted_tank"
+		"TOOL CHEST":
+			return "crafted_tool_chest"
+		"BROOD CAGE":
+			return "crafted_brood_cage"
+		"ARCHIVE SHELF":
+			return "crafted_archive_shelf"
 		_:
 			return ""
 
@@ -3649,6 +4329,8 @@ func _get_research_subject_definition(subject: Dictionary) -> Dictionary:
 			return _get_resource_research_definition(subject_type)
 		"equipment":
 			return _get_equipment_research_definition(subject_type)
+		"crafted":
+			return _get_crafted_research_definition(subject_type)
 		_:
 			return {}
 
@@ -3819,7 +4501,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "POND",
-				"description": "Shallow basin with recoverable wet stock. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Shallow basin with recoverable wet stock.",
+				"notes_sections": _build_location_note_sections("Wet collection site. Good for regenerative biological stock and low-grade harvest.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"crater":
@@ -3827,7 +4510,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "CRATER",
-				"description": "Impact basin with sifted dust and hard edges. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Impact basin with sifted dust and hard edges.",
+				"notes_sections": _build_location_note_sections("Broken mineral basin. Good for hard salvage and exposed remains.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"tower":
@@ -3835,7 +4519,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "TOWER",
-				"description": "Elevated relay structure. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Elevated relay structure.",
+				"notes_sections": _build_location_note_sections("Raised sight and relay point. Valuable, exposed, and usually watched.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"surveillance_zone":
@@ -3843,7 +4528,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "SURVEILLANCE ZONE",
-				"description": "Observed corridor with repeated watch coverage. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Observed corridor with repeated watch coverage.",
+				"notes_sections": _build_location_note_sections("High-signature danger area. Route discipline matters more than yield here.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"facility":
@@ -3851,7 +4537,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "FACILITY",
-				"description": "Industrial structure with repeated joints and work surfaces. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Industrial structure with repeated joints and work surfaces.",
+				"notes_sections": _build_location_note_sections("Dense mechanical salvage site. Better yield, higher risk, good for structural work.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"bunker":
@@ -3859,7 +4546,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "BUNKER",
-				"description": "Sealed shelter construction. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Sealed shelter construction.",
+				"notes_sections": _build_location_note_sections("High-value closed shelter site. Supplies and gear may survive, but access is dangerous.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"field":
@@ -3867,7 +4555,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "FIELD",
-				"description": "Open productive ground. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Open productive ground.",
+				"notes_sections": _build_location_note_sections("Renewable organic ground. Lower salvage density, better long-term biological value.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"dump":
@@ -3875,7 +4564,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "DUMP",
-				"description": "Mixed discard site. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Mixed discard site.",
+				"notes_sections": _build_location_note_sections("Chaotic salvage field. Good for mixed recovery, bad for predictable safe routes.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"cache":
@@ -3883,7 +4573,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "CACHE",
-				"description": "Small reserve layout. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Small reserve layout.",
+				"notes_sections": _build_location_note_sections("Compact stash site. Good for concentrated finds if it has not already been stripped.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"nest":
@@ -3891,7 +4582,8 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "NEST",
-				"description": "Organic clustered structure. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Organic clustered structure.",
+				"notes_sections": _build_location_note_sections("High organic yield with biological risk. Good for cages, bad for safe extraction.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"ruin":
@@ -3899,11 +4591,19 @@ func _get_location_research_definition(location_type: String) -> Dictionary:
 				"subject_kind": "location",
 				"subject_type": location_type,
 				"title": "RUIN",
-				"description": "Broken structure with surviving edges and voids. Extracts: %s. Scavenging risk: %s." % [extract_text, risk_text],
+				"description": "Broken structure with surviving edges and voids.",
+				"notes_sections": _build_location_note_sections("Fragmented old structure. Good for mixed salvage and slow careful reading of the site.", extract_text, risk_text),
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
 			return {}
+
+func _build_location_note_sections(summary_text: String, extract_text: String, risk_text: String) -> Array:
+	return [
+		{"title": "SUMMARY", "text": summary_text},
+		{"title": "EXTRACTS", "text": extract_text},
+		{"title": "THREATS", "text": risk_text},
+	]
 
 func _get_location_extracts_text(location_type: String) -> String:
 	var drop_table: Array = Array(LOCATION_SCAVENGE_TABLES.get(location_type, []))
@@ -4067,7 +4767,14 @@ func _get_drone_research_definition(drone_type: String) -> Dictionary:
 				"subject_kind": "drone",
 				"subject_type": drone_type,
 				"title": "SPIDER DRONE",
-				"description": "Stable low profile frame. Processes: salvage, carrying, drop placement, close terrain work, direct attack approach. Action commands: %s. Punch codes: %s." % [_get_drone_action_command_text(drone_type), _get_drone_action_command_code_text(drone_type)],
+				"description": "Stable low-profile field frame.",
+				"notes_sections": [
+					{"title": "ROLE", "text": "Salvage, carrying, drop placement, close terrain work, direct attack approach."},
+					{"title": "COMMANDS", "text": _get_drone_action_command_text(drone_type)},
+					{"title": "PUNCH CODES", "text": _get_drone_action_command_code_text(drone_type)},
+					{"title": "LIMITS", "text": "Shared interpreter. Pickup, drop, or attack only work when the frame and mission state support them."},
+					{"title": "PROGRAMMING", "text": "Write explicit outward and return paths. Pickup only matters at valid target sites. ATK only resolves during combat."},
+				],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		"butterfly":
@@ -4075,7 +4782,14 @@ func _get_drone_research_definition(drone_type: String) -> Dictionary:
 				"subject_kind": "drone",
 				"subject_type": drone_type,
 				"title": "BUTTERFLY DRONE",
-				"description": "Light winged platform. Processes: scouting, movement, turning, visual survey, light route discovery. Action commands: %s. Punch codes: %s." % [_get_drone_action_command_text(drone_type), _get_drone_action_command_code_text(drone_type)],
+				"description": "Light winged scouting platform.",
+				"notes_sections": [
+					{"title": "ROLE", "text": "Scouting, movement, turning, visual survey, and light route discovery."},
+					{"title": "COMMANDS", "text": _get_drone_action_command_text(drone_type)},
+					{"title": "PUNCH CODES", "text": _get_drone_action_command_code_text(drone_type)},
+					{"title": "LIMITS", "text": "No pickup, drop, or direct attack. Scan favors wide safe observation over close interaction."},
+					{"title": "PROGRAMMING", "text": "Use movement and scan loops, then write a clean return path. This frame is for discovery, not hauling or fighting."},
+				],
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
@@ -4158,6 +4872,44 @@ func _get_equipment_research_definition(equipment_type: String) -> Dictionary:
 				"subject_type": equipment_type,
 				"title": "TOOL KIT",
 				"description": "Field repair and build bundle. Grants UTILITY +3 per copy when equipped.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		_:
+			return {}
+
+func _get_crafted_research_definition(crafted_type: String) -> Dictionary:
+	var subject_key := "crafted_%s" % crafted_type
+	match crafted_type:
+		"tank":
+			return {
+				"subject_kind": "crafted",
+				"subject_type": crafted_type,
+				"title": "TANK",
+				"description": "Generic bioprocess vessel. Used to convert live biological stock into stable workshop outputs.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"tool_chest":
+			return {
+				"subject_kind": "crafted",
+				"subject_type": crafted_type,
+				"title": "TOOL CHEST",
+				"description": "Heavy workshop storage. Holds stacks and cage items without using table space.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"brood_cage":
+			return {
+				"subject_kind": "crafted",
+				"subject_type": crafted_type,
+				"title": "BROOD CAGE",
+				"description": "Containment cage for hostile biological subjects. Empty or occupied, and valid for enemy research when loaded.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
+		"archive_shelf":
+			return {
+				"subject_kind": "crafted",
+				"subject_type": crafted_type,
+				"title": "ARCHIVE SHELF",
+				"description": "Paper and archive storage. Keeps knowledge stock organized without consuming active table area.",
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:

@@ -25,6 +25,9 @@ const FONT_SIZE_CARD_TITLE := 8
 const FONT_SIZE_CARD_META := 6
 const FONT_SIZE_CARD_VALUE := 9
 const FONT_SIZE_VALUE := 12
+const FONT_SIZE_STAT_VALUE := 12
+const STAT_ICON_SIZE := 18.0
+const STAT_ICON_GAP := 3.0
 const CARD_VARIANTS := {
 	"machine": {
 		"card_class": "machine",
@@ -175,7 +178,11 @@ static var _material_biomass_art: Texture2D = null
 static var _material_bone_art: Texture2D = null
 static var _material_dry_rations_art: Texture2D = null
 static var _material_medicine_art: Texture2D = null
+static var _material_growth_medium_art: Texture2D = null
 static var _material_algae_art: Texture2D = null
+static var _material_bacteria_art: Texture2D = null
+static var _material_mealworms_art: Texture2D = null
+static var _material_bone_meal_art: Texture2D = null
 static var _material_fiber_art: Texture2D = null
 static var _material_paper_art: Texture2D = null
 static var _material_metal_art: Texture2D = null
@@ -183,7 +190,12 @@ static var _material_mushrooms_art: Texture2D = null
 static var _equipment_knife_art: Texture2D = null
 static var _equipment_bow_art: Texture2D = null
 static var _equipment_plate_mail_art: Texture2D = null
+static var _equipment_hide_cloak_art: Texture2D = null
 static var _equipment_tool_kit_art: Texture2D = null
+static var _crafted_tank_art: Texture2D = null
+static var _crafted_tool_chest_art: Texture2D = null
+static var _crafted_brood_cage_art: Texture2D = null
+static var _crafted_archive_shelf_art: Texture2D = null
 static var _attack_stat_icon_art: Texture2D = null
 static var _armor_stat_icon_art: Texture2D = null
 static var _hp_stat_icon_art: Texture2D = null
@@ -196,6 +208,15 @@ static func load_svg_texture(path: String) -> Texture2D:
 		return null
 	var image := Image.new()
 	var err := image.load_svg_from_string(svg_text)
+	if err != OK:
+		return null
+	return ImageTexture.create_from_image(image)
+
+static func load_texture_asset(path: String) -> Texture2D:
+	if not FileAccess.file_exists(path):
+		return null
+	var image := Image.new()
+	var err := image.load(path)
 	if err != OK:
 		return null
 	return ImageTexture.create_from_image(image)
@@ -356,13 +377,17 @@ static func _get_stat_icon_texture(stat_name: String) -> Texture2D:
 			return null
 
 static func _draw_stat_icon_value(canvas: Control, rect: Rect2, stat_icon: String, value_text: String, color: Color) -> void:
-	var icon_side := minf(rect.size.y - 1.0, 12.0)
-	var icon_rect := Rect2(Vector2(rect.position.x + 2.0, rect.position.y + (rect.size.y - icon_side) * 0.5), Vector2(icon_side, icon_side))
-	if not _draw_texture_fit(canvas, _get_stat_icon_texture(stat_icon), icon_rect):
-		_draw_text_token(canvas, icon_rect, stat_icon, FONT_SIZE_CARD_META, color)
-	var value_rect := Rect2(Vector2(icon_rect.end.x + 2.0, rect.position.y), Vector2(rect.end.x - icon_rect.end.x - 4.0, rect.size.y))
 	var font := ThemeDB.fallback_font
 	var font_size := FONT_SIZE_CARD_VALUE
+	var icon_side := minf(rect.size.y - 1.0, 9.0)
+	var gap := 2.0
+	var text_width := font.get_string_size(value_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
+	var group_width := icon_side + gap + text_width
+	var group_start_x := rect.position.x + (rect.size.x - group_width) * 0.5
+	var icon_rect := Rect2(Vector2(group_start_x, rect.position.y + (rect.size.y - icon_side) * 0.5), Vector2(icon_side, icon_side))
+	if not _draw_texture_fit(canvas, _get_stat_icon_texture(stat_icon), icon_rect):
+		_draw_text_token(canvas, icon_rect, stat_icon, FONT_SIZE_CARD_META, color)
+	var value_rect := Rect2(Vector2(icon_rect.end.x + gap, rect.position.y), Vector2(text_width + 2.0, rect.size.y))
 	var baseline := value_rect.position.y + (value_rect.size.y - font.get_height(font_size)) * 0.5 + font.get_ascent(font_size)
 	canvas.draw_string(font, Vector2(value_rect.position.x, baseline), value_text, HORIZONTAL_ALIGNMENT_LEFT, value_rect.size.x, font_size, color)
 
@@ -371,16 +396,51 @@ static func _draw_stat_icon_pair_row(canvas: Control, rect: Rect2, left_icon: St
 	_draw_stat_icon_value(canvas, Rect2(rect.position, Vector2(half_width, rect.size.y)), left_icon, left_value, color)
 	_draw_stat_icon_value(canvas, Rect2(Vector2(rect.position.x + half_width, rect.position.y), Vector2(half_width, rect.size.y)), right_icon, right_value, color)
 
-static func _draw_stat_icon_triplet_row(canvas: Control, rect: Rect2, left_icon: String, left_value: String, middle_icon: String, middle_value: String, right_icon: String, right_value: String, color: Color) -> void:
-	var third_width := rect.size.x / 3.0
-	_draw_stat_icon_value(canvas, Rect2(rect.position, Vector2(third_width, rect.size.y)), left_icon, left_value, color)
-	_draw_stat_icon_value(canvas, Rect2(Vector2(rect.position.x + third_width, rect.position.y), Vector2(third_width, rect.size.y)), middle_icon, middle_value, color)
-	_draw_stat_icon_value(canvas, Rect2(Vector2(rect.position.x + third_width * 2.0, rect.position.y), Vector2(third_width, rect.size.y)), right_icon, right_value, color)
+static func _draw_stat_icon_single_row(canvas: Control, rect: Rect2, stat_icon: String, value_text: String, color: Color) -> void:
+	_draw_stat_icon_value(canvas, rect, stat_icon, value_text, color)
 
 static func _draw_operator_meta_row(canvas: Control, rect: Rect2, energy: int, hp: int, color: Color) -> void:
 	var half_width := rect.size.x * 0.5
 	_draw_stat_icon_value(canvas, Rect2(rect.position, Vector2(half_width, rect.size.y)), "energy", str(energy), color)
 	_draw_stat_icon_value(canvas, Rect2(Vector2(rect.position.x + half_width, rect.position.y), Vector2(half_width, rect.size.y)), "hp", str(hp), color)
+
+static func _draw_unit_stat_cell(canvas: Control, rect: Rect2, stat_icon: String, value_text: String, color: Color) -> void:
+	var font := ThemeDB.fallback_font
+	var font_size := FONT_SIZE_STAT_VALUE
+	var icon_side := STAT_ICON_SIZE
+	var gap := STAT_ICON_GAP
+	var text_width := font.get_string_size(value_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
+	var group_width := icon_side + gap + text_width
+	var start_x := rect.position.x + (rect.size.x - group_width) * 0.5
+	var icon_rect := Rect2(Vector2(start_x, rect.position.y + (rect.size.y - icon_side) * 0.5), Vector2(icon_side, icon_side))
+	if not _draw_texture_fit(canvas, _get_stat_icon_texture(stat_icon), icon_rect):
+		_draw_text_token(canvas, icon_rect, stat_icon, FONT_SIZE_CARD_META, color)
+	var value_rect := Rect2(Vector2(icon_rect.end.x + gap, rect.position.y), Vector2(text_width + 1.0, rect.size.y))
+	var baseline := value_rect.position.y + (value_rect.size.y - font.get_height(font_size)) * 0.5 + font.get_ascent(font_size)
+	canvas.draw_string(font, Vector2(value_rect.position.x, baseline), value_text, HORIZONTAL_ALIGNMENT_LEFT, value_rect.size.x, font_size, color)
+
+static func _draw_operator_stat_grid(canvas: Control, rect: Rect2, operator_state: Dictionary, color: Color) -> void:
+	var gap: float = 1.0
+	var cell_width: float = floor((rect.size.x - gap) * 0.5)
+	var cell_height: float = floor((rect.size.y - gap) * 0.5)
+	var left_x: float = rect.position.x
+	var right_x: float = rect.end.x - cell_width
+	var top_y: float = rect.position.y
+	var bottom_y: float = rect.end.y - cell_height
+	var totals: Dictionary = Dictionary(operator_state.get("equipment_totals", {}))
+	_draw_unit_stat_cell(canvas, Rect2(Vector2(left_x, top_y), Vector2(cell_width, cell_height)), "energy", str(int(operator_state.get("energy", 0))), color)
+	_draw_unit_stat_cell(canvas, Rect2(Vector2(right_x, top_y), Vector2(cell_width, cell_height)), "hp", str(int(operator_state.get("hp", 0))), color)
+	_draw_unit_stat_cell(canvas, Rect2(Vector2(left_x, bottom_y), Vector2(cell_width, cell_height)), "attack", str(int(totals.get("attack", 0))), color)
+	_draw_unit_stat_cell(canvas, Rect2(Vector2(right_x, bottom_y), Vector2(cell_width, cell_height)), "armor", str(int(totals.get("armor", 0))), color)
+
+static func _draw_drone_stat_strip(canvas: Control, rect: Rect2, power_charge: int, totals: Dictionary, color: Color) -> void:
+	var gap: float = 4.0
+	var cell_width: float = floor((rect.size.x - gap * 2.0) / 3.0)
+	var row_width: float = cell_width * 3.0 + gap * 2.0
+	var start_x: float = rect.position.x + (rect.size.x - row_width) * 0.5
+	_draw_unit_stat_cell(canvas, Rect2(Vector2(start_x, rect.position.y), Vector2(cell_width, rect.size.y)), "energy", str(maxi(power_charge, 0)), color)
+	_draw_unit_stat_cell(canvas, Rect2(Vector2(start_x + cell_width + gap, rect.position.y), Vector2(cell_width, rect.size.y)), "attack", str(int(totals.get("attack", 0))), color)
+	_draw_unit_stat_cell(canvas, Rect2(Vector2(start_x + (cell_width + gap) * 2.0, rect.position.y), Vector2(cell_width, rect.size.y)), "armor", str(int(totals.get("armor", 0))), color)
 
 static func _get_location_blueprint_token_label(location_type: String) -> String:
 	match location_type:
@@ -546,6 +606,22 @@ static func _get_material_texture(material_type: String) -> Texture2D:
 			if _material_medicine_art == null:
 				_material_medicine_art = load_svg_texture("res://assets/cards/medicine.svg")
 			return _material_medicine_art
+		"growth_medium":
+			if _material_growth_medium_art == null:
+				_material_growth_medium_art = load_svg_texture("res://assets/cards/substrat.svg")
+			return _material_growth_medium_art
+		"bacteria":
+			if _material_bacteria_art == null:
+				_material_bacteria_art = load_svg_texture("res://assets/cards/bacteria.svg")
+			return _material_bacteria_art
+		"mealworms":
+			if _material_mealworms_art == null:
+				_material_mealworms_art = load_svg_texture("res://assets/cards/mealworms.svg")
+			return _material_mealworms_art
+		"bone_meal":
+			if _material_bone_meal_art == null:
+				_material_bone_meal_art = load_svg_texture("res://assets/cards/bone_meal.svg")
+			return _material_bone_meal_art
 		"paper":
 			if _material_paper_art == null:
 				_material_paper_art = load_svg_texture("res://assets/cards/paper.svg")
@@ -588,6 +664,10 @@ static func _get_equipment_texture(equipment_type: String) -> Texture2D:
 			if _equipment_plate_mail_art == null:
 				_equipment_plate_mail_art = load_svg_texture("res://assets/cards/platemail.svg")
 			return _equipment_plate_mail_art
+		"hide_cloak":
+			if _equipment_hide_cloak_art == null:
+				_equipment_hide_cloak_art = load_svg_texture("res://assets/cards/hide_cloak.svg")
+			return _equipment_hide_cloak_art
 		"tool_kit":
 			if _equipment_tool_kit_art == null:
 				_equipment_tool_kit_art = load_svg_texture("res://assets/cards/tools.svg")
@@ -688,9 +768,7 @@ static func draw_operator_card(canvas: Control, rect: Rect2, operator_state: Dic
 	canvas.draw_rect(clip_rect, ACCENT_DIM)
 	canvas.draw_rect(clip_rect.grow(-1.0), ACCENT)
 	_draw_band_title(canvas, face_rect, operator_name, TAPE)
-	_draw_operator_meta_row(canvas, Rect2(Vector2(info_rect.position.x, info_rect.position.y + 10.0), Vector2(info_rect.size.x, 10.0)), int(operator_state.get("energy", 0)), int(operator_state.get("hp", 0)), TAPE)
-	var combat_totals: Dictionary = Dictionary(operator_state.get("equipment_totals", {}))
-	_draw_stat_icon_pair_row(canvas, Rect2(Vector2(info_rect.position.x, info_rect.position.y + 20.0), Vector2(info_rect.size.x, 10.0)), "attack", str(int(combat_totals.get("attack", 0))), "armor", str(int(combat_totals.get("armor", 0))), TAPE_SHADE)
+	_draw_operator_stat_grid(canvas, info_rect, operator_state, TAPE)
 
 static func draw_location_card(canvas: Control, rect: Rect2, card_data: Dictionary, bunker_texture: Texture2D, cache_texture: Texture2D, pond_texture: Texture2D, crater_texture: Texture2D, tower_texture: Texture2D, surveillance_texture: Texture2D, facility_texture: Texture2D, field_texture: Texture2D, dump_texture: Texture2D, nest_texture: Texture2D, ruin_texture: Texture2D) -> void:
 	var shell := _draw_card_variant(canvas, rect, "location")
@@ -730,12 +808,6 @@ static func draw_material_card(canvas: Control, rect: Rect2, card_data: Dictiona
 	match material_type:
 		"energy_bar":
 			_draw_crafted_energy_bar_art(canvas, art_rect)
-		"medicine":
-			_draw_material_glyph(canvas, _fit_rect(art_rect, 6.0), material_type)
-		"dry_rations":
-			_draw_material_glyph(canvas, _fit_rect(art_rect, 6.0), material_type)
-		"growth_medium":
-			_draw_material_growth_medium_art(canvas, art_rect)
 		_:
 			_draw_material_glyph(canvas, _fit_rect(art_rect, 6.0), material_type)
 	_draw_band_title(canvas, face_rect, _trim_card_label(display_name.to_upper(), 18), STEEL_DARK)
@@ -886,9 +958,12 @@ static func draw_crafted_card(canvas: Control, rect: Rect2, card_data: Dictionar
 	var crafted_type := str(card_data.get("type", ""))
 	var result_name := str(card_data.get("display_name", card_data.get("result", "Crafted Item"))).to_upper()
 	var result_label := _trim_card_label(result_name, 16)
+	var crafted_texture := _get_crafted_texture(crafted_type)
 	_draw_framed_panel(canvas, art_rect, 8.0, Color(0.90, 0.84, 0.69))
 	_draw_crafted_banner(canvas, art_rect)
-	if result_name == "ENERGY BAR":
+	if crafted_texture != null:
+		_draw_texture_fit(canvas, crafted_texture, Rect2(Vector2(art_rect.position.x + 16.0, art_rect.position.y + 32.0), Vector2(art_rect.size.x - 32.0, art_rect.size.y - 40.0)))
+	elif result_name == "ENERGY BAR":
 		_draw_crafted_energy_bar_art(canvas, art_rect)
 	elif result_name == "MEDICINE":
 		_draw_crafted_medicine_art(canvas, art_rect)
@@ -901,6 +976,9 @@ static func draw_crafted_card(canvas: Control, rect: Rect2, card_data: Dictionar
 	elif crafted_type == "tank":
 		var tank_batch: Dictionary = Dictionary(card_data.get("tank_batch", {}))
 		meta_text = "TANK RUNNING" if not tank_batch.is_empty() else "TANK IDLE"
+	elif crafted_type.contains("cage"):
+		var captive_enemy: Dictionary = Dictionary(card_data.get("captive_enemy", {}))
+		meta_text = "OCCUPIED" if not captive_enemy.is_empty() else "EMPTY CAGE"
 	_draw_card_text(canvas, _get_info_slot(info_rect, "meta"), meta_text, "meta_center", TAPE_SHADE)
 
 static func _draw_crafted_banner(canvas: Control, art_rect: Rect2) -> void:
@@ -951,6 +1029,27 @@ static func _draw_material_growth_medium_art(canvas: Control, art_rect: Rect2) -
 static func _draw_crafted_generic_art(canvas: Control, art_rect: Rect2) -> void:
 	_draw_framed_panel(canvas, Rect2(Vector2(art_rect.position.x + 16.0, art_rect.position.y + 42.0), Vector2(art_rect.size.x - 32.0, art_rect.size.y - 58.0)), 0.0, Color(0.83, 0.76, 0.58))
 	_draw_card_text(canvas, Rect2(Vector2(art_rect.position.x, art_rect.position.y + 16.0), Vector2(art_rect.size.x, 10.0)), "MADE", "title_center", TAPE)
+
+static func _get_crafted_texture(crafted_type: String) -> Texture2D:
+	match crafted_type:
+		"tank":
+			if _crafted_tank_art == null:
+				_crafted_tank_art = load_svg_texture("res://assets/cards/tank.svg")
+			return _crafted_tank_art
+		"tool_chest":
+			if _crafted_tool_chest_art == null:
+				_crafted_tool_chest_art = load_svg_texture("res://assets/cards/tool_chest.svg")
+			return _crafted_tool_chest_art
+		"brood_cage":
+			if _crafted_brood_cage_art == null:
+				_crafted_brood_cage_art = load_svg_texture("res://assets/cards/brood_cage.svg")
+			return _crafted_brood_cage_art
+		"archive_shelf":
+			if _crafted_archive_shelf_art == null:
+				_crafted_archive_shelf_art = load_svg_texture("res://assets/cards/archive_shelf.svg")
+			return _crafted_archive_shelf_art
+		_:
+			return null
 
 static func _get_equipment_token_text(equipment_type: String) -> String:
 	match equipment_type:
@@ -1025,17 +1124,7 @@ static func draw_table_drone_card(canvas: Control, rect: Rect2, slot: Dictionary
 		_draw_empty_drone_card_face(canvas, art_rect, outside_status)
 	_draw_equipment_slot_row(canvas, Rect2(Vector2(art_rect.position.x + 18.0, art_rect.end.y - 30.0), Vector2(art_rect.size.x - 36.0, 24.0)), Array(slot.get("equipment_slots", [])))
 	var drone_combat_totals: Dictionary = Dictionary(slot.get("equipment_totals", {}))
-	_draw_stat_icon_triplet_row(
-		canvas,
-		Rect2(Vector2(info_rect.position.x, info_rect.position.y + 16.0), Vector2(info_rect.size.x, 12.0)),
-		"energy",
-		str(maxi(power_charge, 0)),
-		"attack",
-		str(int(drone_combat_totals.get("attack", 0))),
-		"armor",
-		str(int(drone_combat_totals.get("armor", 0))),
-		TAPE
-	)
+	_draw_drone_stat_strip(canvas, Rect2(Vector2(info_rect.position.x, info_rect.position.y + 1.0), Vector2(info_rect.size.x, info_rect.size.y - 2.0)), power_charge, drone_combat_totals, TAPE)
 	var status_light := Rect2(Vector2(rect.end.x - 16.0, rect.position.y + 10.0), Vector2(6.0, 6.0))
 	canvas.draw_circle(status_light.get_center(), 3.0, Color(0.46, 0.77, 0.46) if available_in_workshop else Color(0.76, 0.44, 0.24))
 

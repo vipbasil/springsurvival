@@ -15,6 +15,7 @@ const ENEMY_FIGHT_INTERVAL := 2.2
 const BOT_RECOVERY_BASE_INTERVAL := 4.2
 const BOT_RECOVERY_PER_TILE_INTERVAL := 0.75
 const BOT_RECOVERY_ENCOUNTER_INTERVAL := 3.4
+const ENEMY_CAGE_CAPTURE_BASE_INTERVAL := 2.2
 const ATTACK_FEEDBACK_DURATION := 0.22
 const DAMAGE_FEEDBACK_DURATION := 0.30
 const RESEARCH_FEEDBACK_DURATION := 0.72
@@ -63,6 +64,9 @@ const FONT_SIZE_CARD_META := 6
 const FONT_SIZE_CARD_VALUE := 9
 const FONT_SIZE_FLOATING_BASE := 14
 const OPERATOR_ID_PHOTO := preload("res://assets/cards/operator_id_photo.svg")
+const OPERATOR_LERA_PHOTO := preload("res://assets/cards/operator_lera.svg")
+const OPERATOR_MIRA_PHOTO := preload("res://assets/cards/operator_mira.svg")
+const OPERATOR_DREN_PHOTO := preload("res://assets/cards/operator_dren.svg")
 const BOT_ROUTE_COLORS := [
 	Color(0.82, 0.67, 0.28),
 	Color(0.60, 0.76, 0.63),
@@ -86,6 +90,7 @@ var _journal_research_cooldown := JOURNAL_RESEARCH_INTERVAL
 var _blueprint_craft_cooldown := BLUEPRINT_CRAFT_INTERVAL
 var _enemy_fight_cooldowns := {}
 var _bot_recovery_process := {}
+var _enemy_cage_capture_process := {}
 var _selected_bot_index := 0
 var _selected_power_slot_index := -1
 var _drag_candidate := {}
@@ -114,12 +119,19 @@ var _combat_card_fx := {}
 var _location_marker_fx := {}
 var _floating_numbers := []
 var _floating_announcements := []
+var _operator_selection_open := false
+var _operator_selection_click_rects := []
 var _journal_open := false
 var _journal_page_index := 0
 var _journal_recipe_click_rects := []
+var _journal_index_click_rects := []
+var _journal_related_click_rects := []
+var _journal_recipe_prev_rect := Rect2()
+var _journal_recipe_next_rect := Rect2()
 var _journal_prev_rect := Rect2()
 var _journal_next_rect := Rect2()
 var _journal_close_rect := Rect2()
+var _journal_recipe_page_index := 0
 var _journal_viewed_subject_key := ""
 var _bot_log_open := false
 var _bot_log_bot_index := 0
@@ -421,6 +433,7 @@ func _ready():
 	_location_dump_texture = WorkshopArtData.load_svg_texture("res://assets/cards/location_dump.svg")
 	_location_nest_texture = WorkshopArtData.load_svg_texture("res://assets/cards/location_nest.svg")
 	_location_ruin_texture = WorkshopArtData.load_svg_texture("res://assets/cards/location_ruin.svg")
+	_operator_selection_open = GameState.needs_operator_selection() or not GameState.is_run_active()
 	_refresh_labels()
 	queue_redraw()
 
@@ -434,6 +447,8 @@ func _notification(what: int):
 		_set_cursor_shape(Control.CURSOR_ARROW)
 
 func _process(delta: float):
+	if _operator_selection_open:
+		return
 	_tick_combat_feedback(delta)
 	if not GameState.is_run_active():
 		return
@@ -443,6 +458,7 @@ func _process(delta: float):
 	_tick_blueprint_crafting(delta)
 	_tick_tank_process(delta)
 	_tick_bot_recovery(delta)
+	_tick_enemy_cage_capture(delta)
 	_tick_enemy_fights(delta)
 	_outside_step_cooldown -= delta
 	if _outside_step_cooldown > 0.0:
@@ -617,6 +633,61 @@ func _tick_tank_process(delta: float):
 		EventBus.log_message.emit("Tank output ready: %s" % str(created_material.get("display_name", created_material.get("type", "Resource"))))
 		queue_redraw()
 
+func _tick_enemy_cage_capture(delta: float):
+	if _enemy_cage_capture_process.is_empty():
+		return
+	var cage_id := str(_enemy_cage_capture_process.get("cage_id", ""))
+	var enemy_id := str(_enemy_cage_capture_process.get("enemy_id", ""))
+	if cage_id.is_empty() or enemy_id.is_empty():
+		_enemy_cage_capture_process.clear()
+		return
+	if not GameState.is_enemy_cage_crafted_card(cage_id) or GameState.is_enemy_cage_occupied(cage_id):
+		_enemy_cage_capture_process.clear()
+		return
+	if _get_enemy_card_by_id(enemy_id).is_empty():
+		_enemy_cage_capture_process.clear()
+		return
+	var remaining_cooldown := maxf(float(_enemy_cage_capture_process.get("cooldown", 0.0)) - delta, 0.0)
+	_enemy_cage_capture_process["cooldown"] = remaining_cooldown
+	queue_redraw()
+	if remaining_cooldown > 0.0:
+		return
+	var result := GameState.resolve_enemy_cage_capture(cage_id, enemy_id)
+	var capture_rect := Rect2(_enemy_cage_capture_process.get("rect", Rect2()))
+	var enemy_name := str(_enemy_cage_capture_process.get("enemy_name", "Enemy"))
+	_enemy_cage_capture_process.clear()
+	if result.is_empty() or not bool(result.get("ok", false)):
+		EventBus.log_message.emit(str(result.get("message", "Capture failed")))
+		return
+	if bool(result.get("success", false)):
+		_table_enemy_positions.erase(enemy_id)
+		var enemy_layout_key := GameState.get_state_table_card_layout_key("enemy", enemy_id)
+		if not enemy_layout_key.is_empty():
+			GameState.clear_workshop_card_position(enemy_layout_key)
+		_trigger_research_card_feedback("crafted", cage_id)
+		_trigger_research_card_feedback("enemy", enemy_id)
+		_floating_announcements.append({
+			"position": capture_rect.get_center() + Vector2(0.0, -28.0),
+			"text": "CAPTURED",
+			"subtext": enemy_name,
+			"timer": DISCOVERY_BANNER_DURATION,
+			"duration": DISCOVERY_BANNER_DURATION,
+		})
+	else:
+		_table_crafted_positions.erase(cage_id)
+		var cage_layout_key := GameState.get_state_table_card_layout_key("crafted", cage_id)
+		if not cage_layout_key.is_empty():
+			GameState.clear_workshop_card_position(cage_layout_key)
+		_trigger_research_failure_card_feedback("enemy", enemy_id)
+		_floating_announcements.append({
+			"position": capture_rect.get_center() + Vector2(0.0, -28.0),
+			"text": "CAPTURE FAILED",
+			"subtext": "CAGE LOST",
+			"timer": DISCOVERY_BANNER_DURATION,
+			"duration": DISCOVERY_BANNER_DURATION,
+		})
+	EventBus.log_message.emit(str(result.get("message", "Capture resolved")))
+
 func _tick_bot_recovery(delta: float):
 	if not is_instance_valid(map_region):
 		return
@@ -642,8 +713,9 @@ func _tick_bot_recovery(delta: float):
 			"encounter_interval": BOT_RECOVERY_ENCOUNTER_INTERVAL,
 			"encounter_cooldown": minf(BOT_RECOVERY_ENCOUNTER_INTERVAL, maxf(duration * 0.5, 1.6)),
 			"encounter_rolls": 0,
+			"retrieval_from_active": bool(candidate.get("retrieval_from_active", false)),
 		}
-		EventBus.log_message.emit("Recovery started: %s" % _bot_display_name(bot_index))
+		EventBus.log_message.emit("%s started: %s" % ["Retrieval" if bool(_bot_recovery_process.get("retrieval_from_active", false)) else "Recovery", _bot_display_name(bot_index)])
 		queue_redraw()
 	var remaining_cooldown := maxf(float(_bot_recovery_process.get("cooldown", 0.0)) - delta, 0.0)
 	var remaining_encounter := maxf(float(_bot_recovery_process.get("encounter_cooldown", BOT_RECOVERY_ENCOUNTER_INTERVAL)) - delta, 0.0)
@@ -687,8 +759,10 @@ func _tick_bot_recovery(delta: float):
 	if hp_loss > 0:
 		_spawn_floating_feedback(operator_center + Vector2(14.0, -6.0), "-%d HP" % hp_loss, Color(0.93, 0.42, 0.34), 68.0)
 	var recovery_text := "DRONE RECOVERED"
+	if bool(result.get("retrieval_from_active", false)):
+		recovery_text = "DRONE RETRIEVED"
 	if bool(result.get("collapsed", false)):
-		recovery_text = "RECOVERED - COLLAPSE"
+		recovery_text = "%s - COLLAPSE" % recovery_text
 	_floating_announcements.append({
 		"position": Rect2(candidate.get("rect", Rect2())).get_center() + Vector2(0.0, -28.0),
 		"text": recovery_text,
@@ -1040,7 +1114,7 @@ func _get_active_bot_recovery_candidate(rect: Rect2) -> Dictionary:
 			continue
 		if bool(slot.get("available_in_workshop", false)):
 			continue
-		if not GameState.can_recover_bot(bot_index):
+		if not GameState.can_operator_retrieve_bot(bot_index):
 			continue
 		var drone_rect := Rect2(slot.get("rect", Rect2()))
 		if not _has_meaningful_overlap(drone_rect, operator_rect, 0.30):
@@ -1052,6 +1126,7 @@ func _get_active_bot_recovery_candidate(rect: Rect2) -> Dictionary:
 			"distance": distance,
 			"energy_cost": GameState.get_bot_recovery_energy_cost(bot_index),
 			"duration": _get_bot_recovery_duration(distance),
+			"retrieval_from_active": str(slot.get("outside_status", "cabinet")) == "active",
 		}
 	return {}
 
@@ -1082,8 +1157,7 @@ func _build_research_subject_from_card(card_info: Dictionary) -> Dictionary:
 			var location_card: Dictionary = card_info.get("card_data", {})
 			return {"kind": "location", "type": str(location_card.get("type", "")), "source_kind": "location", "source_identifier": str(location_card.get("id", ""))}
 		"enemy":
-			var enemy_card: Dictionary = card_info.get("card_data", {})
-			return {"kind": "enemy", "type": str(enemy_card.get("type", "")), "source_kind": "enemy", "source_identifier": str(enemy_card.get("id", ""))}
+			return {}
 		"material":
 			var material_card: Dictionary = card_info.get("card_data", {})
 			return {
@@ -1102,6 +1176,20 @@ func _build_research_subject_from_card(card_info: Dictionary) -> Dictionary:
 				"card_id": str(equipment_card.get("id", "")),
 				"source_kind": "equipment",
 				"source_identifier": str(equipment_card.get("id", "")),
+			}
+		"crafted":
+			var crafted_card: Dictionary = card_info.get("card_data", {})
+			var crafted_id := str(crafted_card.get("id", ""))
+			if crafted_id.is_empty() or not GameState.is_enemy_cage_occupied(crafted_id):
+				return {}
+			var captive_enemy := GameState.get_caged_enemy(crafted_id)
+			if captive_enemy.is_empty():
+				return {}
+			return {
+				"kind": "enemy",
+				"type": str(captive_enemy.get("type", "")),
+				"source_kind": "crafted",
+				"source_identifier": crafted_id,
 			}
 		"bot":
 			var slot: Dictionary = card_info.get("slot", {})
@@ -1389,6 +1477,12 @@ func _parse_material_requirement(part: String) -> Dictionary:
 	}
 
 func _input(event: InputEvent):
+	if _operator_selection_open:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			var operator_click: InputEventMouseButton = event
+			_handle_operator_selection_click(operator_click.position)
+			queue_redraw()
+		return
 	if _journal_open:
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			var modal_click: InputEventMouseButton = event
@@ -1444,6 +1538,9 @@ func _draw():
 	_draw_drag_overlay()
 	_draw_floating_numbers()
 	_draw_floating_announcements()
+	if _operator_selection_open:
+		_draw_operator_selection_overlay()
+		return
 	if _journal_open:
 		_draw_journal_overlay()
 	if _bot_log_open:
@@ -1461,6 +1558,8 @@ func _open_programming_scene():
 	get_tree().change_scene_to_file(PROGRAMMING_SCENE_PATH)
 
 func _refresh_labels(_value = null):
+	if not GameState.is_run_active():
+		_operator_selection_open = true
 	queue_redraw()
 
 func _on_log_message(message: String):
@@ -1525,6 +1624,8 @@ func _ensure_table_layout(rect: Rect2):
 		_sync_state_table_card_positions(kind, workspace)
 
 func _on_map_gui_input(event: InputEvent):
+	if _operator_selection_open:
+		return
 	if _journal_open:
 		return
 	if event is InputEventMouseMotion:
@@ -1554,9 +1655,36 @@ func _on_map_gui_input(event: InputEvent):
 			return
 		var top_card := WorkshopTableControllerData.get_top_table_card_at_point(_get_table_visual_cards(_rect_in_root(map_region)), root_point)
 		if not top_card.is_empty():
+			var top_kind := str(top_card.get("kind", ""))
+			var top_identifier = null
+			match top_kind:
+				"enemy":
+					top_identifier = str(top_card.get("enemy_id", ""))
+				"crafted":
+					top_identifier = str(top_card.get("crafted_id", ""))
+			if _is_card_locked_by_enemy_cage_capture(top_kind, top_identifier):
+				_drag_candidate.clear()
+				return
+			if mouse_event.double_click and top_kind == "crafted":
+				var crafted_id := str(top_card.get("crafted_id", ""))
+				if not crafted_id.is_empty() and GameState.is_tool_chest_crafted_card(crafted_id):
+					var withdrawn := GameState.withdraw_latest_crafted_storage_item(crafted_id)
+					if not withdrawn.is_empty():
+						_place_withdrawn_storage_card(withdrawn, Rect2(top_card.get("rect", Rect2())))
+						EventBus.log_message.emit("%s withdrawn" % str(withdrawn.get("display_name", withdrawn.get("result", "Stored item"))))
+					return
+				if not crafted_id.is_empty() and GameState.is_enemy_cage_occupied(crafted_id):
+					var release_result: Dictionary = GameState.release_enemy_from_cage(crafted_id)
+					if bool(release_result.get("ok", false)):
+						var enemy: Dictionary = Dictionary(release_result.get("enemy", {}))
+						var enemy_id := str(enemy.get("id", ""))
+						if not enemy_id.is_empty():
+							_place_generated_enemy_card(enemy_id, Rect2(top_card.get("rect", Rect2())))
+					EventBus.log_message.emit(str(release_result.get("message", "Enemy released")))
+					return
 			var top_drag_state := WorkshopTableControllerData.build_top_card_drag_state(root_point, top_card)
 			if not top_drag_state.is_empty():
-				match str(top_card.get("kind", "")):
+				match top_kind:
 					"cartridge":
 						_selected_power_slot_index = -1
 						GameState.select_programmed_cartridge(str(top_card.get("cartridge_id", "")))
@@ -1583,10 +1711,11 @@ func _complete_click_candidate(candidate: Dictionary):
 			_storage_open = false
 			_journal_open = true
 			_journal_page_index = clampi(_journal_page_index, 0, maxi(_get_journal_display_entries().size() - 1, 0))
+			_journal_recipe_page_index = 0
 			_journal_viewed_subject_key = _get_current_journal_subject_key()
 		"crafted":
 			var crafted_id := str(candidate.get("crafted_id", ""))
-			if crafted_id.is_empty() or not GameState.is_storage_crafted_card(crafted_id):
+			if crafted_id.is_empty() or not GameState.is_archive_shelf_crafted_card(crafted_id):
 				return
 			_journal_open = false
 			_bot_log_open = false
@@ -1655,6 +1784,143 @@ func _cursor_shape_for_point(root_point: Vector2) -> int:
 		return Control.CURSOR_POINTING_HAND
 
 	return Control.CURSOR_ARROW
+
+func _get_operator_card_name() -> String:
+	var operator_state := GameState.get_operator_state()
+	var display_name := str(operator_state.get("display_name", "")).strip_edges()
+	if display_name.is_empty():
+		return str(WORKSHOP_OPERATOR["name"])
+	return display_name
+
+func _get_operator_card_focus() -> String:
+	var operator_state := GameState.get_operator_state()
+	var focus := str(operator_state.get("focus", "")).strip_edges()
+	if focus.is_empty():
+		return str(WORKSHOP_OPERATOR["focus"])
+	return focus
+
+func _get_operator_profile_photo(profile_id: String) -> Texture2D:
+	match profile_id.strip_edges().to_lower():
+		"lera":
+			return OPERATOR_LERA_PHOTO
+		"mira":
+			return OPERATOR_MIRA_PHOTO
+		"dren":
+			return OPERATOR_DREN_PHOTO
+	return OPERATOR_ID_PHOTO
+
+func _get_current_operator_photo() -> Texture2D:
+	var operator_state := GameState.get_operator_state()
+	return _get_operator_profile_photo(str(operator_state.get("profile_id", "")))
+
+func _build_operator_profile_preview_state(profile: Dictionary) -> Dictionary:
+	var state := {
+		"energy": GameState.OPERATOR_MAX_ENERGY,
+		"max_energy": GameState.OPERATOR_MAX_ENERGY,
+		"hp": GameState.OPERATOR_MAX_HP,
+		"max_hp": GameState.OPERATOR_MAX_HP,
+		"status": "active",
+		"equipment_slots": [
+			{"slot_index": 0, "item_type": "", "display_name": ""},
+			{"slot_index": 1, "item_type": "", "display_name": ""},
+			{"slot_index": 2, "item_type": "", "display_name": ""},
+		],
+	}
+	var equipment_type := str(profile.get("starting_equipment", "")).strip_edges()
+	if not equipment_type.is_empty():
+		var display_name := equipment_type.replace("_", " ").capitalize()
+		state["equipment_slots"][0] = {
+			"slot_index": 0,
+			"item_type": equipment_type,
+			"display_name": display_name,
+		}
+	var totals := {"attack": 0, "armor": 0, "stealth": 0, "utility": 0}
+	match equipment_type:
+		"knife":
+			totals["attack"] = 1
+		"bow":
+			totals["attack"] = 3
+			totals["armor"] = -1
+		"plate_mail":
+			totals["armor"] = 3
+			totals["stealth"] = -1
+		"hide_cloak":
+			totals["stealth"] = 3
+		"tool_kit":
+			totals["utility"] = 3
+	state["equipment_totals"] = totals
+	return state
+
+func _draw_operator_selection_overlay() -> void:
+	_operator_selection_click_rects.clear()
+	var screen_rect := Rect2(Vector2.ZERO, size)
+	draw_rect(screen_rect, Color(0.03, 0.03, 0.04, 0.68))
+	var panel_size := Vector2(minf(size.x - 120.0, 1320.0), minf(size.y - 100.0, 760.0))
+	var panel_rect := Rect2((size - panel_size) * 0.5, panel_size)
+	draw_rect(panel_rect, Color(0.92, 0.87, 0.76))
+	draw_rect(panel_rect.grow(-4.0), Color(0.95, 0.91, 0.82))
+	draw_rect(panel_rect, PANEL_BORDER, false, 3.0)
+	var redeployment := not GameState.is_run_active()
+	var title := "ARK REDEPLOYMENT" if redeployment else "ARK DEPLOYMENT"
+	var intro_text := "Choose one operator for surface deployment. The selected operator will materialize into a warm starter shelter with the first field package already prepared."
+	if redeployment:
+		intro_text = "The previous shelter run has ended. Choose the next operator to drop from the Ark and begin again with the starter shelter package."
+	_draw_outlined_text(panel_rect.position + Vector2(24.0, 28.0), title, HORIZONTAL_ALIGNMENT_LEFT, panel_rect.size.x - 48.0, FONT_SIZE_REGION, STEEL_DARK, Color(0.98, 0.94, 0.86))
+	var intro_lines := _wrap_journal_text(intro_text, panel_rect.size.x - 48.0, FONT_SIZE_CARD_VALUE + 2, 3)
+	for line_index in range(intro_lines.size()):
+		draw_string(ThemeDB.fallback_font, panel_rect.position + Vector2(24.0, 64.0 + float(line_index) * 20.0), intro_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, panel_rect.size.x - 48.0, FONT_SIZE_CARD_VALUE + 2, STEEL_DARK)
+	var profiles := GameState.get_start_operator_profiles()
+	var card_rect_size := CARD_SIZE * 1.28
+	var column_gap := 26.0
+	var total_width := float(profiles.size()) * card_rect_size.x + float(maxi(profiles.size() - 1, 0)) * column_gap
+	var cards_origin := Vector2(panel_rect.position.x + (panel_rect.size.x - total_width) * 0.5, panel_rect.position.y + 138.0)
+	for profile_index in range(profiles.size()):
+		var profile: Dictionary = Dictionary(profiles[profile_index])
+		var card_rect := Rect2(cards_origin + Vector2(float(profile_index) * (card_rect_size.x + column_gap), 0.0), card_rect_size)
+		var preview_state := _build_operator_profile_preview_state(profile)
+		WorkshopArtData.draw_operator_card(self, card_rect, preview_state, str(profile.get("name", "OPERATOR")), str(profile.get("focus", "")), _get_operator_profile_photo(str(profile.get("id", ""))))
+		var summary_rect := Rect2(Vector2(card_rect.position.x, card_rect.end.y + 12.0), Vector2(card_rect.size.x, 74.0))
+		var summary_lines := _wrap_journal_text(str(profile.get("summary", "")), summary_rect.size.x, FONT_SIZE_CARD_VALUE + 1, 4)
+		for line_index in range(summary_lines.size()):
+			draw_string(ThemeDB.fallback_font, Vector2(summary_rect.position.x, summary_rect.position.y + 14.0 + float(line_index) * 16.0), summary_lines[line_index], HORIZONTAL_ALIGNMENT_CENTER, summary_rect.size.x, FONT_SIZE_CARD_VALUE + 1, STEEL_DARK)
+		var starter_lines := _wrap_journal_text(_build_operator_profile_starter_text(profile), summary_rect.size.x, FONT_SIZE_CARD_META + 3, 4)
+		for line_index in range(starter_lines.size()):
+			draw_string(ThemeDB.fallback_font, Vector2(summary_rect.position.x, summary_rect.position.y + 86.0 + float(line_index) * 13.0), starter_lines[line_index], HORIZONTAL_ALIGNMENT_CENTER, summary_rect.size.x, FONT_SIZE_CARD_META + 3, TAPE_SHADE)
+		var click_rect := Rect2(card_rect.position, Vector2(card_rect.size.x, 224.0))
+		_operator_selection_click_rects.append({"rect": click_rect, "profile_id": str(profile.get("id", ""))})
+
+func _build_operator_profile_starter_text(profile: Dictionary) -> String:
+	var extras: Array[String] = []
+	var equipment_name := str(profile.get("starting_equipment", "")).strip_edges()
+	if not equipment_name.is_empty():
+		extras.append("starts with %s" % equipment_name.replace("_", " ").to_upper())
+	for extra_variant in Array(profile.get("extra_materials", [])):
+		if typeof(extra_variant) != TYPE_DICTIONARY:
+			continue
+		var extra_material: Dictionary = extra_variant
+		var quantity := maxi(int(extra_material.get("quantity", 0)), 0)
+		var item_type := str(extra_material.get("type", "")).strip_edges()
+		if quantity <= 0 or item_type.is_empty():
+			continue
+		extras.append("+%d %s" % [quantity, item_type.replace("_", " ").to_upper()])
+	return ". ".join(extras)
+
+func _handle_operator_selection_click(root_point: Vector2) -> void:
+	for click_info_variant in _operator_selection_click_rects:
+		if typeof(click_info_variant) != TYPE_DICTIONARY:
+			continue
+		var click_info: Dictionary = click_info_variant
+		if not Rect2(click_info.get("rect", Rect2())).has_point(root_point):
+			continue
+		if GameState.start_new_run_with_operator(str(click_info.get("profile_id", ""))):
+			_operator_selection_open = false
+			_selected_power_slot_index = -1
+			_drag_candidate.clear()
+			_active_drag.clear()
+			_bot_log_open = false
+			_storage_open = false
+			_journal_open = false
+		return
 
 func _is_valid_drop_target(root_point: Vector2) -> bool:
 	var drop_rect := _get_drop_rect(root_point)
@@ -1804,6 +2070,33 @@ func _complete_table_card_drag(kind: String, drop_root: Vector2, card_size: Vect
 				_emit_equipment_total_feedback("bot", bot_index, bot_totals_before, GameState.get_bot_equipment_totals(bot_index))
 			EventBus.log_message.emit(str(bot_equip_result.get("message", "Equipment handled")))
 			return
+	if kind == "enemy":
+		var enemy_id := str(_active_drag.get("enemy_id", ""))
+		var cage_target := _get_enemy_cage_target(drop_rect, enemy_id)
+		if not cage_target.is_empty() and not enemy_id.is_empty():
+			if not _enemy_cage_capture_process.is_empty():
+				EventBus.log_message.emit("Capture already in progress")
+				return
+			var cage_id := str(cage_target.get("crafted_id", ""))
+			var cage_rect := Rect2(cage_target.get("rect", Rect2()))
+			_set_state_table_card_position("enemy", enemy_id, cage_rect.position)
+			var enemy_card: Dictionary = Dictionary(_active_drag.get("card_data", {})).duplicate(true)
+			_start_enemy_cage_capture_process(cage_id, enemy_id, cage_rect, enemy_card)
+			return
+	if kind == "crafted":
+		var crafted_id := str(_active_drag.get("crafted_id", ""))
+		if not crafted_id.is_empty() and GameState.is_enemy_cage_crafted_card(crafted_id) and not GameState.is_enemy_cage_occupied(crafted_id):
+			var enemy_target := _get_capture_enemy_target(drop_rect, crafted_id)
+			if not enemy_target.is_empty():
+				if not _enemy_cage_capture_process.is_empty():
+					EventBus.log_message.emit("Capture already in progress")
+					return
+				var enemy_id := str(enemy_target.get("enemy_id", ""))
+				var enemy_rect := Rect2(enemy_target.get("rect", Rect2()))
+				_set_state_table_card_position("crafted", crafted_id, enemy_rect.position)
+				var enemy_card: Dictionary = Dictionary(enemy_target.get("card_data", {})).duplicate(true)
+				_start_enemy_cage_capture_process(crafted_id, enemy_id, enemy_rect, enemy_card)
+				return
 	if kind == "crafted" and _has_meaningful_overlap(Rect2(_table_operator_position, CARD_SIZE), drop_rect, 0.30):
 		var edible_crafted_id := str(_active_drag.get("crafted_id", ""))
 		if edible_crafted_id.is_empty():
@@ -1823,7 +2116,7 @@ func _complete_table_card_drag(kind: String, drop_root: Vector2, card_size: Vect
 		if bool(material_use_result.get("ok", false)):
 			EventBus.log_message.emit(str(material_use_result.get("message", "Operator supply used")))
 			return
-	if kind in ["material", "crafted"]:
+	if kind in ["material", "crafted", "blueprint", "equipment"]:
 		var storage_target := _get_storage_target(kind, drop_rect)
 		if not storage_target.is_empty():
 			var storage_id := str(storage_target.get("crafted_id", ""))
@@ -1836,11 +2129,21 @@ func _complete_table_card_drag(kind: String, drop_root: Vector2, card_size: Vect
 						var stored_material_key := GameState.get_state_table_card_layout_key("material", source_card_id)
 						if not stored_material_key.is_empty():
 							GameState.clear_workshop_card_position(stored_material_key)
-					else:
+					elif kind == "crafted":
 						_table_crafted_positions.erase(source_card_id)
 						var stored_crafted_key := GameState.get_state_table_card_layout_key("crafted", source_card_id)
 						if not stored_crafted_key.is_empty():
 							GameState.clear_workshop_card_position(stored_crafted_key)
+					elif kind == "blueprint":
+						_table_blueprint_positions.erase(source_card_id)
+						var stored_blueprint_key := GameState.get_state_table_card_layout_key("blueprint", source_card_id)
+						if not stored_blueprint_key.is_empty():
+							GameState.clear_workshop_card_position(stored_blueprint_key)
+					elif kind == "equipment":
+						_table_equipment_positions.erase(source_card_id)
+						var stored_equipment_key := GameState.get_state_table_card_layout_key("equipment", source_card_id)
+						if not stored_equipment_key.is_empty():
+							GameState.clear_workshop_card_position(stored_equipment_key)
 					EventBus.log_message.emit(str(storage_result.get("message", "Stored")))
 					return
 	if not _is_rect_in_table_workspace(_get_drop_rect(drop_root)):
@@ -1877,6 +2180,36 @@ func _complete_table_card_drag(kind: String, drop_root: Vector2, card_size: Vect
 		_table_trash_position = clamped
 		GameState.set_workshop_card_position("trash_card", clamped)
 
+func _get_capture_enemy_target(drop_rect: Rect2, source_cage_id: String) -> Dictionary:
+	if source_cage_id.is_empty():
+		return {}
+	var table_rect := _rect_in_root(map_region)
+	for card_info in _get_table_visual_cards(table_rect):
+		if str(card_info.get("kind", "")) != "enemy":
+			continue
+		var enemy_id := str(card_info.get("enemy_id", ""))
+		if enemy_id.is_empty() or _is_card_locked_by_enemy_cage_capture("enemy", enemy_id):
+			continue
+		if _has_meaningful_overlap(Rect2(card_info.get("rect", Rect2())), drop_rect, 0.30):
+			return card_info
+	return {}
+
+func _get_enemy_cage_target(drop_rect: Rect2, source_enemy_id: String) -> Dictionary:
+	if source_enemy_id.is_empty():
+		return {}
+	var table_rect := _rect_in_root(map_region)
+	for card_info in _get_table_visual_cards(table_rect):
+		if str(card_info.get("kind", "")) != "crafted":
+			continue
+		var crafted_id := str(card_info.get("crafted_id", ""))
+		if crafted_id.is_empty() or not GameState.is_enemy_cage_crafted_card(crafted_id):
+			continue
+		if GameState.is_enemy_cage_occupied(crafted_id) or _is_card_locked_by_enemy_cage_capture("crafted", crafted_id):
+			continue
+		if _has_meaningful_overlap(Rect2(card_info.get("rect", Rect2())), drop_rect, 0.30):
+			return card_info
+	return {}
+
 func _get_storage_target(source_kind: String, drop_rect: Rect2) -> Dictionary:
 	var table_rect := _rect_in_root(map_region)
 	for card_info in _get_table_visual_cards(table_rect):
@@ -1887,6 +2220,8 @@ func _get_storage_target(source_kind: String, drop_rect: Rect2) -> Dictionary:
 		if crafted_id.is_empty() or crafted_id == source_id:
 			continue
 		if not GameState.is_storage_crafted_card(crafted_id):
+			continue
+		if source_kind in ["blueprint", "equipment"] and not GameState.is_tool_chest_crafted_card(crafted_id):
 			continue
 		if _has_meaningful_overlap(Rect2(card_info.get("rect", Rect2())), drop_rect, 0.30):
 			return card_info
@@ -2048,6 +2383,23 @@ func _place_generated_equipment_card(equipment_id: String, source_rect: Rect2):
 	)
 	_set_state_table_card_position("equipment", equipment_id, generated_position)
 
+func _place_withdrawn_storage_card(withdrawn: Dictionary, source_rect: Rect2) -> void:
+	var withdrawn_kind := str(withdrawn.get("kind", ""))
+	var withdrawn_id := str(withdrawn.get("id", ""))
+	match withdrawn_kind:
+		"material":
+			if not withdrawn_id.is_empty():
+				_place_generated_material_card(withdrawn_id, source_rect)
+		"crafted":
+			if not withdrawn_id.is_empty():
+				_place_generated_crafted_card(withdrawn_id, source_rect)
+		"blueprint":
+			if not withdrawn_id.is_empty():
+				_place_generated_blueprint_card(withdrawn_id, source_rect)
+		"equipment":
+			if not withdrawn_id.is_empty():
+				_place_generated_equipment_card(withdrawn_id, source_rect)
+
 func _get_equipment_slot_rects_for_card(card_rect: Rect2) -> Array:
 	var face_rect := card_rect.grow(-3.0)
 	var art_rect := Rect2(Vector2(face_rect.position.x + 12.0, face_rect.position.y + 18.0), Vector2(face_rect.size.x - 24.0, 86.0))
@@ -2188,7 +2540,7 @@ func _draw_map_bay(rect: Rect2):
 			"operator":
 				var operator_card_state := GameState.get_operator_state()
 				operator_card_state["equipment_totals"] = GameState.get_operator_equipment_totals()
-				WorkshopArtData.draw_operator_card(self, Rect2(card_info["rect"]), operator_card_state, str(WORKSHOP_OPERATOR["name"]), str(WORKSHOP_OPERATOR["focus"]), OPERATOR_ID_PHOTO)
+				WorkshopArtData.draw_operator_card(self, Rect2(card_info["rect"]), operator_card_state, _get_operator_card_name(), _get_operator_card_focus(), _get_current_operator_photo())
 			"cartridge":
 				WorkshopArtData.draw_tape_card(self, Rect2(card_info["rect"]), true, str(card_info.get("label", "")), bool(card_info.get("selected", false)))
 			"blank":
@@ -2290,7 +2642,7 @@ func _draw_drag_overlay():
 	elif drag_kind == "operator":
 		var operator_drag_state := GameState.get_operator_state()
 		operator_drag_state["equipment_totals"] = GameState.get_operator_equipment_totals()
-		WorkshopArtData.draw_operator_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), operator_drag_state, str(WORKSHOP_OPERATOR["name"]), str(WORKSHOP_OPERATOR["focus"]), OPERATOR_ID_PHOTO)
+		WorkshopArtData.draw_operator_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), operator_drag_state, _get_operator_card_name(), _get_operator_card_focus(), _get_current_operator_photo())
 	elif drag_kind == "trash_card":
 		WorkshopArtData.draw_trash_card(self, Rect2(_drag_mouse_root - _drag_pickup_offset, CARD_SIZE), false)
 	elif drag_kind == "bench_card":
@@ -2366,6 +2718,12 @@ func _get_active_process_states(rect: Rect2) -> Array:
 			"rect": Rect2(_bot_recovery_process.get("rect", Rect2())),
 			"cooldown": float(_bot_recovery_process.get("cooldown", 0.0)),
 			"duration": float(_bot_recovery_process.get("duration", BOT_RECOVERY_BASE_INTERVAL)),
+		})
+	if not _enemy_cage_capture_process.is_empty():
+		states.append({
+			"rect": Rect2(_enemy_cage_capture_process.get("rect", Rect2())),
+			"cooldown": float(_enemy_cage_capture_process.get("cooldown", 0.0)),
+			"duration": float(_enemy_cage_capture_process.get("duration", ENEMY_CAGE_CAPTURE_BASE_INTERVAL)),
 		})
 	for tank_batch_variant in GameState.get_active_tank_batches():
 		if typeof(tank_batch_variant) != TYPE_DICTIONARY:
@@ -2445,7 +2803,80 @@ func _get_current_journal_subject_key() -> String:
 	return str(Dictionary(entries[page_index]).get("subject_key", ""))
 
 func _get_journal_display_entries() -> Array:
-	return GameState.get_journal_display_entries()
+	var entries := GameState.get_journal_display_entries()
+	var index_entry := _build_journal_index_entry(entries)
+	var display_entries: Array = [index_entry]
+	display_entries.append_array(entries)
+	return display_entries
+
+func _build_journal_index_entry(entries: Array) -> Dictionary:
+	var categories := _build_journal_index_categories(entries)
+	return {
+		"subject_key": "__index__",
+		"subject_kind": "index",
+		"subject_type": "index",
+		"title": "INDEX",
+		"description": "Use the index to jump between knowledge families. Locked entries still appear inside each family, so the journal shows both what is known and what remains unknown.",
+		"locked": false,
+		"unread": false,
+		"attempts": 0,
+		"recipes": [],
+		"recipe_ids": [],
+		"categories": categories,
+	}
+
+func _find_journal_page_index_by_subject_key(subject_key: String) -> int:
+	if subject_key.is_empty():
+		return -1
+	var entries := _get_journal_display_entries()
+	for entry_index in range(entries.size()):
+		var entry: Dictionary = Dictionary(entries[entry_index])
+		if str(entry.get("subject_key", "")) == subject_key:
+			return entry_index
+	return -1
+
+func _build_journal_index_categories(entries: Array) -> Array:
+	var specs := [
+		{"kind": "location", "label": "LOCATIONS"},
+		{"kind": "material", "label": "MATERIALS"},
+		{"kind": "equipment", "label": "EQUIPMENT"},
+		{"kind": "crafted", "label": "STRUCTURES"},
+		{"kind": "drone", "label": "DRONES"},
+		{"kind": "enemy", "label": "ENEMIES"},
+		{"kind": "machine", "label": "MACHINES"},
+		{"kind": "tape", "label": "MEDIA"},
+		{"kind": "resource", "label": "RESOURCES"},
+	]
+	var categories: Array = []
+	for spec_variant in specs:
+		var spec: Dictionary = spec_variant
+		var kind := str(spec.get("kind", ""))
+		var total := 0
+		var discovered := 0
+		var unread := false
+		var first_page_index := -1
+		for entry_index in range(entries.size()):
+			var entry: Dictionary = Dictionary(entries[entry_index])
+			if str(entry.get("subject_kind", "")) != kind:
+				continue
+			total += 1
+			if not bool(entry.get("locked", true)):
+				discovered += 1
+			if bool(entry.get("unread", false)):
+				unread = true
+			if first_page_index == -1:
+				first_page_index = entry_index + 1
+		if total <= 0:
+			continue
+		categories.append({
+			"kind": kind,
+			"label": str(spec.get("label", kind.to_upper())),
+			"total": total,
+			"discovered": discovered,
+			"unread": unread,
+			"page_index": first_page_index,
+		})
+	return categories
 
 func _draw_run_end_overlay():
 	var overlay_rect := Rect2(Vector2.ZERO, size)
@@ -2476,30 +2907,69 @@ func _handle_journal_modal_click(root_point: Vector2):
 	if _journal_close_rect.has_point(root_point) or not overlay_rect.has_point(root_point):
 		_commit_current_journal_page_read()
 		_journal_open = false
+		_journal_recipe_page_index = 0
 		_journal_recipe_click_rects.clear()
+		_journal_related_click_rects.clear()
 		return
 	if _journal_prev_rect.has_point(root_point):
 		_commit_current_journal_page_read()
 		_journal_page_index = maxi(_journal_page_index - 1, 0)
+		_journal_recipe_page_index = 0
 		_journal_viewed_subject_key = _get_current_journal_subject_key()
 		return
 	if _journal_next_rect.has_point(root_point):
 		_commit_current_journal_page_read()
 		_journal_page_index = mini(_journal_page_index + 1, maxi(_get_journal_display_entries().size() - 1, 0))
+		_journal_recipe_page_index = 0
 		_journal_viewed_subject_key = _get_current_journal_subject_key()
+		return
+	for click_info_variant in _journal_index_click_rects:
+		if typeof(click_info_variant) != TYPE_DICTIONARY:
+			continue
+		var click_info: Dictionary = click_info_variant
+		if not Rect2(click_info.get("rect", Rect2())).has_point(root_point):
+			continue
+		_commit_current_journal_page_read()
+		_journal_page_index = int(click_info.get("page_index", 0))
+		_journal_recipe_page_index = 0
+		_journal_viewed_subject_key = _get_current_journal_subject_key()
+		return
+	if _journal_recipe_prev_rect.has_point(root_point):
+		_journal_recipe_page_index = maxi(_journal_recipe_page_index - 1, 0)
+		return
+	if _journal_recipe_next_rect.has_point(root_point):
+		var entry := Dictionary(_get_journal_display_entries()[clampi(_journal_page_index, 0, maxi(_get_journal_display_entries().size() - 1, 0))])
+		var recipes: Array = Array(entry.get("recipes", []))
+		var page_count := maxi(int(ceili(float(recipes.size()) / 2.0)), 1)
+		_journal_recipe_page_index = mini(_journal_recipe_page_index + 1, page_count - 1)
 		return
 	for click_info in _journal_recipe_click_rects:
 		var recipe_rect := Rect2(click_info.get("rect", Rect2()))
 		if not recipe_rect.has_point(root_point):
 			continue
 		var recipe: Dictionary = Dictionary(click_info.get("recipe", {}))
-		if bool(recipe.get("locked", false)):
+		if not bool(recipe.get("copyable", false)):
 			return
 		var blueprint := GameState.create_blueprint_card(recipe)
 		var blueprint_id := str(blueprint.get("id", ""))
 		if not blueprint_id.is_empty():
 			_place_generated_blueprint_card(blueprint_id, Rect2(_table_journal_position, CARD_SIZE))
 			EventBus.log_message.emit("%s copied as blueprint" % str(blueprint.get("result", "Blueprint")))
+		return
+	for click_info_variant in _journal_related_click_rects:
+		if typeof(click_info_variant) != TYPE_DICTIONARY:
+			continue
+		var click_info: Dictionary = click_info_variant
+		if not Rect2(click_info.get("rect", Rect2())).has_point(root_point):
+			continue
+		var subject_key := str(click_info.get("subject_key", ""))
+		var target_page_index := _find_journal_page_index_by_subject_key(subject_key)
+		if target_page_index == -1:
+			return
+		_commit_current_journal_page_read()
+		_journal_page_index = target_page_index
+		_journal_recipe_page_index = 0
+		_journal_viewed_subject_key = _get_current_journal_subject_key()
 		return
 
 func _handle_bot_log_modal_click(root_point: Vector2):
@@ -2536,17 +3006,16 @@ func _handle_storage_modal_click(root_point: Vector2):
 		if withdrawn.is_empty():
 			return
 		var container_rect := Rect2(Vector2(_table_crafted_positions.get(_storage_container_id, Vector2(size.x * 0.5 - CARD_SIZE.x * 0.5, size.y * 0.5 - CARD_SIZE.y * 0.5))), CARD_SIZE)
-		var withdrawn_kind := str(withdrawn.get("kind", ""))
-		var withdrawn_id := str(withdrawn.get("id", ""))
-		if withdrawn_kind == "material" and not withdrawn_id.is_empty():
-			_place_generated_material_card(withdrawn_id, container_rect)
-		elif withdrawn_kind == "crafted" and not withdrawn_id.is_empty():
-			_place_generated_crafted_card(withdrawn_id, container_rect)
+		_place_withdrawn_storage_card(withdrawn, container_rect)
 		EventBus.log_message.emit("%s withdrawn" % str(withdrawn.get("display_name", withdrawn.get("result", "Stored item"))))
 		return
 
 func _draw_journal_overlay():
 	_journal_recipe_click_rects.clear()
+	_journal_index_click_rects.clear()
+	_journal_related_click_rects.clear()
+	_journal_recipe_prev_rect = Rect2()
+	_journal_recipe_next_rect = Rect2()
 	_journal_prev_rect = Rect2()
 	_journal_next_rect = Rect2()
 	_journal_close_rect = Rect2()
@@ -2574,47 +3043,31 @@ func _draw_journal_overlay():
 	var entry_locked := bool(entry.get("locked", false))
 	var left_page := Rect2(page_rect.position + Vector2(20.0, 26.0), Vector2(page_rect.size.x * 0.5 - 32.0, page_rect.size.y - 52.0))
 	var right_page := Rect2(Vector2(spine_x + 12.0, page_rect.position.y + 26.0), Vector2(page_rect.size.x * 0.5 - 32.0, page_rect.size.y - 52.0))
+	if str(entry.get("subject_kind", "")) == "index":
+		_draw_journal_index_page(page_rect, left_page, right_page, entry)
+		if _journal_page_index > 0:
+			_journal_prev_rect = Rect2(Vector2(page_rect.position.x + 16.0, page_rect.end.y - 34.0), Vector2(24.0, 18.0))
+			draw_rect(_journal_prev_rect, Color(0.79, 0.72, 0.56))
+			draw_rect(_journal_prev_rect, PANEL_BORDER, false, 1.0)
+			draw_string(ThemeDB.fallback_font, Vector2(_journal_prev_rect.position.x, _journal_prev_rect.position.y + 14.0), "<", HORIZONTAL_ALIGNMENT_CENTER, _journal_prev_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
+		if _journal_page_index < entries.size() - 1:
+			_journal_next_rect = Rect2(Vector2(page_rect.end.x - 56.0, page_rect.end.y - 34.0), Vector2(24.0, 18.0))
+			draw_rect(_journal_next_rect, Color(0.79, 0.72, 0.56))
+			draw_rect(_journal_next_rect, PANEL_BORDER, false, 1.0)
+			draw_string(ThemeDB.fallback_font, Vector2(_journal_next_rect.position.x, _journal_next_rect.position.y + 14.0), ">", HORIZONTAL_ALIGNMENT_CENTER, _journal_next_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
+		draw_string(ThemeDB.fallback_font, Vector2(page_rect.position.x, page_rect.end.y - 18.0), "PAGE %d / %d" % [_journal_page_index + 1, entries.size()], HORIZONTAL_ALIGNMENT_CENTER, page_rect.size.x, FONT_SIZE_CARD_META + 2, STEEL_DARK)
+		return
 	_draw_outlined_text(Vector2(left_page.position.x, left_page.position.y + 4.0), str(entry.get("title", "ENTRY")), HORIZONTAL_ALIGNMENT_LEFT, left_page.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
 	if bool(entry.get("unread", false)) and not entry_locked:
 		_draw_unread_badge(Rect2(Vector2(left_page.end.x - 24.0, left_page.position.y - 4.0), Vector2(18.0, 18.0)))
 	_draw_outlined_text(Vector2(right_page.position.x, right_page.position.y + 4.0), "LOCKED NOTES" if entry_locked else "RECIPES", HORIZONTAL_ALIGNMENT_LEFT, right_page.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
-	var preview_rect := Rect2(left_page.position + Vector2(8.0, 28.0), Vector2(144.0, 176.0))
+	var preview_rect := Rect2(left_page.position + Vector2(8.0, 28.0), Vector2(132.0, 164.0))
 	if entry_locked:
 		_draw_locked_journal_entry_preview(preview_rect, entry)
 	else:
 		_draw_journal_entry_preview(preview_rect, entry)
-	var description_lines := _wrap_journal_text(str(entry.get("description", "")), left_page.size.x - 170.0, FONT_SIZE_CARD_VALUE, 8)
-	for line_index in range(description_lines.size()):
-		draw_string(
-			ThemeDB.fallback_font,
-			Vector2(left_page.position.x + 170.0, left_page.position.y + 52.0 + float(line_index) * 16.0),
-			description_lines[line_index],
-			HORIZONTAL_ALIGNMENT_LEFT,
-			left_page.size.x - 170.0,
-			FONT_SIZE_CARD_VALUE,
-			STEEL_DARK
-		)
-	draw_string(ThemeDB.fallback_font, Vector2(left_page.position.x + 170.0, left_page.position.y + 188.0), "ATTEMPTS %d" % int(entry.get("attempts", 0)), HORIZONTAL_ALIGNMENT_LEFT, left_page.size.x - 170.0, FONT_SIZE_CARD_META + 2, TAPE_SHADE)
-	var recipes: Array = Array(entry.get("recipes", []))
-	if recipes.is_empty():
-		var no_result_lines := _wrap_journal_text("No stable formula recorded yet. Further research may still fail, but can surface a usable blueprint.", right_page.size.x - 16.0, FONT_SIZE_CARD_VALUE, 6)
-		for line_index in range(no_result_lines.size()):
-			draw_string(ThemeDB.fallback_font, Vector2(right_page.position.x, right_page.position.y + 40.0 + float(line_index) * 16.0), no_result_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, right_page.size.x - 16.0, FONT_SIZE_CARD_VALUE, STEEL_DARK)
-	else:
-		for recipe_index in range(recipes.size()):
-			var recipe: Dictionary = recipes[recipe_index]
-			var recipe_locked := bool(recipe.get("locked", false))
-			var recipe_rect := Rect2(Vector2(right_page.position.x, right_page.position.y + 36.0 + float(recipe_index) * 72.0), Vector2(right_page.size.x - 10.0, 60.0))
-			draw_rect(recipe_rect, Color(0.78, 0.73, 0.60) if recipe_locked else Color(0.84, 0.78, 0.62))
-			draw_rect(recipe_rect, PANEL_BORDER, false, 1.0)
-			var formula_lines := _wrap_journal_text(str(recipe.get("formula", "")), recipe_rect.size.x - 12.0, FONT_SIZE_CARD_VALUE, 3)
-			for line_index in range(formula_lines.size()):
-				draw_string(ThemeDB.fallback_font, Vector2(recipe_rect.position.x + 6.0, recipe_rect.position.y + 16.0 + float(line_index) * 14.0), formula_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, recipe_rect.size.x - 12.0, FONT_SIZE_CARD_VALUE, STEEL_DARK)
-			draw_string(ThemeDB.fallback_font, Vector2(recipe_rect.position.x + 6.0, recipe_rect.end.y - 6.0), "RESEARCH REQUIRED" if recipe_locked else "CLICK TO COPY BLUEPRINT", HORIZONTAL_ALIGNMENT_LEFT, recipe_rect.size.x - 12.0, FONT_SIZE_CARD_META + 1, TAPE_SHADE)
-			if bool(recipe.get("unread", false)) and not recipe_locked:
-				_draw_unread_badge(Rect2(Vector2(recipe_rect.end.x - 18.0, recipe_rect.position.y + 4.0), Vector2(14.0, 14.0)))
-			if not recipe_locked:
-				_journal_recipe_click_rects.append({"rect": recipe_rect, "recipe": recipe})
+	_draw_journal_entry_sections(left_page, preview_rect, entry)
+	_draw_journal_recipe_panel(page_rect, right_page, entry)
 	if _journal_page_index > 0:
 		_journal_prev_rect = Rect2(Vector2(page_rect.position.x + 16.0, page_rect.end.y - 34.0), Vector2(24.0, 18.0))
 		draw_rect(_journal_prev_rect, Color(0.79, 0.72, 0.56))
@@ -2692,6 +3145,45 @@ func _draw_bot_log_overlay():
 		draw_string(ThemeDB.fallback_font, Vector2(_bot_log_next_rect.position.x, _bot_log_next_rect.position.y + 14.0), ">", HORIZONTAL_ALIGNMENT_CENTER, _bot_log_next_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
 	draw_string(ThemeDB.fallback_font, Vector2(page_rect.position.x, page_rect.end.y - 18.0), "PAGE %d / %d" % [_bot_log_page_index + 1, page_count], HORIZONTAL_ALIGNMENT_CENTER, page_rect.size.x, FONT_SIZE_CARD_META + 2, STEEL_DARK)
 
+func _is_card_locked_by_enemy_cage_capture(kind: String, identifier) -> bool:
+	if _enemy_cage_capture_process.is_empty():
+		return false
+	match kind:
+		"enemy":
+			return str(identifier) == str(_enemy_cage_capture_process.get("enemy_id", ""))
+		"crafted":
+			return str(identifier) == str(_enemy_cage_capture_process.get("cage_id", ""))
+		_:
+			return false
+
+func _get_enemy_card_by_id(enemy_id: String) -> Dictionary:
+	if enemy_id.is_empty():
+		return {}
+	for enemy_card_variant in GameState.get_state_table_cards("enemy"):
+		if typeof(enemy_card_variant) != TYPE_DICTIONARY:
+			continue
+		var enemy_card: Dictionary = enemy_card_variant
+		if str(enemy_card.get("id", "")) == enemy_id:
+			return Dictionary(enemy_card).duplicate(true)
+	return {}
+
+func _start_enemy_cage_capture_process(cage_id: String, enemy_id: String, process_rect: Rect2, enemy_card: Dictionary) -> void:
+	if cage_id.is_empty() or enemy_id.is_empty() or enemy_card.is_empty():
+		return
+	var enemy_hp := maxi(int(enemy_card.get("hp", 1)), 1)
+	var enemy_attack := maxi(int(enemy_card.get("attack", 1)), 1)
+	var duration := ENEMY_CAGE_CAPTURE_BASE_INTERVAL + float(enemy_hp) * 0.32 + float(enemy_attack) * 0.45
+	_enemy_cage_capture_process = {
+		"cage_id": cage_id,
+		"enemy_id": enemy_id,
+		"enemy_name": str(enemy_card.get("display_name", "Enemy")),
+		"rect": process_rect,
+		"duration": duration,
+		"cooldown": duration,
+	}
+	EventBus.log_message.emit("Capture started: %s" % str(enemy_card.get("display_name", "Enemy")))
+	queue_redraw()
+
 func _draw_storage_overlay():
 	_storage_item_click_rects.clear()
 	_storage_prev_rect = Rect2()
@@ -2740,6 +3232,8 @@ func _draw_storage_overlay():
 		var label := str(entry.get("display_name", entry.get("result", "ITEM"))).to_upper()
 		if str(entry.get("kind", "")) == "material":
 			label = "%s  x%d" % [label, maxi(int(entry.get("quantity", 1)), 1)]
+		elif not Dictionary(entry.get("captive_enemy", {})).is_empty():
+			label = "%s [%s]" % [label, str(Dictionary(entry.get("captive_enemy", {})).get("display_name", "CAGED")).to_upper()]
 		draw_string(ThemeDB.fallback_font, Vector2(row_rect.position.x + 8.0, row_rect.position.y + 22.0), label, HORIZONTAL_ALIGNMENT_LEFT, row_rect.size.x - 90.0, FONT_SIZE_CARD_VALUE, STEEL_DARK)
 		draw_string(ThemeDB.fallback_font, Vector2(row_rect.end.x - 76.0, row_rect.position.y + 22.0), "WITHDRAW", HORIZONTAL_ALIGNMENT_LEFT, 70.0, FONT_SIZE_CARD_META + 1, TAPE_SHADE)
 		_storage_item_click_rects.append({"rect": row_rect, "entry_id": str(entry.get("entry_id", ""))})
@@ -2763,6 +3257,145 @@ func _get_crafted_card_by_id(card_id: String) -> Dictionary:
 		if str(Dictionary(crafted_card).get("id", "")) == card_id:
 			return Dictionary(crafted_card)
 	return {}
+
+func _draw_journal_index_page(page_rect: Rect2, left_page: Rect2, right_page: Rect2, entry: Dictionary) -> void:
+	_draw_outlined_text(Vector2(left_page.position.x, left_page.position.y + 4.0), str(entry.get("title", "INDEX")), HORIZONTAL_ALIGNMENT_LEFT, left_page.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
+	_draw_outlined_text(Vector2(right_page.position.x, right_page.position.y + 4.0), "SECTIONS", HORIZONTAL_ALIGNMENT_LEFT, right_page.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
+	var intro_lines := _wrap_journal_text(str(entry.get("description", "")), left_page.size.x - 8.0, FONT_SIZE_CARD_VALUE + 1, 9)
+	for line_index in range(intro_lines.size()):
+		draw_string(ThemeDB.fallback_font, Vector2(left_page.position.x, left_page.position.y + 52.0 + float(line_index) * 18.0), intro_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, left_page.size.x - 8.0, FONT_SIZE_CARD_VALUE + 1, STEEL_DARK)
+	var categories: Array = Array(entry.get("categories", []))
+	var item_height := 42.0
+	var top_y := right_page.position.y + 34.0
+	for category_index in range(categories.size()):
+		var category: Dictionary = Dictionary(categories[category_index])
+		var item_rect := Rect2(Vector2(right_page.position.x, top_y + float(category_index) * (item_height + 8.0)), Vector2(right_page.size.x - 8.0, item_height))
+		draw_rect(item_rect, Color(0.84, 0.78, 0.62))
+		draw_rect(item_rect, PANEL_BORDER, false, 1.0)
+		var label := str(category.get("label", "ENTRY"))
+		var counts := "%d / %d" % [int(category.get("discovered", 0)), int(category.get("total", 0))]
+		draw_string(ThemeDB.fallback_font, Vector2(item_rect.position.x + 8.0, item_rect.position.y + 16.0), label, HORIZONTAL_ALIGNMENT_LEFT, item_rect.size.x - 16.0, FONT_SIZE_CARD_VALUE + 1, STEEL_DARK)
+		draw_string(ThemeDB.fallback_font, Vector2(item_rect.position.x + 8.0, item_rect.end.y - 8.0), counts, HORIZONTAL_ALIGNMENT_LEFT, item_rect.size.x - 32.0, FONT_SIZE_CARD_META + 2, TAPE_SHADE)
+		draw_string(ThemeDB.fallback_font, Vector2(item_rect.position.x, item_rect.position.y + 28.0), "OPEN", HORIZONTAL_ALIGNMENT_RIGHT, item_rect.size.x - 10.0, FONT_SIZE_CARD_META + 2, STEEL_DARK)
+		if bool(category.get("unread", false)):
+			_draw_unread_badge(Rect2(Vector2(item_rect.end.x - 18.0, item_rect.position.y + 4.0), Vector2(14.0, 14.0)))
+		_journal_index_click_rects.append({"rect": item_rect, "page_index": int(category.get("page_index", 0))})
+	draw_string(ThemeDB.fallback_font, Vector2(left_page.position.x, left_page.end.y - 10.0), "DISCOVERED / TOTAL", HORIZONTAL_ALIGNMENT_LEFT, left_page.size.x, FONT_SIZE_CARD_META + 2, TAPE_SHADE)
+
+func _draw_journal_entry_sections(left_page: Rect2, preview_rect: Rect2, entry: Dictionary) -> void:
+	var body_top := left_page.position.y + 34.0
+	var right_column := Rect2(Vector2(preview_rect.end.x + 16.0, body_top), Vector2(left_page.end.x - (preview_rect.end.x + 16.0), preview_rect.size.y))
+	var lower_rect := Rect2(Vector2(left_page.position.x, preview_rect.end.y + 12.0), Vector2(left_page.size.x, left_page.end.y - (preview_rect.end.y + 22.0)))
+	var sections: Array = Array(entry.get("notes_sections", []))
+	if sections.is_empty():
+		sections = [{"title": "SUMMARY", "text": str(entry.get("description", ""))}]
+	var next_index := _draw_journal_section_list(right_column, sections, 0, 3)
+	if next_index < sections.size():
+		_draw_journal_section_list(lower_rect, sections, next_index, 4)
+	draw_string(ThemeDB.fallback_font, Vector2(left_page.position.x, left_page.end.y - 10.0), "ATTEMPTS %d" % int(entry.get("attempts", 0)), HORIZONTAL_ALIGNMENT_LEFT, left_page.size.x, FONT_SIZE_CARD_META + 2, TAPE_SHADE)
+
+func _draw_journal_section_list(rect: Rect2, sections: Array, start_index: int, max_sections: int) -> int:
+	var y := rect.position.y
+	var drawn := 0
+	for section_index in range(start_index, sections.size()):
+		if drawn >= max_sections:
+			return section_index
+		var section: Dictionary = Dictionary(sections[section_index])
+		var title := str(section.get("title", "NOTES"))
+		var text := str(section.get("text", "")).strip_edges()
+		if text.is_empty():
+			continue
+		draw_string(ThemeDB.fallback_font, Vector2(rect.position.x, y + 12.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x, FONT_SIZE_CARD_META + 2, TAPE_SHADE)
+		var lines := _wrap_journal_text(text, rect.size.x - 4.0, FONT_SIZE_CARD_VALUE, 4 if rect.size.y > 120.0 else 3)
+		for line_index in range(lines.size()):
+			draw_string(ThemeDB.fallback_font, Vector2(rect.position.x, y + 28.0 + float(line_index) * 15.0), lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 4.0, FONT_SIZE_CARD_VALUE, STEEL_DARK)
+		y += 28.0 + float(lines.size()) * 15.0 + 8.0
+		drawn += 1
+	return sections.size()
+
+func _draw_journal_recipe_panel(page_rect: Rect2, right_page: Rect2, entry: Dictionary) -> void:
+	var recipes: Array = Array(entry.get("recipes", []))
+	var related_subjects: Array = Array(entry.get("related_subjects", []))
+	var recipes_title_y := right_page.position.y + 4.0
+	_draw_outlined_text(Vector2(right_page.position.x, recipes_title_y), "RECIPES", HORIZONTAL_ALIGNMENT_LEFT, right_page.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
+	var page_size := 2
+	var recipe_card_height := 72.0
+	var recipe_card_gap := 8.0
+	var recipes_panel_height := recipe_card_height * float(page_size) + recipe_card_gap
+	if recipes.is_empty():
+		var no_result_lines := _wrap_journal_text("No stable formula recorded yet. Further research may still fail, but can surface a usable blueprint.", right_page.size.x - 16.0, FONT_SIZE_CARD_VALUE, 6)
+		for line_index in range(no_result_lines.size()):
+			draw_string(ThemeDB.fallback_font, Vector2(right_page.position.x, right_page.position.y + 40.0 + float(line_index) * 16.0), no_result_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, right_page.size.x - 16.0, FONT_SIZE_CARD_VALUE, STEEL_DARK)
+	else:
+		var page_count := maxi(int(ceili(float(recipes.size()) / float(page_size))), 1)
+		_journal_recipe_page_index = clampi(_journal_recipe_page_index, 0, page_count - 1)
+		var start_index := _journal_recipe_page_index * page_size
+		var end_index := mini(start_index + page_size, recipes.size())
+		for recipe_index in range(start_index, end_index):
+			var display_index := recipe_index - start_index
+			var recipe: Dictionary = recipes[recipe_index]
+			var recipe_state := str(recipe.get("state", "locked"))
+			var recipe_locked := recipe_state == "locked"
+			var recipe_partial := recipe_state == "partial"
+			var recipe_complete := recipe_state == "complete"
+			var recipe_rect := Rect2(Vector2(right_page.position.x, right_page.position.y + 36.0 + float(display_index) * (recipe_card_height + recipe_card_gap)), Vector2(right_page.size.x - 10.0, recipe_card_height))
+			var fill := Color(0.78, 0.73, 0.60)
+			if recipe_complete:
+				fill = Color(0.84, 0.78, 0.62)
+			elif recipe_partial:
+				fill = Color(0.81, 0.75, 0.58)
+			draw_rect(recipe_rect, fill)
+			draw_rect(recipe_rect, PANEL_BORDER, false, 1.0)
+			var result_name := str(recipe.get("result", "UNKNOWN"))
+			draw_string(ThemeDB.fallback_font, Vector2(recipe_rect.position.x + 6.0, recipe_rect.position.y + 14.0), result_name, HORIZONTAL_ALIGNMENT_LEFT, recipe_rect.size.x - 12.0, FONT_SIZE_CARD_META + 3, STEEL_DARK)
+			var formula_lines := _build_journal_recipe_formula_lines(recipe, recipe_rect.size.x - 12.0, 3)
+			for line_index in range(formula_lines.size()):
+				draw_string(ThemeDB.fallback_font, Vector2(recipe_rect.position.x + 6.0, recipe_rect.position.y + 28.0 + float(line_index) * 11.0), formula_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, recipe_rect.size.x - 12.0, FONT_SIZE_CARD_META + 2, STEEL_DARK)
+			var state_text := "RESEARCH REQUIRED"
+			if recipe_partial:
+				state_text = "PARTIAL FORMULA"
+			elif recipe_complete:
+				state_text = "CLICK TO COPY BLUEPRINT"
+			draw_string(ThemeDB.fallback_font, Vector2(recipe_rect.position.x + 6.0, recipe_rect.end.y - 6.0), state_text, HORIZONTAL_ALIGNMENT_LEFT, recipe_rect.size.x - 12.0, FONT_SIZE_CARD_META + 1, TAPE_SHADE)
+			if bool(recipe.get("unread", false)) and not recipe_locked:
+				_draw_unread_badge(Rect2(Vector2(recipe_rect.end.x - 18.0, recipe_rect.position.y + 4.0), Vector2(14.0, 14.0)))
+			if recipe_complete:
+				_journal_recipe_click_rects.append({"rect": recipe_rect, "recipe": recipe})
+		if page_count > 1:
+			if _journal_recipe_page_index > 0:
+				_journal_recipe_prev_rect = Rect2(Vector2(right_page.position.x, right_page.position.y + 36.0 + recipes_panel_height + 4.0), Vector2(22.0, 16.0))
+				draw_rect(_journal_recipe_prev_rect, Color(0.79, 0.72, 0.56))
+				draw_rect(_journal_recipe_prev_rect, PANEL_BORDER, false, 1.0)
+				draw_string(ThemeDB.fallback_font, Vector2(_journal_recipe_prev_rect.position.x, _journal_recipe_prev_rect.position.y + 13.0), "<", HORIZONTAL_ALIGNMENT_CENTER, _journal_recipe_prev_rect.size.x, FONT_SIZE_CARD_META + 1, STEEL_DARK)
+			if _journal_recipe_page_index < page_count - 1:
+				_journal_recipe_next_rect = Rect2(Vector2(right_page.end.x - 32.0, right_page.position.y + 36.0 + recipes_panel_height + 4.0), Vector2(22.0, 16.0))
+				draw_rect(_journal_recipe_next_rect, Color(0.79, 0.72, 0.56))
+				draw_rect(_journal_recipe_next_rect, PANEL_BORDER, false, 1.0)
+				draw_string(ThemeDB.fallback_font, Vector2(_journal_recipe_next_rect.position.x, _journal_recipe_next_rect.position.y + 13.0), ">", HORIZONTAL_ALIGNMENT_CENTER, _journal_recipe_next_rect.size.x, FONT_SIZE_CARD_META + 1, STEEL_DARK)
+			draw_string(ThemeDB.fallback_font, Vector2(right_page.position.x + 28.0, right_page.position.y + 36.0 + recipes_panel_height + 17.0), "RECIPES %d / %d" % [_journal_recipe_page_index + 1, page_count], HORIZONTAL_ALIGNMENT_LEFT, right_page.size.x - 60.0, FONT_SIZE_CARD_META + 1, TAPE_SHADE)
+	var related_panel := Rect2(Vector2(right_page.position.x, right_page.position.y + 236.0), Vector2(right_page.size.x - 10.0, right_page.size.y - 244.0))
+	_draw_outlined_text(Vector2(related_panel.position.x, related_panel.position.y + 4.0), "RELATED", HORIZONTAL_ALIGNMENT_LEFT, related_panel.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
+	if related_subjects.is_empty():
+		draw_string(ThemeDB.fallback_font, Vector2(related_panel.position.x, related_panel.position.y + 28.0), "No cross-references yet.", HORIZONTAL_ALIGNMENT_LEFT, related_panel.size.x, FONT_SIZE_CARD_VALUE, TAPE_SHADE)
+		return
+	var columns := 2
+	var cell_gap := 8.0
+	var cell_width := (related_panel.size.x - cell_gap) * 0.5
+	var cell_height := 34.0
+	var max_items := mini(related_subjects.size(), 6)
+	for related_index in range(max_items):
+		var related_entry: Dictionary = Dictionary(related_subjects[related_index])
+		var column := related_index % columns
+		var row := related_index / columns
+		var cell_rect := Rect2(Vector2(related_panel.position.x + float(column) * (cell_width + cell_gap), related_panel.position.y + 24.0 + float(row) * (cell_height + 6.0)), Vector2(cell_width, cell_height))
+		draw_rect(cell_rect, Color(0.78, 0.73, 0.60) if bool(related_entry.get("locked", false)) else Color(0.84, 0.78, 0.62))
+		draw_rect(cell_rect, PANEL_BORDER, false, 1.0)
+		var label := str(related_entry.get("title", "ENTRY"))
+		draw_string(ThemeDB.fallback_font, Vector2(cell_rect.position.x + 6.0, cell_rect.position.y + 20.0), label, HORIZONTAL_ALIGNMENT_LEFT, cell_rect.size.x - 12.0, FONT_SIZE_CARD_META + 2, STEEL_DARK)
+		draw_string(ThemeDB.fallback_font, Vector2(cell_rect.position.x + 6.0, cell_rect.end.y - 6.0), "LOCKED" if bool(related_entry.get("locked", false)) else "OPEN PAGE", HORIZONTAL_ALIGNMENT_LEFT, cell_rect.size.x - 12.0, FONT_SIZE_CARD_META, TAPE_SHADE)
+		if bool(related_entry.get("unread", false)) and not bool(related_entry.get("locked", false)):
+			_draw_unread_badge(Rect2(Vector2(cell_rect.end.x - 18.0, cell_rect.position.y + 4.0), Vector2(14.0, 14.0)))
+		_journal_related_click_rects.append({"rect": cell_rect, "subject_key": str(related_entry.get("subject_key", ""))})
 
 func _draw_journal_entry_preview(preview_rect: Rect2, entry: Dictionary):
 	var subject_kind := str(entry.get("subject_kind", ""))
@@ -2813,6 +3446,48 @@ func _draw_locked_journal_entry_preview(preview_rect: Rect2, _entry: Dictionary)
 	draw_arc(Vector2(lock_body_rect.position.x + 18.0, lock_body_rect.position.y + 2.0), 10.0, PI, TAU, 16, STEEL_DARK, 4.0)
 	_draw_outlined_text(Vector2(inner_rect.position.x, inner_rect.position.y + 100.0), "LOCKED", HORIZONTAL_ALIGNMENT_CENTER, inner_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.95, 0.92, 0.84))
 	_draw_outlined_text(Vector2(inner_rect.position.x, inner_rect.position.y + 132.0), "??", HORIZONTAL_ALIGNMENT_CENTER, inner_rect.size.x, FONT_SIZE_BANNER + 6, ACCENT_DIM, Color(0.95, 0.92, 0.84))
+
+func _build_journal_recipe_formula_lines(recipe: Dictionary, max_width: float, max_lines: int) -> Array:
+	var formula_body := str(recipe.get("formula", "")).strip_edges()
+	var result_name := str(recipe.get("result", "UNKNOWN")).strip_edges()
+	var prefix := "%s = " % result_name
+	if formula_body.begins_with(prefix):
+		formula_body = formula_body.substr(prefix.length(), formula_body.length() - prefix.length()).strip_edges()
+	var parts: Array[String] = []
+	if not formula_body.is_empty():
+		for piece in formula_body.split(" + ", false):
+			var normalized_piece := str(piece).strip_edges()
+			if not normalized_piece.is_empty():
+				parts.append(normalized_piece)
+	if parts.is_empty():
+		for part_variant in Array(recipe.get("formula_parts", [])).duplicate(true):
+			var normalized_part := str(part_variant).strip_edges()
+			if not normalized_part.is_empty():
+				parts.append(normalized_part)
+	if parts.is_empty():
+		return []
+	var font := ThemeDB.fallback_font
+	var lines: Array = []
+	var current_line := ""
+	for part in parts:
+		var proposal := part if current_line.is_empty() else "%s + %s" % [current_line, part]
+		if font.get_string_size(proposal, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE_CARD_META + 2).x <= max_width:
+			current_line = proposal
+			continue
+		if not current_line.is_empty():
+			lines.append(current_line)
+			if lines.size() >= max_lines:
+				break
+		current_line = part
+	if lines.size() < max_lines and not current_line.is_empty():
+		lines.append(current_line)
+	if lines.size() > max_lines:
+		lines = lines.slice(0, max_lines)
+	if parts.size() > 0 and lines.size() == max_lines:
+		var last_index := lines.size() - 1
+		if not str(lines[last_index]).ends_with("..."):
+			lines[last_index] = str(lines[last_index]) + "..."
+	return lines
 
 func _wrap_journal_text(text: String, max_width: float, font_size: int, max_lines: int) -> Array:
 	var font := ThemeDB.fallback_font

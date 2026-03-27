@@ -97,6 +97,39 @@ Still needed:
   - loot
   - threats
   - recipes
+- add proper cross-reference display so related recipes/pages are visible from all relevant subjects
+- fix multi-page recipe UI bugs when a page has more than one recipe page worth of content
+- add explicit drone capability sections:
+  - allowed commands
+  - mission role
+  - hardware limits
+- reserve dedicated space for per-drone programming notes instead of squeezing it into the general description block
+- separate journal page structure into stable sections with fixed layout, not flowing mixed text
+
+### 2A. Punch Tape UX And Identity
+
+Current state:
+
+- binary punch-tape programming exists
+- decode preview exists
+- execution commitment exists
+- shared interpreter with machine-specific capability exists
+
+Still needed:
+
+- add a fast-forward / terminate / skip-to-outcome flow once failure is obvious
+- make tape correction a real physical mechanic:
+  - patching
+  - splicing
+  - possibly cutting / joining segments
+- make tape scarcity and tape damage matter more than raw binary memorization
+- let the typewriter start with no default program label and allow direct user naming / renaming from keyboard input
+- keep asking the design question: what larger survival purpose does the tape system serve in the full game loop?
+- make sure the punch-tape loop pays off in:
+  - stealth / signature pressure
+  - logistics / recovery
+  - resource scarcity
+  - machine capability differences
 
 ### 3. Enemy Research Through Cages
 
