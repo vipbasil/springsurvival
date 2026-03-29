@@ -6198,10 +6198,18 @@ func consume_material_type_quantity(material_type: String, amount: int) -> int:
 	return consumed
 
 func charge_bot_with_power_units(bot_index: int, max_units: int = BOT_POWER_CAPACITY) -> Dictionary:
+	return charge_bot_with_power_units_and_operator_cost(bot_index, max_units, 0)
+
+func charge_bot_with_power_units_and_operator_cost(bot_index: int, max_units: int = BOT_POWER_CAPACITY, operator_energy_cost: int = 0) -> Dictionary:
 	if bot_index < 0 or bot_index >= bot_loadouts.size():
 		return {"ok": false, "message": "Invalid bot"}
 	if not is_bot_available_in_workshop(bot_index):
 		return {"ok": false, "message": "Bot is outside"}
+	if operator_energy_cost > 0:
+		if not is_run_active():
+			return {"ok": false, "message": "Operator unavailable"}
+		if int(operator_state.get("energy", 0)) < operator_energy_cost:
+			return {"ok": false, "message": "Operator too tired"}
 	var max_power_charge := int(bot_loadouts[bot_index].get("max_power_charge", BOT_POWER_CAPACITY))
 	var current_power := int(bot_loadouts[bot_index].get("power_charge", 0))
 	var missing_power := maxi(max_power_charge - current_power, 0)
@@ -6210,15 +6218,21 @@ func charge_bot_with_power_units(bot_index: int, max_units: int = BOT_POWER_CAPA
 	var consumed := consume_material_type_quantity("power_unit", mini(missing_power, maxi(max_units, 0)))
 	if consumed <= 0:
 		return {"ok": false, "message": "No power units"}
+	if operator_energy_cost > 0:
+		operator_state["energy"] = maxi(int(operator_state.get("energy", 0)) - operator_energy_cost, 0)
+		operator_state["status"] = "exhausted" if int(operator_state.get("energy", 0)) <= 0 else "active"
 	bot_loadouts[bot_index]["power_charge"] = current_power + consumed
 	_sync_power_card_count(bot_loadouts[bot_index])
 	_refresh_bot_predictions()
 	save_programmed_cartridges()
+	EventBus.operator_state_changed.emit(get_operator_state())
 	EventBus.bot_loadouts_changed.emit(bot_loadouts)
 	EventBus.outside_world_changed.emit()
 	return {
 		"ok": true,
 		"charged": consumed,
+		"operator_energy_cost": operator_energy_cost,
+		"operator_energy": int(operator_state.get("energy", 0)),
 		"power_charge": int(bot_loadouts[bot_index].get("power_charge", 0)),
 		"message": "%s charged" % _bot_display_name(bot_index),
 	}
