@@ -7,6 +7,7 @@
 - Use three universal equipment slots on operator and drones.
 - Equipment can stack by duplication across those three slots.
 - Found gear and crafted gear should resolve into the same equipment card family.
+- Portable built objects should use the live `structure` card family, not a provenance-based `crafted` family. Old `crafted_*` save keys may still load for compatibility, but runtime/journal/UI language should use `structure`.
 - Research should consume one quantity from the researched card on each attempt when quantity-bearing.
 - Titles belong in the top band of cards.
 - Punch tape should be differentiated by physical commitment, scarce media, repair, and machine-specific capability, not by raw binary memorization alone.
@@ -22,11 +23,16 @@
 - The run should start with an Ark-side operator choice: present 3 operators, then deploy the selected one into the starter shelter on Earth.
 - Use the previously agreed warm starter shelter package instead of a zero-resource start. The opening should let the player launch drones, read the journal, and begin the first biology/paper loop without dead time.
 - Initial operator selection should use 3 distinct starter biases without changing the core shelter package, drone count, max HP, max energy, or slot count. Differences should come from equipped gear, a few extra resources, and a few extra known or partial journal pages.
-- The current implemented Ark selection uses one shared portrait for all operators. Distinction comes from profile name/focus text, equipped starter item, extra resources, and seeded journal knowledge.
+- The current implemented Ark selection uses distinct portrait assets for LERA, MIRA, and DREN. The Ark selection cards and the live operator card should both use the selected operator's profile portrait.
 - Operator portraits should read as 40+ Ark survivors: visibly tired, worn, rationed, and weathered. Avoid youthful or glamorous faces even when the graphic style is simplified.
 - Run end should return to the Ark selection flow, not trap the player inside a dead shelter state. Redeployment is the restart UX.
 - Knowledge must persist between runs. Journal discoveries and learned formulas are the roguelite carryover; shelter state and local inventory are not.
-- TOOL CHEST and ARCHIVE SHELF should not share the same interaction model. TOOL CHEST is direct card-native storage: drop portable non-NPC cards onto it to store them, and double-click it to withdraw the most recently stored card via LIFO. ARCHIVE SHELF keeps the explicit overlay browsing model.
+- TOOL CHEST and ARCHIVE SHELF should not share the same interaction model. TOOL CHEST is direct card-native storage: drop portable non-NPC cards onto it to store them, and double-click it to withdraw the most recently stored card via LIFO. ARCHIVE SHELF keeps the explicit overlay browsing model and should accept all portable state-table cards except hostile enemy cards.
+- Power Unit should be a normal `material` card, not a separate `resource`/slotted power-card family. Legacy power slots should migrate into `material: power_unit`.
+- CHARGE MACHINE should refill a workshop drone by consuming up to `50` `power_unit` quantity from material cards. It should no longer manufacture a separate installable power card.
+- CHARGE MACHINE is now automatic. It should not require operator overlap. If a workshop drone is placed on the charge machine and `power_unit` material exists, the machine can consume up to `50` units and refill the drone by itself.
+- Direct card use should still work too: dropping a `power_unit` material card directly onto a workshop drone immediately transfers charge from that card into the drone and drains the card's quantity.
+- Drone max power charge is `200`, but the charge machine still transfers only `50` power units per operating cycle. `power_unit` material quantities should stay on the smaller transfer scale rather than inflating to the drone max-charge value.
 - Generated card art should target an old minimalist flat-color poster look: hyper minimal, geometric, clean silhouette, poster-like flat illustration, pure white background only, and a strict max-4-color palette. Default palette: deep navy `#1F2A44`, parchment cream `#F2E9DA`, burnt ochre `#D9822B`, soft steel gray `#8A8F98`. No gradients, glows, vignettes, soft shadows, or extra colors. Hard-edged flat highlight and shadow planes are desired and are one of the key style traits; what is forbidden is soft airbrushed shading, not poster-style tonal blocks. Shapes should stay flat and vector-friendly so outputs can be cleaned and converted to SVG with minimal path complexity.
 - For image generation, use these four reference images together as the default style pack unless explicitly overridden:
   - `/Users/vasilibraga/Downloads/5j3eWWkFs2HxE02P (1).png`
@@ -36,7 +42,22 @@
 
 - Operator portraits should read as 40+ Ark survivors who are tired but determined: worn and rationed, not youthful, but also not defeated or melodramatically sad.
 
-- Operator portraits should keep hair mostly deep navy, with only a small soft-steel-gray accent plane at a temple, hairline, or beard edge to suggest age. Do not turn the whole hair mass gray.
+- Operator portraits should keep hair mostly deep navy. Age should come primarily from facial structure and poster-shadow wrinkle planes, not from turning the hair gray.
 - Operator portrait facial features must survive minimization on cards. Wrinkles, brow masses, under-eye folds, mouth folds, and cheek planes should be drawn as a few broad flat poster shapes, not thin delicate lines that disappear at small size.
 - Operator portraits must share one consistent framing format: front-facing head-and-shoulders bust, upper chest visible, shoulders included, centered on white, no vignette, no floating head-only crop, and no oversized torso/document-photo drift.
-- Operator portraits may use a few small soft-steel-gray hair strays or accent streaks, but only as subtle flat planes inside otherwise deep-navy hair.
+- Occupied BROOD CAGE cards should show the captive visually by drawing the contained enemy art behind the transparent cage bars. Empty cages should keep the plain empty-cage appearance.
+- Card layout should reflect what the card is, not how it was obtained. Crafted results should not keep a special provenance-specific shell, banner, or generic `CRAFTED` label if they are functioning as normal item/structure cards.
+- Taming should stay card-native. A caged WOLF PACK plus a dropped BONE card starts a taming progress bar on the cage; success yields a DOG unit card instead of a new submenu or abstract upgrade state.
+- DOG should behave as a full unit card, not as a passive pet token. It uses the same 3 equipment slots as operator and drones, can wear any equipment card, restores energy from BONE or DRY RATIONS, and restores HP from MEDICINE.
+- DOG should join the same overlap-based table combat system as operator and drones. Enemy card collision is enough to trigger combat participation; dog attack contributes to the shared fight result, dogs take mitigated HP damage back, and each fight costs the dog 1 energy so feeding remains a real upkeep mechanic.
+- Dogs do not revive after being killed in combat. If combat reduces a dog to 0 HP, the dog dies, is removed from the table, and drops the same kind of loot as its source animal type.
+- TANK should be classified as a `mechanism`, not a `structure`. It behaves like an active process machine and should be researched, rendered, and handled semantically alongside mechanisms rather than passive containers.
+- The tank should use slot-driven continuous biology rather than one-shot overlap crafting. The correct model is: persistent living culture, persistent recipe blueprint, consumable feed, and a slow repeating output cycle that continues only while consumables remain.
+- Tank feed consumption should affect only `Biomass`. Living cultures like algae, bacteria, and mealworms persist. `Medicine` tank cycles should take three times as long as `Dry Rations` cycles.
+- Tank growth lines now split into two modes:
+  - `Dry Rations` and `Medicine` consume `Biomass` feed each cycle.
+  - `Fiber` and `Biomass` are slow substrate-supported growth lines that use `Growth Medium` as persistent, non-consumed support.
+- Tank interaction should stay card-native. Double-clicking a tank stops any active batch immediately and ejects all loaded tank cards back onto the table: recipe blueprint, feed/support card, and culture card.
+- Journal preview pages must use the real card renderer for supported subject kinds. If the project has dedicated art for an equipment, structure, or mechanism, the journal should show that art instead of a text placeholder.
+- Drone handling should be type-driven, not slot-driven. Runtime, journal, naming, commands, and rendering should read an explicit `drone_type` definition instead of assuming `slot 0 = spider` and `slot 1 = butterfly`.
+- Heavy hostile machines should use real enemy armor, not just inflated HP. `WARDEN` is now the heavy machine-enforcer tier: high attack, high HP, high armor, and low-frequency presence in machine-heavy locations.

@@ -16,6 +16,9 @@
     {"id": "biomass_bacteria", "result": "BACTERIA", "parts": ["BLUEPRINT", "OPERATOR", "BIOMASS x1", "GROWTH MEDIUM x1"]},
     {"id": "biomass_mealworms", "result": "MEALWORMS", "parts": ["BLUEPRINT", "OPERATOR", "BIOMASS x2", "FIBER x1"]}
   ],
+  "material_mushrooms": [
+    {"id": "mushrooms_biomass", "result": "BIOMASS", "parts": ["BLUEPRINT", "OPERATOR", "MUSHROOMS x1", "GROWTH MEDIUM x1"]}
+  ],
   "material_bone": [
     {"id": "bone_bone_meal", "result": "BONE MEAL", "parts": ["BLUEPRINT", "OPERATOR", "BONE x2"]}
   ],

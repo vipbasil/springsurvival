@@ -22,5 +22,10 @@
     {"kind": "material", "type": "hide", "weight": 45, "quantity_min": 1, "quantity_max": 2},
     {"kind": "material", "type": "biomass", "weight": 40, "quantity_min": 1, "quantity_max": 3},
     {"kind": "material", "type": "bone", "weight": 15, "quantity_min": 1, "quantity_max": 1}
+  ],
+  "warden": [
+    {"kind": "material", "type": "metal", "weight": 55, "quantity_min": 2, "quantity_max": 4},
+    {"kind": "material", "type": "power_unit", "weight": 30, "quantity_min": 15, "quantity_max": 35},
+    {"kind": "material", "type": "paper", "weight": 15, "quantity_min": 1, "quantity_max": 2}
   ]
 }

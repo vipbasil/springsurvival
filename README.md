@@ -35,12 +35,12 @@ These are all represented as machine cards on the workshop table.
 - `machine`
 - `drone`
 - `tape`
-- `resource`
 - `material`
 - `location`
 - `enemy`
 - `blueprint`
-- `crafted`
+- `mechanism`
+- `structure`
 
 ### Drones
 
@@ -105,9 +105,9 @@ Core material/resource economy:
 - `Bone Meal`
 - `Power Unit`
 
-### Crafted / Structure Outputs
+### Structure Outputs
 
-Important crafted outputs currently in the active recipe catalog:
+Important structure outputs currently in the active recipe catalog:
 
 - `FRESH TAPE`
 - `TOOL CHEST`
@@ -166,7 +166,7 @@ Important crafted outputs currently in the active recipe catalog:
 - Material cards only need to meet or exceed the required quantity.
 - Only the required quantity is consumed.
 - The blueprint is destroyed on successful craft.
-- `FRESH TAPE` creates a real blank tape instead of a generic crafted card.
+- `FRESH TAPE` creates a real blank tape instead of a generic structure card.
 - Food and medicine craft into real stackable material cards.
 
 ### Storage
@@ -179,7 +179,7 @@ Current storage structures:
 They can store:
 
 - material cards
-- cage-type crafted cards
+- cage-type structure cards
 
 Stored cards persist and can be withdrawn later.
 
@@ -261,13 +261,13 @@ Saved state currently includes:
 - operator state
 - programmed tapes
 - blank tapes
-- power units
+- power unit material stacks
 - drones and mission state
 - discovered locations
 - enemies
 - materials
 - blueprints
-- crafted cards
+- structure cards
 - journal entries
 - storage contents
 - workshop layout

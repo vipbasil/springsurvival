@@ -44,12 +44,16 @@ static func is_dragging_table_card(active_drag: Dictionary, kind: String, identi
 			return str(active_drag.get("identifier", active_drag.get("location_id", ""))) == str(identifier)
 		"enemy":
 			return str(active_drag.get("identifier", active_drag.get("enemy_id", ""))) == str(identifier)
+		"dog":
+			return str(active_drag.get("identifier", active_drag.get("dog_id", ""))) == str(identifier)
 		"material":
 			return str(active_drag.get("identifier", active_drag.get("material_id", ""))) == str(identifier)
 		"blueprint":
 			return str(active_drag.get("identifier", active_drag.get("blueprint_id", ""))) == str(identifier)
-		"crafted":
-			return str(active_drag.get("identifier", active_drag.get("crafted_id", ""))) == str(identifier)
+		"mechanism":
+			return str(active_drag.get("identifier", active_drag.get("mechanism_id", ""))) == str(identifier)
+		"structure":
+			return str(active_drag.get("identifier", active_drag.get("structure_id", ""))) == str(identifier)
 		"equipment":
 			return str(active_drag.get("identifier", active_drag.get("equipment_id", ""))) == str(identifier)
 		_:
@@ -100,7 +104,7 @@ static func build_top_card_drag_state(root_point: Vector2, top_card: Dictionary)
 			base["identifier"] = slot_index
 			base["source"] = "table"
 			base["slot_index"] = slot_index
-		"location", "enemy", "material", "blueprint", "crafted", "equipment":
+		"location", "enemy", "dog", "material", "blueprint", "mechanism", "structure", "equipment":
 			var card_id := str(top_card.get("%s_id" % kind, ""))
 			if card_id.is_empty():
 				return {}
@@ -125,7 +129,11 @@ static func is_valid_drop_target(active_drag: Dictionary, drop_rect: Rect2, opti
 			return bool(options.get("has_drop_drone", false)) or bool(options.get("in_charge_machine", false)) or bool(options.get("in_table_workspace", false)) or bool(options.get("in_recycle_zone", false))
 		"location", "material", "blueprint", "equipment":
 			return bool(options.get("in_table_workspace", false)) or bool(options.get("in_recycle_zone", false))
-		"crafted":
+		"dog":
+			return bool(options.get("in_table_workspace", false))
+		"mechanism":
+			return bool(options.get("in_table_workspace", false)) or bool(options.get("in_recycle_zone", false))
+		"structure":
 			return bool(options.get("in_table_workspace", false)) or bool(options.get("in_recycle_zone", false)) or bool(options.get("overlaps_operator", false))
 		"bot", "blank", "operator", "enemy":
 			return bool(options.get("in_table_workspace", false)) or bool(options.get("in_route_machine", false))
