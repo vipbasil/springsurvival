@@ -2,6 +2,12 @@ extends Node
 
 const PunchEncodingData = preload("res://scripts/data/PunchEncoding.gd")
 const TapeDecoderData = preload("res://scripts/data/TapeDecoder.gd")
+const ShelterLeakRulesData = preload("res://scripts/data/ShelterLeakRules.gd")
+const EncounterWeightRulesData = preload("res://scripts/data/EncounterWeightRules.gd")
+const TankProcessRulesData = preload("res://scripts/data/TankProcessRules.gd")
+const JournalRecipeStateData = preload("res://scripts/data/JournalRecipeState.gd")
+const JournalEntryBuilderData = preload("res://scripts/data/JournalEntryBuilder.gd")
+const JournalCrossrefsData = preload("res://scripts/data/JournalCrossrefs.gd")
 
 const RECIPE_CATALOG_PATH := "res://resources/instructions/recipes.json"
 const ENEMY_LOOT_CATALOG_PATH := "res://resources/instructions/enemy_loot.json"
@@ -54,7 +60,7 @@ const RESEARCH_TAPE_TYPES := ["programmed", "blank"]
 const RESEARCH_RESOURCE_TYPES: Array[String] = []
 const RESEARCH_EQUIPMENT_TYPES := ["knife", "bow", "plate_mail", "hide_cloak", "tool_kit"]
 const RESEARCH_CRAFTED_TYPES := ["tool_chest", "brood_cage", "archive_shelf"]
-const RESEARCH_MECHANISM_TYPES := ["tank"]
+const RESEARCH_MECHANISM_TYPES := ["tank", "leak_detector"]
 const START_OPERATOR_PROFILES := [
 	{
 		"id": "lera",
@@ -287,6 +293,7 @@ var equipment_cards: Array = []
 var journal_entries: Array = []
 var workshop_layout: Dictionary = {}
 var operator_state: Dictionary = {}
+var shelter_leaks: Dictionary = {}
 var recipe_catalog: Dictionary = {}
 var enemy_loot_catalog: Dictionary = {}
 
@@ -357,54 +364,6 @@ const EQUIPMENT_TYPE_SPECS := {
 	},
 }
 const STORAGE_CRAFTED_TYPES := ["tool_chest", "archive_shelf"]
-const TANK_PROCESS_SPECS := {
-	"fiber_cycle": {
-		"recipe_result": "FIBER",
-		"culture_type": "algae",
-		"feed_type": "growth_medium",
-		"result_type": "fiber",
-		"display_name": "Fiber",
-		"quantity": 1,
-		"duration": 36.0,
-		"feed_consumed": false,
-	},
-	"medicine_cycle": {
-		"recipe_result": "MEDICINE",
-		"culture_type": "bacteria",
-		"feed_type": "biomass",
-		"result_type": "medicine",
-		"display_name": "Medicine",
-		"quantity": 1,
-		"duration": 54.0,
-		"feed_consumed": true,
-	},
-	"rations_cycle": {
-		"recipe_result": "DRY RATIONS",
-		"culture_type": "mealworms",
-		"feed_type": "biomass",
-		"result_type": "dry_rations",
-		"display_name": "Dry Rations",
-		"quantity": 1,
-		"duration": 18.0,
-		"feed_consumed": true,
-	},
-	"biomass_cycle": {
-		"recipe_result": "BIOMASS",
-		"culture_type": "mushrooms",
-		"feed_type": "growth_medium",
-		"result_type": "biomass",
-		"display_name": "Biomass",
-		"quantity": 1,
-		"duration": 36.0,
-		"feed_consumed": false,
-	},
-}
-const TANK_RECIPE_RESULT_TO_PROCESS := {
-	"FIBER": "fiber_cycle",
-	"MEDICINE": "medicine_cycle",
-	"DRY RATIONS": "rations_cycle",
-	"BIOMASS": "biomass_cycle",
-}
 
 func _ready():
 	_load_recipe_catalog()
@@ -725,6 +684,32 @@ func recycle_programmed_cartridge(cartridge_id: String) -> bool:
 	save_programmed_cartridges()
 	EventBus.cartridges_changed.emit(programmed_cartridges)
 	EventBus.cartridge_selected.emit(selected_cartridge_id)
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	return true
+
+func discard_programmed_cartridge(cartridge_id: String) -> bool:
+	var cartridge_index := _get_programmed_cartridge_index(cartridge_id)
+	if cartridge_index == -1:
+		return false
+	var cartridge: Dictionary = programmed_cartridges[cartridge_index]
+	if str(cartridge.get("location", "")) != "shelf":
+		return false
+	programmed_cartridges.remove_at(cartridge_index)
+	if selected_cartridge_id == cartridge_id:
+		selected_cartridge_id = ""
+	_refresh_bot_predictions()
+	save_programmed_cartridges()
+	EventBus.cartridges_changed.emit(programmed_cartridges)
+	EventBus.cartridge_selected.emit(selected_cartridge_id)
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	return true
+
+func discard_blank_cartridge(slot_index: int) -> bool:
+	if slot_index < 0 or slot_index >= blank_cartridge_slots.size():
+		return false
+	blank_cartridge_slots.remove_at(slot_index)
+	save_programmed_cartridges()
+	EventBus.cartridges_changed.emit(programmed_cartridges)
 	EventBus.bot_loadouts_changed.emit(bot_loadouts)
 	return true
 
@@ -1190,7 +1175,7 @@ func get_structure_cards() -> Array:
 		if typeof(entry_variant) != TYPE_DICTIONARY:
 			continue
 		var entry: Dictionary = entry_variant
-		if str(entry.get("type", "")) == "tank":
+		if _is_mechanism_card_type(str(entry.get("type", ""))):
 			continue
 		result.append(entry.duplicate(true))
 	return result
@@ -1201,10 +1186,38 @@ func get_mechanism_cards() -> Array:
 		if typeof(entry_variant) != TYPE_DICTIONARY:
 			continue
 		var entry: Dictionary = entry_variant
-		if str(entry.get("type", "")) != "tank":
+		if not _is_mechanism_card_type(str(entry.get("type", ""))):
 			continue
 		result.append(entry.duplicate(true))
 	return result
+
+func get_shelter_leaks() -> Dictionary:
+	return _normalize_saved_shelter_leaks(shelter_leaks)
+
+func add_shelter_leak(channel: String, amount: float) -> Dictionary:
+	var updates := {}
+	updates[str(channel).strip_edges().to_lower()] = amount
+	return add_shelter_leaks(updates)
+
+func add_shelter_leaks(updates: Dictionary) -> Dictionary:
+	var leaks := ShelterLeakRulesData.apply_updates(shelter_leaks, updates)
+	var changed := leaks != _normalize_saved_shelter_leaks(shelter_leaks)
+	if changed:
+		shelter_leaks = leaks
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+	return leaks.duplicate(true)
+
+func tick_shelter_leaks(delta: float) -> Dictionary:
+	if delta <= 0.0:
+		return get_shelter_leaks()
+	var leaks := ShelterLeakRulesData.decay(shelter_leaks, delta)
+	var changed := leaks != _normalize_saved_shelter_leaks(shelter_leaks)
+	if changed:
+		shelter_leaks = leaks
+		save_programmed_cartridges()
+		EventBus.outside_world_changed.emit()
+	return leaks.duplicate(true)
 
 func get_equipment_cards() -> Array:
 	return equipment_cards.duplicate(true)
@@ -1243,148 +1256,58 @@ func get_journal_entries() -> Array:
 	return journal_entries.duplicate(true)
 
 func get_journal_display_entries() -> Array:
-	var discovered_by_key := {}
-	var discovered_recipes_by_id := {}
-	for entry_variant in journal_entries:
-		if typeof(entry_variant) != TYPE_DICTIONARY:
-			continue
-		var entry: Dictionary = Dictionary(entry_variant).duplicate(true)
-		var subject_key := str(entry.get("subject_key", ""))
-		if subject_key.is_empty():
-			continue
-		for recipe_variant in Array(entry.get("recipes", [])):
-			if typeof(recipe_variant) != TYPE_DICTIONARY:
-				continue
-			var recipe: Dictionary = Dictionary(recipe_variant).duplicate(true)
-			var recipe_id := str(recipe.get("id", ""))
-			if recipe_id.is_empty():
-				continue
-			discovered_recipes_by_id[recipe_id] = recipe
-		discovered_by_key[subject_key] = entry
-	var visible_by_key := _build_formula_known_journal_entries(discovered_by_key)
-	var display_entries: Array = []
-	var seen_subject_keys := {}
-	for subject in _get_all_research_subjects():
-		var subject_key := _get_research_subject_key(subject)
-		if subject_key.is_empty() or seen_subject_keys.has(subject_key):
-			continue
-		seen_subject_keys[subject_key] = true
-		var subject_def := _get_research_subject_definition(subject)
-		if subject_def.is_empty():
-			continue
-		var related_recipe_ids := _get_related_recipe_ids(subject_key)
-		if visible_by_key.has(subject_key):
-			var visible_entry: Dictionary = Dictionary(visible_by_key[subject_key]).duplicate(true)
-			visible_entry["recipes"] = _build_journal_recipe_display_list(
-				subject_key,
-				discovered_recipes_by_id,
-				related_recipe_ids,
-				visible_by_key
-			)
-			visible_entry["recipe_ids"] = related_recipe_ids.duplicate()
-			visible_entry["related_subjects"] = _build_journal_related_subjects(subject_key, related_recipe_ids, visible_by_key)
-			visible_entry["locked"] = false
-			visible_entry = _apply_live_journal_subject_fields(visible_entry, subject_def)
-			display_entries.append(visible_entry)
-			continue
-		var locked_entry := _build_locked_journal_entry(subject_key, subject_def)
-		locked_entry["recipes"] = _build_journal_recipe_display_list(subject_key, discovered_recipes_by_id, related_recipe_ids, visible_by_key)
-		locked_entry["recipe_ids"] = related_recipe_ids.duplicate()
-		locked_entry["related_subjects"] = _build_journal_related_subjects(subject_key, related_recipe_ids, visible_by_key)
-		display_entries.append(locked_entry)
-	for subject_key_variant in visible_by_key.keys():
-		var subject_key := str(subject_key_variant)
-		if seen_subject_keys.has(subject_key):
-			continue
-		var fallback_entry: Dictionary = Dictionary(visible_by_key[subject_key]).duplicate(true)
-		var fallback_recipe_ids := _get_related_recipe_ids(subject_key)
-		fallback_entry["recipe_ids"] = fallback_recipe_ids.duplicate()
-		fallback_entry["recipes"] = _build_journal_recipe_display_list(subject_key, discovered_recipes_by_id, fallback_recipe_ids, visible_by_key)
-		fallback_entry["related_subjects"] = _build_journal_related_subjects(subject_key, fallback_recipe_ids, visible_by_key)
-		fallback_entry["locked"] = false
-		display_entries.append(fallback_entry)
-	return display_entries
+	return JournalEntryBuilderData.build_display_entries(
+		journal_entries,
+		_get_all_research_subjects(),
+		Callable(self, "_get_research_subject_key"),
+		Callable(self, "_get_research_subject_definition"),
+		Callable(self, "_get_related_recipe_ids"),
+		Callable(self, "_build_journal_recipe_display_list"),
+		_get_all_loaded_research_recipes(),
+		Callable(self, "_get_named_subject_key"),
+		Callable(self, "_normalize_recipe_result_parts"),
+		Callable(self, "_sanitize_recipe_parts"),
+		Callable(self, "_get_journal_recipe_state"),
+		Callable(self, "_get_research_subject_definition_by_key"),
+		Callable(self, "_get_loaded_recipe_by_id"),
+		Callable(self, "_get_recipe_related_subject_keys"),
+		Callable(self, "_dedupe_strings"),
+		Callable(self, "_mask_locked_journal_label"),
+		Callable(self, "is_journal_entry_unread"),
+		Callable(self, "_build_locked_journal_recipe_list"),
+		Callable(self, "_build_locked_journal_description")
+	)
 
 func _apply_live_journal_subject_fields(entry: Dictionary, subject_def: Dictionary) -> Dictionary:
-	var result := entry.duplicate(true)
-	if subject_def.has("notes_sections"):
-		result["notes_sections"] = Array(subject_def.get("notes_sections", [])).duplicate(true)
-	return result
+	return JournalEntryBuilderData.apply_live_subject_fields(entry, subject_def)
 
 func _build_formula_known_journal_entries(discovered_by_key: Dictionary) -> Dictionary:
-	var visible_by_key := {}
-	for subject_key_variant in discovered_by_key.keys():
-		var subject_key := str(subject_key_variant)
-		visible_by_key[subject_key] = Dictionary(discovered_by_key[subject_key]).duplicate(true)
-	var changed := true
-	while changed:
-		changed = false
-		for recipe_variant in _get_all_loaded_research_recipes():
-			if typeof(recipe_variant) != TYPE_DICTIONARY:
-				continue
-			var recipe: Dictionary = Dictionary(recipe_variant)
-			var result_subject_key := _get_named_subject_key(str(recipe.get("result", "")))
-			if result_subject_key.is_empty() or visible_by_key.has(result_subject_key):
-				continue
-			var formula_parts: Array = _normalize_recipe_result_parts(str(recipe.get("result", "")).to_upper(), _sanitize_recipe_parts(Array(recipe.get("formula_parts", [])).duplicate(true)))
-			if _get_journal_recipe_state(result_subject_key, formula_parts, visible_by_key) != "complete":
-				continue
-			var subject_def := _get_research_subject_definition_by_key(result_subject_key)
-			if subject_def.is_empty():
-				continue
-			visible_by_key[result_subject_key] = _build_formula_known_journal_entry(result_subject_key, subject_def)
-			changed = true
-	return visible_by_key
+	return JournalEntryBuilderData.build_formula_known_entries(
+		discovered_by_key,
+		_get_all_loaded_research_recipes(),
+		Callable(self, "_get_named_subject_key"),
+		Callable(self, "_normalize_recipe_result_parts"),
+		Callable(self, "_sanitize_recipe_parts"),
+		Callable(self, "_get_journal_recipe_state"),
+		Callable(self, "_get_research_subject_definition_by_key"),
+		Callable(self, "_get_related_recipe_ids")
+	)
 
 func _build_formula_known_journal_entry(subject_key: String, subject_def: Dictionary) -> Dictionary:
-	return {
-		"subject_key": subject_key,
-		"subject_kind": str(subject_def.get("subject_kind", "")),
-		"subject_type": str(subject_def.get("subject_type", "")),
-		"title": str(subject_def.get("title", "UNKNOWN ENTRY")),
-		"description": str(subject_def.get("description", "")),
-		"recipe_ids": _get_related_recipe_ids(subject_key),
-		"recipes": [],
-		"unread": false,
-		"attempts": 0,
-		"locked": false,
-		"known_from_formula": true,
-	}
+	return JournalEntryBuilderData.build_formula_known_entry(subject_key, subject_def, Callable(self, "_get_related_recipe_ids"))
 
 func _build_journal_related_subjects(subject_key: String, related_recipe_ids: Array, discovered_by_key: Dictionary) -> Array:
-	var related_keys: Array[String] = []
-	for recipe_id_variant in related_recipe_ids:
-		var recipe_id := str(recipe_id_variant)
-		if recipe_id.is_empty():
-			continue
-		var live_recipe := _get_loaded_recipe_by_id(recipe_id)
-		if live_recipe.is_empty():
-			continue
-		for related_subject_key_variant in _get_recipe_related_subject_keys(live_recipe):
-			var related_subject_key := str(related_subject_key_variant)
-			if related_subject_key.is_empty() or related_subject_key == subject_key:
-				continue
-			related_keys.append(related_subject_key)
-	var related_subjects: Array = []
-	for related_subject_key in _dedupe_strings(related_keys):
-		var subject_def := _get_research_subject_definition_by_key(related_subject_key)
-		var discovered := discovered_by_key.has(related_subject_key)
-		var title := ""
-		if discovered:
-			title = str(Dictionary(discovered_by_key[related_subject_key]).get("title", "")).strip_edges()
-		if title.is_empty() and not subject_def.is_empty():
-			title = str(subject_def.get("title", "")).strip_edges()
-		if title.is_empty():
-			continue
-		related_subjects.append({
-			"subject_key": related_subject_key,
-			"title": title if discovered else _mask_locked_journal_label(title),
-			"locked": not discovered,
-			"subject_kind": str(subject_def.get("subject_kind", "")),
-			"subject_type": str(subject_def.get("subject_type", "")),
-			"unread": is_journal_entry_unread(related_subject_key),
-		})
-	return related_subjects
+	return JournalEntryBuilderData.build_related_subjects(
+		subject_key,
+		related_recipe_ids,
+		discovered_by_key,
+		Callable(self, "_get_loaded_recipe_by_id"),
+		Callable(self, "_get_recipe_related_subject_keys"),
+		Callable(self, "_dedupe_strings"),
+		Callable(self, "_get_research_subject_definition_by_key"),
+		Callable(self, "_mask_locked_journal_label"),
+		Callable(self, "is_journal_entry_unread")
+	)
 
 func _get_research_subject_definition_by_key(subject_key: String) -> Dictionary:
 	var subject := _build_research_subject_from_key(subject_key)
@@ -2700,6 +2623,7 @@ func load_programmed_cartridges():
 	selected_cartridge_id = ""
 	_initialize_operator_state()
 	_initialize_bot_loadouts()
+	shelter_leaks = _default_shelter_leaks()
 	_initialize_outside_objects()
 	location_cards = []
 	enemy_cards = []
@@ -2826,6 +2750,7 @@ func load_programmed_cartridges():
 	var saved_equipment_cards: Array = parsed.get("equipment_cards", [])
 	if typeof(saved_equipment_cards) == TYPE_ARRAY:
 		equipment_cards = _normalize_saved_equipment_cards(saved_equipment_cards)
+	shelter_leaks = _normalize_saved_shelter_leaks(Dictionary(parsed.get("shelter_leaks", {})))
 	_migrate_stackable_crafted_cards_to_materials()
 	_migrate_equipment_like_crafted_cards_to_equipment()
 
@@ -2884,6 +2809,7 @@ func save_programmed_cartridges():
 		"structure_cards": saved_structure_cards,
 		"mechanism_cards": saved_mechanism_cards,
 		"equipment_cards": equipment_cards,
+		"shelter_leaks": _normalize_saved_shelter_leaks(shelter_leaks),
 		"journal_entries": journal_entries,
 		"workshop_layout": workshop_layout,
 		"operator_state": operator_state,
@@ -2918,6 +2844,15 @@ func _initialize_operator_state():
 		"focus": "",
 		"equipment_slots": _default_equipment_slots(),
 	}
+
+func _default_shelter_leaks() -> Dictionary:
+	return ShelterLeakRulesData.default_profile()
+
+func _normalize_saved_shelter_leaks(entry: Dictionary) -> Dictionary:
+	return ShelterLeakRulesData.normalize(entry)
+
+func _is_mechanism_card_type(card_type: String) -> bool:
+	return card_type in ["tank", "leak_detector"]
 
 func _default_dog_card(entry: Dictionary = {}) -> Dictionary:
 	var max_energy := maxi(int(entry.get("max_energy", DOG_MAX_ENERGY)), DOG_MAX_ENERGY)
@@ -3607,13 +3542,28 @@ func _roll_location_encounter_card(location_type: String, location_id: String) -
 	var encounter_def: Dictionary = Dictionary(LOCATION_ENCOUNTER_TABLES.get(location_type, {}))
 	if encounter_def.is_empty():
 		return {}
-	if randf() > float(encounter_def.get("chance", 0.0)):
+	if randf() > _get_location_encounter_chance(encounter_def):
 		return {}
-	var enemy_entry := _roll_weighted_material_drop_entry(Array(encounter_def.get("types", [])))
+	var enemy_entry := _roll_weighted_material_drop_entry(_get_leak_adjusted_encounter_entries(Array(encounter_def.get("types", []))))
 	var enemy_type := str(enemy_entry.get("type", ""))
 	if enemy_type.is_empty():
 		return {}
 	return _build_enemy_card_for_type(enemy_type, "location_scavenge:%s:%s" % [location_type, location_id])
+
+func _get_location_encounter_chance(encounter_def: Dictionary) -> float:
+	return EncounterWeightRulesData.location_encounter_chance(encounter_def, shelter_leaks)
+
+func _get_leak_adjusted_encounter_entries(type_entries: Array) -> Array:
+	return EncounterWeightRulesData.adjusted_entries(type_entries, shelter_leaks)
+
+func _get_enemy_leak_weight_multiplier(enemy_type: String) -> float:
+	return EncounterWeightRulesData.enemy_leak_weight_multiplier(enemy_type, shelter_leaks)
+
+func _get_enemy_leak_encounter_bonus(enemy_type: String) -> float:
+	return EncounterWeightRulesData.enemy_leak_encounter_bonus(enemy_type, shelter_leaks)
+
+func _get_shelter_leak_ratio(channel: String) -> float:
+	return ShelterLeakRulesData.ratio(shelter_leaks, channel)
 
 func _build_scanned_location_card_at(position: Vector2, source: String = "drone_scan") -> Dictionary:
 	var location_types := [
@@ -4091,7 +4041,7 @@ func _normalize_saved_table_cards(structure_entries: Array, mechanism_entries: A
 		if typeof(entry_variant) != TYPE_DICTIONARY:
 			continue
 		var entry: Dictionary = Dictionary(entry_variant).duplicate(true)
-		if str(entry.get("type", "")) != "tank":
+		if not _is_mechanism_card_type(str(entry.get("type", ""))):
 			normalized_legacy = true
 			continue
 		var entry_id := str(entry.get("id", ""))
@@ -4108,11 +4058,11 @@ func _normalize_saved_table_cards(structure_entries: Array, mechanism_entries: A
 		if entry_id.is_empty():
 			normalized_legacy = true
 			continue
-		var is_tank := str(entry.get("type", "")) == "tank"
+		var is_mechanism := _is_mechanism_card_type(str(entry.get("type", "")))
 		if seen_ids.has(entry_id):
 			normalized_legacy = true
 			continue
-		if is_tank:
+		if is_mechanism:
 			normalized_legacy = true
 		seen_ids[entry_id] = true
 		merged.append(entry)
@@ -4125,8 +4075,11 @@ func _normalize_structure_subject_key(subject_key: String) -> String:
 	var normalized := subject_key.strip_edges()
 	if normalized == "structure_tank":
 		return "mechanism_tank"
+	if normalized == "structure_leak_detector":
+		return "mechanism_leak_detector"
 	if normalized.begins_with("crafted_"):
-		return "structure_%s" % normalized.substr("crafted_".length(), normalized.length() - "crafted_".length())
+		var legacy_type := normalized.substr("crafted_".length(), normalized.length() - "crafted_".length())
+		return "mechanism_%s" % legacy_type if _is_mechanism_card_type(legacy_type) else "structure_%s" % legacy_type
 	return normalized
 
 func _normalize_structure_subject_kind(subject_kind: String) -> String:
@@ -4153,49 +4106,13 @@ func _normalize_legacy_subject_type(subject_kind: String, subject_type: String) 
 	return subject_type
 
 func _default_tank_slots() -> Dictionary:
-	return {
-		"culture": {},
-		"feed": {},
-		"recipe": {},
-	}
+	return TankProcessRulesData.default_slots()
 
 func _normalize_saved_tank_slots(entry: Dictionary) -> Dictionary:
-	var slots := _default_tank_slots()
-	if entry.is_empty():
-		return slots
-	slots["culture"] = Dictionary(entry.get("culture", {})).duplicate(true)
-	slots["feed"] = Dictionary(entry.get("feed", {})).duplicate(true)
-	slots["recipe"] = Dictionary(entry.get("recipe", {})).duplicate(true)
-	return slots
+	return TankProcessRulesData.normalize_slots(entry)
 
 func _normalize_saved_tank_batch(entry: Dictionary) -> Dictionary:
-	if entry.is_empty():
-		return {}
-	var process_id := str(entry.get("process_id", ""))
-	if process_id.is_empty():
-		return {}
-	match process_id:
-		"algae_to_fiber":
-			process_id = "fiber_cycle"
-		"bacteria_to_medicine":
-			process_id = "medicine_cycle"
-		"mealworms_to_rations":
-			process_id = "rations_cycle"
-	var spec := Dictionary(TANK_PROCESS_SPECS.get(process_id, {}))
-	if spec.is_empty():
-		return {}
-	var duration := maxf(float(entry.get("duration", TANK_PROCESS_DEFAULT_DURATION)), 0.1)
-	var ends_at := float(entry.get("ends_at", 0.0))
-	if ends_at <= 0.0:
-		ends_at = float(Time.get_unix_time_from_system()) + duration
-	return {
-		"process_id": process_id,
-		"result_type": str(entry.get("result_type", spec.get("result_type", ""))),
-		"display_name": str(entry.get("display_name", spec.get("display_name", "Tank Batch"))),
-		"quantity": maxi(int(entry.get("quantity", int(spec.get("quantity", 1)))), 1),
-		"duration": duration,
-		"ends_at": ends_at,
-	}
+	return TankProcessRulesData.normalize_batch(entry, TANK_PROCESS_DEFAULT_DURATION)
 
 func _migrate_stackable_crafted_cards_to_materials() -> void:
 	if crafted_cards.is_empty():
@@ -4666,178 +4583,39 @@ func _build_journal_recipe_entry(subject_key: String, recipe_source: Dictionary,
 	}
 
 func _get_journal_recipe_state(subject_key: String, formula_parts: Array, discovered_by_key: Dictionary) -> String:
-	var has_known_subject := discovered_by_key.has(subject_key)
-	var has_unknown_subject := false
-	for part_variant in formula_parts:
-		var part_subject_key := _get_formula_part_subject_key(str(part_variant))
-		if part_subject_key.is_empty():
-			continue
-		if discovered_by_key.has(part_subject_key):
-			has_known_subject = true
-		else:
-			has_unknown_subject = true
-	if not has_unknown_subject:
-		return "complete"
-	return "partial" if has_known_subject else "locked"
+	return JournalRecipeStateData.get_recipe_state(subject_key, formula_parts, discovered_by_key, Callable(self, "_get_formula_part_subject_key"))
 
 func _build_journal_recipe_formula_text(result_name: String, formula_parts: Array, discovered_by_key: Dictionary, state: String) -> String:
-	if state == "locked":
-		return _build_locked_formula_text(result_name, formula_parts)
-	var display_parts: Array[String] = []
-	for part_variant in formula_parts:
-		display_parts.append(_build_journal_formula_part_display(str(part_variant), discovered_by_key))
-	return "%s = %s" % [result_name, " + ".join(display_parts)]
+	return JournalRecipeStateData.build_formula_text(
+		result_name,
+		formula_parts,
+		discovered_by_key,
+		state,
+		Callable(self, "_get_formula_part_subject_key"),
+		Callable(self, "_mask_locked_journal_label")
+	)
 
 func _build_journal_formula_part_display(part: String, discovered_by_key: Dictionary) -> String:
-	var normalized := part.strip_edges()
-	if normalized.is_empty():
-		return "??"
-	var part_subject_key := _get_formula_part_subject_key(normalized)
-	if part_subject_key.is_empty() or discovered_by_key.has(part_subject_key):
-		return normalized
-	return _mask_locked_formula_part(normalized)
+	return JournalRecipeStateData.build_formula_part_display(part, discovered_by_key, Callable(self, "_get_formula_part_subject_key"))
 
 func _get_recipe_related_subject_keys(recipe: Dictionary) -> Array:
-	var related_keys: Array[String] = []
-	var owner_subject_key := str(recipe.get("subject_key", ""))
-	if not owner_subject_key.is_empty():
-		related_keys.append(owner_subject_key)
-	var result_subject_key := _get_named_subject_key(str(recipe.get("result", "")))
-	if not result_subject_key.is_empty():
-		related_keys.append(result_subject_key)
-	for part_variant in Array(recipe.get("formula_parts", [])):
-		var part_subject_key := _get_formula_part_subject_key(str(part_variant))
-		if not part_subject_key.is_empty():
-			related_keys.append(part_subject_key)
-	return _dedupe_strings(related_keys)
+	return JournalCrossrefsData.get_recipe_related_subject_keys(recipe)
 
 func _get_formula_part_subject_key(part: String) -> String:
-	var normalized := part.strip_edges()
-	if normalized.is_empty():
-		return ""
-	var quantity_marker := normalized.to_lower().rfind(" x")
-	if quantity_marker != -1:
-		normalized = normalized.substr(0, quantity_marker).strip_edges()
-	return _get_named_subject_key(normalized)
+	return JournalCrossrefsData.get_formula_part_subject_key(part)
 
 func _get_named_subject_key(token: String) -> String:
-	match token.strip_edges().to_upper():
-		"METAL":
-			return "material_metal"
-		"SPRING":
-			return "material_spring"
-		"PAPER":
-			return "material_paper"
-		"FIBER":
-			return "material_fiber"
-		"BIOMASS":
-			return "material_biomass"
-		"DRY RATIONS":
-			return "material_dry_rations"
-		"MEDICINE":
-			return "material_medicine"
-		"GROWTH MEDIUM":
-			return "material_growth_medium"
-		"MUSHROOMS":
-			return "material_mushrooms"
-		"ALGAE":
-			return "material_algae"
-		"BACTERIA":
-			return "material_bacteria"
-		"MEALWORMS":
-			return "material_mealworms"
-		"BONE MEAL":
-			return "material_bone_meal"
-		"HIDE":
-			return "material_hide"
-		"BONE":
-			return "material_bone"
-		"POND":
-			return "location_pond"
-		"CRATER":
-			return "location_crater"
-		"TOWER":
-			return "location_tower"
-		"SURVEILLANCE ZONE":
-			return "location_surveillance_zone"
-		"FACILITY":
-			return "location_facility"
-		"BUNKER":
-			return "location_bunker"
-		"FIELD":
-			return "location_field"
-		"DUMP":
-			return "location_dump"
-		"CACHE":
-			return "location_cache"
-		"NEST":
-			return "location_nest"
-		"RUIN":
-			return "location_ruin"
-		"SURVEILLANCE DRONE":
-			return "enemy_surveillance_drone"
-		"INFANTRY DRONE":
-			return "enemy_infantry_drone"
-		"STALKER":
-			return "enemy_stalker"
-		"GRIZZLY":
-			return "enemy_grizzly"
-		"WOLF PACK":
-			return "enemy_wolf_pack"
-		"WARDEN":
-			return "enemy_warden"
-		"BENCH":
-			return "machine_bench"
-		"ROUTE TABLE":
-			return "machine_route"
-		"CHARGE MACHINE":
-			return "machine_charge"
-		"TRASH":
-			return "machine_trash"
-		"SPIDER DRONE":
-			return "drone_spider"
-		"BUTTERFLY DRONE":
-			return "drone_butterfly"
-		"PROGRAMMED TAPE":
-			return "tape_programmed"
-		"BLANK TAPE":
-			return "tape_blank"
-		"POWER UNIT", "SPRING CHARGE":
-			return "material_power_unit"
-		"KNIFE":
-			return "equipment_knife"
-		"BOW":
-			return "equipment_bow"
-		"PLATE MAIL":
-			return "equipment_plate_mail"
-		"HIDE CLOAK":
-			return "equipment_hide_cloak"
-		"TOOL KIT":
-			return "equipment_tool_kit"
-		"TANK":
-			return "mechanism_tank"
-		"TOOL CHEST":
-			return "structure_tool_chest"
-		"BROOD CAGE":
-			return "structure_brood_cage"
-		"ARCHIVE SHELF":
-			return "structure_archive_shelf"
-		_:
-			return ""
+	return JournalCrossrefsData.get_named_subject_key(token)
 
 func _build_locked_journal_entry(subject_key: String, subject_def: Dictionary) -> Dictionary:
-	return {
-		"subject_key": subject_key,
-		"subject_kind": str(subject_def.get("subject_kind", "")),
-		"subject_type": str(subject_def.get("subject_type", "")),
-		"title": _mask_locked_journal_label(str(subject_def.get("title", "UNKNOWN ENTRY"))),
-		"description": _build_locked_journal_description(subject_def),
-		"recipe_ids": _get_related_recipe_ids(subject_key),
-		"recipes": _build_locked_journal_recipe_list(subject_key, Array(subject_def.get("recipes", []))),
-		"unread": false,
-		"attempts": 0,
-		"locked": true,
-	}
+	return JournalEntryBuilderData.build_locked_journal_entry(
+		subject_key,
+		subject_def,
+		Callable(self, "_get_related_recipe_ids"),
+		Callable(self, "_mask_locked_journal_label"),
+		Callable(self, "_build_locked_journal_recipe_list"),
+		Callable(self, "_build_locked_journal_description")
+	)
 
 func _build_locked_journal_recipe_list(subject_key: String, live_recipes: Array) -> Array:
 	var recipes: Array = []
@@ -4860,19 +4638,10 @@ func _build_locked_journal_recipe(subject_key: String, live_recipe: Dictionary) 
 	}
 
 func _build_locked_formula_text(result_name: String, formula_parts: Array) -> String:
-	var masked_parts: Array[String] = []
-	for part_variant in formula_parts:
-		masked_parts.append(_mask_locked_formula_part(str(part_variant)))
-	return "%s = %s" % [_mask_locked_journal_label(result_name), " + ".join(masked_parts)]
+	return JournalRecipeStateData.build_locked_formula_text(result_name, formula_parts, Callable(self, "_mask_locked_journal_label"))
 
 func _mask_locked_formula_part(part: String) -> String:
-	var normalized := part.strip_edges()
-	if normalized.is_empty():
-		return "??"
-	var quantity_marker := normalized.to_lower().rfind(" x")
-	if quantity_marker != -1 and quantity_marker < normalized.length() - 2:
-		return "?? %s" % normalized.substr(quantity_marker + 1, normalized.length() - quantity_marker - 1)
-	return "??"
+	return JournalRecipeStateData.mask_locked_formula_part(part)
 
 func _mask_locked_journal_label(label: String) -> String:
 	var normalized := label.strip_edges().replace("_", " ").to_upper()
@@ -5187,7 +4956,7 @@ func _get_material_research_definition(material_type: String) -> Dictionary:
 				"subject_kind": "material",
 				"subject_type": material_type,
 				"title": "POWER UNIT",
-				"description": "Portable stored charge. A compact workshop reserve used by the charge machine to refill field units.",
+				"description": "Portable stored charge. Can be dropped directly onto a drone for immediate refilling away from the charge station loop.",
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
 		_:
@@ -5480,6 +5249,14 @@ func _get_mechanism_research_definition(mechanism_type: String) -> Dictionary:
 				"description": "Portable bioprocess mechanism. Holds a living culture, a consumable feed stock, and a recipe blueprint for continuous slow output.",
 				"recipes": _get_loaded_research_recipes(subject_key),
 			}
+		"leak_detector":
+			return {
+				"subject_kind": "mechanism",
+				"subject_type": mechanism_type,
+				"title": "LEAK DETECTOR",
+				"description": "Analog shelter diagnostic board. Reads the current leak profile across trace, noise, waste, and heat without creating any of it.",
+				"recipes": _get_loaded_research_recipes(subject_key),
+			}
 		_:
 			return {}
 
@@ -5671,6 +5448,12 @@ func _get_craft_result_spec(result_name: String) -> Dictionary:
 			"type": "tank",
 			"display_name": "Tank",
 		}
+	if normalized == "LEAK DETECTOR":
+		return {
+			"kind": "mechanism",
+			"type": "leak_detector",
+			"display_name": "Leak Detector",
+		}
 	return {
 		"kind": "structure",
 		"type": _result_name_to_type(normalized),
@@ -5678,7 +5461,7 @@ func _get_craft_result_spec(result_name: String) -> Dictionary:
 	}
 
 func get_tank_process_specs() -> Dictionary:
-	return TANK_PROCESS_SPECS.duplicate(true)
+	return TankProcessRulesData.process_specs()
 
 func insert_card_into_tank(tank_id: String, source_kind: String, card_id: String) -> Dictionary:
 	if tank_id.is_empty() or card_id.is_empty():
@@ -5697,16 +5480,12 @@ func insert_card_into_tank(tank_id: String, source_kind: String, card_id: String
 				return {"ok": false, "message": "Material not found"}
 			var material_card: Dictionary = Dictionary(material_cards[material_index]).duplicate(true)
 			var material_type := str(material_card.get("type", ""))
-			if material_type in ["algae", "bacteria", "mealworms", "mushrooms"]:
-				if not Dictionary(tank_slots.get("culture", {})).is_empty():
-					return {"ok": false, "message": "Tank culture slot is occupied"}
-				tank_slots["culture"] = material_card
-			elif material_type in ["growth_medium", "biomass"]:
-				if not Dictionary(tank_slots.get("feed", {})).is_empty():
-					return {"ok": false, "message": "Tank feed slot is occupied"}
-				tank_slots["feed"] = material_card
-			else:
+			var slot_name := TankProcessRulesData.slot_name_for_material(material_type)
+			if slot_name.is_empty():
 				return {"ok": false, "message": "Material cannot be loaded into tank"}
+			if not Dictionary(tank_slots.get(slot_name, {})).is_empty():
+				return {"ok": false, "message": "Tank %s slot is occupied" % slot_name}
+			tank_slots[slot_name] = material_card
 			material_cards.remove_at(material_index)
 		"blueprint":
 			var blueprint_index := _find_blueprint_card_index(card_id)
@@ -5714,7 +5493,7 @@ func insert_card_into_tank(tank_id: String, source_kind: String, card_id: String
 				return {"ok": false, "message": "Blueprint not found"}
 			var blueprint_card: Dictionary = Dictionary(blueprint_cards[blueprint_index]).duplicate(true)
 			var recipe_result := str(blueprint_card.get("result", "")).to_upper()
-			if not TANK_RECIPE_RESULT_TO_PROCESS.has(recipe_result):
+			if not TankProcessRulesData.is_tank_recipe_result(recipe_result):
 				return {"ok": false, "message": "Blueprint is not a tank recipe"}
 			if not Dictionary(tank_slots.get("recipe", {})).is_empty():
 				return {"ok": false, "message": "Tank recipe slot is occupied"}
@@ -5734,25 +5513,7 @@ func insert_card_into_tank(tank_id: String, source_kind: String, card_id: String
 
 func _get_tank_process_spec_for_card(tank_card: Dictionary) -> Dictionary:
 	var tank_slots := _normalize_saved_tank_slots(Dictionary(tank_card.get("tank_slots", {})))
-	var culture_card: Dictionary = Dictionary(tank_slots.get("culture", {}))
-	var feed_card: Dictionary = Dictionary(tank_slots.get("feed", {}))
-	var recipe_card: Dictionary = Dictionary(tank_slots.get("recipe", {}))
-	if culture_card.is_empty() or feed_card.is_empty() or recipe_card.is_empty():
-		return {}
-	if maxi(int(feed_card.get("quantity", 0)), 0) <= 0:
-		return {}
-	var process_id := str(TANK_RECIPE_RESULT_TO_PROCESS.get(str(recipe_card.get("result", "")).to_upper(), ""))
-	if process_id.is_empty():
-		return {}
-	var spec := Dictionary(TANK_PROCESS_SPECS.get(process_id, {})).duplicate(true)
-	if spec.is_empty():
-		return {}
-	if str(culture_card.get("type", "")) != str(spec.get("culture_type", "")):
-		return {}
-	if str(feed_card.get("type", "")) != str(spec.get("feed_type", "")):
-		return {}
-	spec["process_id"] = process_id
-	return spec
+	return TankProcessRulesData.process_spec_for_slots(tank_slots)
 
 func withdraw_tank_slot(tank_id: String) -> Dictionary:
 	if tank_id.is_empty():
@@ -5913,7 +5674,7 @@ func tick_tank_processes() -> Array:
 		})
 		var tank_slots := _normalize_saved_tank_slots(Dictionary(crafted_card.get("tank_slots", {})))
 		var feed_card: Dictionary = Dictionary(tank_slots.get("feed", {})).duplicate(true)
-		var process_spec := Dictionary(TANK_PROCESS_SPECS.get(str(tank_batch.get("process_id", "")), {}))
+		var process_spec := TankProcessRulesData.spec_for_process_id(str(tank_batch.get("process_id", "")))
 		var feed_consumed := bool(process_spec.get("feed_consumed", true))
 		if feed_consumed and not feed_card.is_empty():
 			var next_quantity := maxi(int(feed_card.get("quantity", 0)) - 1, 0)
@@ -6199,6 +5960,38 @@ func consume_material_type_quantity(material_type: String, amount: int) -> int:
 
 func charge_bot_with_power_units(bot_index: int, max_units: int = BOT_POWER_CAPACITY) -> Dictionary:
 	return charge_bot_with_power_units_and_operator_cost(bot_index, max_units, 0)
+
+func charge_bot_with_operator_effort(bot_index: int, charge_units: int = BOT_POWER_CAPACITY, operator_energy_cost: int = 1) -> Dictionary:
+	if bot_index < 0 or bot_index >= bot_loadouts.size():
+		return {"ok": false, "message": "Invalid bot"}
+	if not is_bot_available_in_workshop(bot_index):
+		return {"ok": false, "message": "Bot is outside"}
+	if not is_run_active():
+		return {"ok": false, "message": "Operator unavailable"}
+	if int(operator_state.get("energy", 0)) < operator_energy_cost:
+		return {"ok": false, "message": "Operator too tired"}
+	var max_power_charge := int(bot_loadouts[bot_index].get("max_power_charge", BOT_POWER_CAPACITY))
+	var current_power := int(bot_loadouts[bot_index].get("power_charge", 0))
+	var added_charge := mini(maxi(charge_units, 0), maxi(max_power_charge - current_power, 0))
+	if added_charge <= 0:
+		return {"ok": false, "message": "Bot already full"}
+	operator_state["energy"] = maxi(int(operator_state.get("energy", 0)) - operator_energy_cost, 0)
+	operator_state["status"] = "exhausted" if int(operator_state.get("energy", 0)) <= 0 else "active"
+	bot_loadouts[bot_index]["power_charge"] = current_power + added_charge
+	_sync_power_card_count(bot_loadouts[bot_index])
+	_refresh_bot_predictions()
+	save_programmed_cartridges()
+	EventBus.operator_state_changed.emit(get_operator_state())
+	EventBus.bot_loadouts_changed.emit(bot_loadouts)
+	EventBus.outside_world_changed.emit()
+	return {
+		"ok": true,
+		"charged": added_charge,
+		"operator_energy_cost": operator_energy_cost,
+		"operator_energy": int(operator_state.get("energy", 0)),
+		"power_charge": int(bot_loadouts[bot_index].get("power_charge", 0)),
+		"message": "%s charged" % _bot_display_name(bot_index),
+	}
 
 func charge_bot_with_power_units_and_operator_cost(bot_index: int, max_units: int = BOT_POWER_CAPACITY, operator_energy_cost: int = 0) -> Dictionary:
 	if bot_index < 0 or bot_index >= bot_loadouts.size():

@@ -10,3 +10,7 @@
 - Exact typewriter UX for user-authored program labels: commit timing, rename flow, and whether labels are editable before and after punching.
 - How drone journal pages should split command list, capability notes, and programming guidance without becoming unreadable.
 - Whether recipe pagination should stay global per subject page or become a dedicated recipe-subpage model later.
+- Exact leak-profile tuning:
+  - how much each player action raises `TRACE`, `NOISE`, `WASTE`, and `HEAT`
+  - how quickly each channel decays
+  - how each enemy type responds to each channel

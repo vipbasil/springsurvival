@@ -25,7 +25,7 @@
       "id": "charge",
       "label": "Charge Machine",
       "card_kind": "machine",
-      "role": "consume stored power units to refill drone charge"
+      "role": "operator-driven station that spends 1 energy per cycle to transfer 50 power into a workshop drone"
     },
     {
       "id": "journal",
@@ -343,6 +343,7 @@
   ],
   "structure_results": [
     "TANK",
+    "LEAK DETECTOR",
     "KNIFE",
     "BOW",
     "PLATE MAIL",

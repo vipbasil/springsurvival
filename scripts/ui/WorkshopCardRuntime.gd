@@ -8,6 +8,7 @@ const FEEDBACK_PHASES := {
 	"research": {"timer": "research_timer", "duration": "research_duration"},
 	"merge": {"timer": "merge_timer", "duration": "merge_duration"},
 	"failure": {"timer": "failure_timer", "duration": "failure_duration"},
+	"jump": {"timer": "jump_timer", "duration": "jump_duration"},
 }
 const STATE_TABLE_CARD_KINDS := ["location", "enemy", "dog", "material", "blueprint", "mechanism", "structure", "equipment"]
 const STATE_TABLE_CARD_RECYCLE_MESSAGES := {

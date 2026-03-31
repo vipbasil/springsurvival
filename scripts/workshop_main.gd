@@ -3,14 +3,21 @@ extends Control
 const WorkshopArtData := preload("res://scripts/ui/WorkshopArt.gd")
 const WorkshopCardRuntimeData := preload("res://scripts/ui/WorkshopCardRuntime.gd")
 const WorkshopTableControllerData := preload("res://scripts/ui/WorkshopTableController.gd")
+const WorkshopEnemyProcessesData := preload("res://scripts/ui/WorkshopEnemyProcesses.gd")
+const WorkshopStorageRuntimeData := preload("res://scripts/ui/WorkshopStorageRuntime.gd")
+const WorkshopCombatRuntimeData := preload("res://scripts/ui/WorkshopCombatRuntime.gd")
 const PROGRAMMING_SCENE_PATH := "res://scenes/main/ProgrammingMain.tscn"
 const MACHINE_CAPACITY := 48.0
 const OUTSIDE_STEP_INTERVAL := 0.55
 const CHARGE_PRODUCTION_INTERVAL := 7.2
+const SHELTER_LEAK_TICK_INTERVAL := 1.0
 const ROUTE_SCAN_INTERVAL := 6.0
 const JOURNAL_RESEARCH_INTERVAL := 9.5
 const BLUEPRINT_CRAFT_INTERVAL := 6.5
 const ENEMY_FIGHT_INTERVAL := 2.2
+const ENEMY_CARD_INTERACTION_INTERVAL := 5.4
+const ENEMY_WANDER_INTERVAL := 12.0
+const ENEMY_WANDER_STEP := 96.0
 const BOT_RECOVERY_BASE_INTERVAL := 4.2
 const BOT_RECOVERY_PER_TILE_INTERVAL := 0.75
 const BOT_RECOVERY_ENCOUNTER_INTERVAL := 3.4
@@ -18,6 +25,7 @@ const ENEMY_CAGE_CAPTURE_BASE_INTERVAL := 2.2
 const DOG_TAMING_BASE_INTERVAL := 5.0
 const ATTACK_FEEDBACK_DURATION := 0.22
 const DAMAGE_FEEDBACK_DURATION := 0.30
+const JUMP_FEEDBACK_DURATION := 0.26
 const RESEARCH_FEEDBACK_DURATION := 0.72
 const MERGE_FEEDBACK_DURATION := 0.40
 const FLOATING_NUMBER_DURATION := 0.60
@@ -83,11 +91,14 @@ const WORKSHOP_OPERATOR := {
 @onready var background: ColorRect = $Background
 
 var _outside_step_cooldown := 0.0
+var _shelter_leak_tick_cooldown := SHELTER_LEAK_TICK_INTERVAL
 var _charge_production_cooldown := CHARGE_PRODUCTION_INTERVAL
 var _route_scan_cooldown := ROUTE_SCAN_INTERVAL
 var _journal_research_cooldown := JOURNAL_RESEARCH_INTERVAL
 var _blueprint_craft_cooldown := BLUEPRINT_CRAFT_INTERVAL
 var _enemy_fight_cooldowns := {}
+var _enemy_card_interaction_cooldowns := {}
+var _enemy_wander_cooldowns := {}
 var _bot_recovery_process := {}
 var _enemy_cage_capture_process := {}
 var _dog_taming_process := {}
@@ -424,6 +435,10 @@ func _process(delta: float):
 	_tick_combat_feedback(delta)
 	if not GameState.is_run_active():
 		return
+	_shelter_leak_tick_cooldown -= delta
+	if _shelter_leak_tick_cooldown <= 0.0:
+		GameState.tick_shelter_leaks(SHELTER_LEAK_TICK_INTERVAL)
+		_shelter_leak_tick_cooldown = SHELTER_LEAK_TICK_INTERVAL
 	_tick_charge_machine(delta)
 	_tick_route_scan(delta)
 	_tick_journal_research(delta)
@@ -433,6 +448,8 @@ func _process(delta: float):
 	_tick_enemy_cage_capture(delta)
 	_tick_dog_taming(delta)
 	_tick_enemy_fights(delta)
+	_tick_enemy_card_interactions(delta)
+	_tick_enemy_wander(delta)
 	_outside_step_cooldown -= delta
 	if _outside_step_cooldown > 0.0:
 		return
@@ -445,7 +462,7 @@ func _tick_charge_machine(delta: float):
 	var rect := _rect_in_root(map_region)
 	_ensure_table_layout(rect)
 	var target_bot := _get_charge_machine_target_bot_index(rect)
-	if target_bot == -1 or not _is_charge_machine_operating() or not GameState.has_charged_power_unit_available():
+	if target_bot == -1 or not _is_charge_machine_operating():
 		_charge_production_cooldown = CHARGE_PRODUCTION_INTERVAL
 		return
 	var charge_rect := Rect2(_table_charge_position, CARD_SIZE)
@@ -454,10 +471,15 @@ func _tick_charge_machine(delta: float):
 	if _charge_production_cooldown > 0.0:
 		return
 	_charge_production_cooldown = CHARGE_PRODUCTION_INTERVAL
-	var charge_result := GameState.charge_bot_with_power_units(target_bot, GameState.CHARGE_MACHINE_TRANSFER_UNITS)
+	var charge_result := GameState.charge_bot_with_operator_effort(target_bot, GameState.CHARGE_MACHINE_TRANSFER_UNITS, 1)
 	if bool(charge_result.get("ok", false)):
+		if int(charge_result.get("charged", 0)) > 0:
+			GameState.add_shelter_leaks({
+				"heat": 5.0,
+				"noise": 2.0,
+			})
 		_trigger_research_card_feedback("bot", target_bot)
-		EventBus.log_message.emit("%s +%d power" % [_bot_display_name(target_bot), int(charge_result.get("charged", 0))])
+		EventBus.log_message.emit("%s +%d power, operator -%d energy" % [_bot_display_name(target_bot), int(charge_result.get("charged", 0)), int(charge_result.get("operator_energy_cost", 0))])
 	queue_redraw()
 
 func _tick_route_scan(delta: float):
@@ -574,6 +596,7 @@ func _tick_tank_process(delta: float):
 		return
 	var rect := _rect_in_root(map_region)
 	_ensure_table_layout(rect)
+	var started_cycles := false
 	for start_variant in GameState.start_available_tank_processes():
 		if typeof(start_variant) != TYPE_DICTIONARY:
 			continue
@@ -581,8 +604,14 @@ func _tick_tank_process(delta: float):
 		var started_tank_id := str(start_result.get("tank_id", ""))
 		if not started_tank_id.is_empty():
 			_trigger_research_card_feedback("mechanism", started_tank_id)
+		started_cycles = true
 		EventBus.log_message.emit("Tank cycle started: %s" % str(start_result.get("display_name", "Bioprocess")))
 		queue_redraw()
+	if started_cycles:
+		GameState.add_shelter_leaks({
+			"heat": 2.0,
+			"waste": 3.0,
+		})
 	var completions := GameState.tick_tank_processes()
 	for completion_variant in completions:
 		if typeof(completion_variant) != TYPE_DICTIONARY:
@@ -595,6 +624,10 @@ func _tick_tank_process(delta: float):
 			continue
 		var tank_rect := Rect2(_table_mechanism_positions.get(tank_id, Vector2.ZERO), CARD_SIZE)
 		_place_generated_material_card(material_id, tank_rect)
+		GameState.add_shelter_leaks({
+			"heat": 1.0,
+			"waste": 4.0,
+		})
 		if not tank_id.is_empty():
 			_trigger_research_card_feedback("mechanism", tank_id)
 		EventBus.log_message.emit("Tank output ready: %s" % str(created_material.get("display_name", created_material.get("type", "Resource"))))
@@ -628,6 +661,8 @@ func _tick_enemy_cage_capture(delta: float):
 		return
 	if bool(result.get("success", false)):
 		_table_enemy_positions.erase(enemy_id)
+		_enemy_card_interaction_cooldowns.erase(enemy_id)
+		_enemy_wander_cooldowns.erase(enemy_id)
 		var enemy_layout_key := GameState.get_state_table_card_layout_key("enemy", enemy_id)
 		if not enemy_layout_key.is_empty():
 			GameState.clear_workshop_card_position(enemy_layout_key)
@@ -737,6 +772,10 @@ func _tick_bot_recovery(delta: float):
 			"encounter_rolls": 0,
 			"retrieval_from_active": bool(candidate.get("retrieval_from_active", false)),
 		}
+		GameState.add_shelter_leaks({
+			"trace": 6.0,
+			"noise": 2.0,
+		})
 		EventBus.log_message.emit("%s started: %s" % ["Retrieval" if bool(_bot_recovery_process.get("retrieval_from_active", false)) else "Recovery", _bot_display_name(bot_index)])
 		queue_redraw()
 	var remaining_cooldown := maxf(float(_bot_recovery_process.get("cooldown", 0.0)) - delta, 0.0)
@@ -819,34 +858,198 @@ func _tick_enemy_fights(delta: float):
 		)
 		if result.is_empty():
 			continue
+		var leak_updates := WorkshopCombatRuntimeData.build_enemy_fight_leak_updates(result, fight_info)
+		GameState.add_shelter_leaks(leak_updates)
 		_emit_enemy_fight_feedback(enemy_id, fight_info, result)
-		if bool(result.get("defeated", false)):
-			var drop_card: Dictionary = result.get("drop_card", {})
-			var drop_kind := str(drop_card.get("kind", ""))
-			var drop_id := str(drop_card.get("id", ""))
+		var fight_outcome: Dictionary = WorkshopCombatRuntimeData.build_enemy_fight_outcome(
+			result,
+			fight_info,
+			_table_enemy_positions,
+			_table_dog_positions,
+			rect.position,
+			CARD_SIZE,
+			Callable(GameState, "get_state_table_card_layout_key")
+		)
+		if bool(fight_outcome.get("enemy_removed", false)):
+			var drop_id := str(fight_outcome.get("enemy_drop_id", ""))
 			_table_enemy_positions.erase(enemy_id)
 			_enemy_fight_cooldowns.erase(enemy_id)
-			EventBus.log_message.emit("%s defeated" % str(result.get("enemy_name", "Hostile")))
+			_enemy_card_interaction_cooldowns.erase(enemy_id)
+			_enemy_wander_cooldowns.erase(enemy_id)
+			EventBus.log_message.emit(str(fight_outcome.get("enemy_message", "%s defeated" % str(result.get("enemy_name", "Hostile")))))
 			if not drop_id.is_empty():
-				_place_generated_material_card(drop_id, Rect2(fight_info.get("rect", Rect2())))
-				EventBus.log_message.emit("%s dropped" % str(drop_card.get("display_name", "Material")))
+				_place_generated_material_card(drop_id, Rect2(fight_outcome.get("enemy_drop_rect", Rect2())))
+				EventBus.log_message.emit("%s dropped" % str(fight_outcome.get("enemy_drop_name", "Material")))
 		else:
-			EventBus.log_message.emit("%s fought back" % str(result.get("enemy_name", "Hostile")))
-		for dog_drop_variant in Array(result.get("dog_drops", [])):
-			var dog_drop: Dictionary = dog_drop_variant
-			var fallen_dog_id := str(dog_drop.get("dog_id", ""))
-			var dog_drop_card: Dictionary = Dictionary(dog_drop.get("drop_card", {}))
-			var dog_drop_kind := str(dog_drop_card.get("kind", ""))
-			var dog_drop_id := str(dog_drop_card.get("id", ""))
-			var dog_rect := Rect2(Vector2(_table_dog_positions.get(fallen_dog_id, rect.position)), CARD_SIZE)
+			EventBus.log_message.emit(str(fight_outcome.get("enemy_message", "%s fought back" % str(result.get("enemy_name", "Hostile")))))
+		for dog_outcome_variant in Array(fight_outcome.get("dog_outcomes", [])):
+			var dog_outcome: Dictionary = Dictionary(dog_outcome_variant)
+			var fallen_dog_id := str(dog_outcome.get("dog_id", ""))
+			var dog_drop_id := str(dog_outcome.get("drop_id", ""))
 			if not dog_drop_id.is_empty():
-				_place_generated_material_card(dog_drop_id, dog_rect)
-				EventBus.log_message.emit("%s dropped" % str(dog_drop_card.get("display_name", "Material")))
+				_place_generated_material_card(dog_drop_id, Rect2(dog_outcome.get("drop_rect", Rect2())))
+				EventBus.log_message.emit("%s dropped" % str(dog_outcome.get("drop_name", "Material")))
 			_table_dog_positions.erase(fallen_dog_id)
-			var dog_layout_key := GameState.get_state_table_card_layout_key("dog", fallen_dog_id)
+			var dog_layout_key := str(dog_outcome.get("layout_key", ""))
 			if not dog_layout_key.is_empty():
 				GameState.clear_workshop_card_position(dog_layout_key)
-			EventBus.log_message.emit("%s died" % str(dog_drop.get("display_name", "DOG")))
+			EventBus.log_message.emit("%s died" % str(dog_outcome.get("dog_name", "DOG")))
+
+func _tick_enemy_card_interactions(delta: float):
+	if not is_instance_valid(map_region):
+		return
+	var rect := _rect_in_root(map_region)
+	_ensure_table_layout(rect)
+	for interaction_info in _get_enemy_card_interaction_states(rect):
+		var enemy_id := str(interaction_info.get("enemy_id", ""))
+		if enemy_id.is_empty():
+			continue
+		var cooldown := float(_enemy_card_interaction_cooldowns.get(enemy_id, ENEMY_CARD_INTERACTION_INTERVAL))
+		cooldown -= delta
+		_enemy_card_interaction_cooldowns[enemy_id] = cooldown
+		queue_redraw()
+		if cooldown > 0.0:
+			continue
+		_enemy_card_interaction_cooldowns[enemy_id] = ENEMY_CARD_INTERACTION_INTERVAL
+		_resolve_enemy_card_interaction(interaction_info)
+
+func _resolve_enemy_card_interaction(interaction_info: Dictionary) -> void:
+	var result: Dictionary = WorkshopCombatRuntimeData.resolve_enemy_card_interaction(
+		interaction_info,
+		_table_cartridge_positions,
+		_table_blank_positions,
+		Callable(self, "_forget_state_table_card"),
+		Callable(GameState, "discard_programmed_cartridge"),
+		Callable(GameState, "discard_blank_cartridge"),
+		Callable(GameState, "clear_workshop_card_position")
+	)
+	if not bool(result.get("ok", false)):
+		return
+	_table_cartridge_positions = Dictionary(result.get("table_cartridge_positions", _table_cartridge_positions)).duplicate(true)
+	_table_blank_positions = Dictionary(result.get("table_blank_positions", _table_blank_positions)).duplicate(true)
+	var target_name := str(result.get("target_name", "Card"))
+	var target_rect := Rect2(result.get("target_rect", Rect2()))
+	var action_label := str(result.get("action_label", "DESTROYED"))
+	_floating_announcements.append({
+		"position": target_rect.get_center() + Vector2(0.0, -24.0),
+		"text": action_label,
+		"subtext": target_name,
+		"timer": DISCOVERY_BANNER_DURATION,
+		"duration": DISCOVERY_BANNER_DURATION,
+	})
+	EventBus.log_message.emit(str(result.get("log_message", "")))
+	queue_redraw()
+
+func _get_enemy_card_interaction_states(rect: Rect2) -> Array:
+	_ensure_table_layout(rect)
+	var result: Dictionary = WorkshopEnemyProcessesData.get_card_interaction_states(
+		GameState.get_enemy_cards(),
+		_table_enemy_positions,
+		rect.position,
+		CARD_SIZE,
+		_get_enemy_fight_states(rect),
+		_enemy_card_interaction_cooldowns,
+		ENEMY_CARD_INTERACTION_INTERVAL,
+		Callable(self, "_is_card_locked_by_active_process"),
+		Callable(self, "_is_dragging_table_card"),
+		Callable(self, "_get_enemy_card_interaction_target")
+	)
+	_enemy_card_interaction_cooldowns = Dictionary(result.get("cooldowns", _enemy_card_interaction_cooldowns)).duplicate(true)
+	return Array(result.get("states", []))
+
+func _get_enemy_card_interaction_target(enemy_id: String, enemy_rect: Rect2, rect: Rect2) -> Dictionary:
+	return WorkshopEnemyProcessesData.get_card_interaction_target(
+		_get_table_visual_cards(rect),
+		enemy_id,
+		enemy_rect,
+		Callable(self, "_has_meaningful_overlap"),
+		Callable(self, "_get_enemy_card_interaction_target_id"),
+		Callable(self, "_is_card_locked_by_active_process"),
+		Callable(self, "_get_enemy_card_interaction_action"),
+		Callable(self, "_get_enemy_card_interaction_target_name")
+	)
+
+func _get_enemy_card_interaction_action(kind: String) -> String:
+	return WorkshopEnemyProcessesData.get_card_interaction_action(kind)
+
+func _get_enemy_card_interaction_target_id(kind: String, card_info: Dictionary):
+	return WorkshopEnemyProcessesData.get_card_interaction_target_id(kind, card_info)
+
+func _get_enemy_card_interaction_target_name(kind: String, card_info: Dictionary) -> String:
+	return WorkshopEnemyProcessesData.get_card_interaction_target_name(kind, card_info)
+
+func _tick_enemy_wander(delta: float):
+	if not is_instance_valid(map_region):
+		return
+	var rect := _rect_in_root(map_region)
+	_ensure_table_layout(rect)
+	var workspace := _get_table_workspace_rect(rect)
+	for candidate_variant in _get_enemy_wander_candidates(rect):
+		if typeof(candidate_variant) != TYPE_DICTIONARY:
+			continue
+		var candidate: Dictionary = candidate_variant
+		var enemy_id := str(candidate.get("enemy_id", ""))
+		if enemy_id.is_empty():
+			continue
+		var cooldown := float(_enemy_wander_cooldowns.get(enemy_id, ENEMY_WANDER_INTERVAL))
+		cooldown -= delta
+		_enemy_wander_cooldowns[enemy_id] = cooldown
+		queue_redraw()
+		if cooldown > 0.0:
+			continue
+		_enemy_wander_cooldowns[enemy_id] = ENEMY_WANDER_INTERVAL
+		_attempt_enemy_wander(enemy_id, Rect2(candidate.get("rect", Rect2())), workspace, rect)
+
+func _attempt_enemy_wander(enemy_id: String, current_rect: Rect2, workspace: Rect2, rect: Rect2) -> void:
+	if enemy_id.is_empty():
+		return
+	var best_position := current_rect.position
+	for _attempt in range(24):
+		var offset := Vector2(randf_range(-ENEMY_WANDER_STEP, ENEMY_WANDER_STEP), randf_range(-ENEMY_WANDER_STEP, ENEMY_WANDER_STEP))
+		if offset.length() < 20.0:
+			continue
+		var candidate_position := _clamp_table_position(current_rect.position + offset, CARD_SIZE, workspace)
+		var candidate_rect := Rect2(candidate_position, CARD_SIZE)
+		if not _enemy_wander_position_is_clear(enemy_id, candidate_rect, rect):
+			continue
+		best_position = candidate_position
+		break
+	if best_position == current_rect.position:
+		return
+	_set_state_table_card_position("enemy", enemy_id, best_position)
+	_trigger_jump_feedback("enemy", enemy_id)
+	_trigger_enemy_landing_unit_feedback(Rect2(best_position, CARD_SIZE), rect)
+	var landed_target := _get_enemy_card_interaction_target(enemy_id, Rect2(best_position, CARD_SIZE), rect)
+	if not landed_target.is_empty():
+		var landed_kind := str(landed_target.get("target_kind", ""))
+		var landed_target_id = landed_target.get("target_id", null)
+		if landed_target_id != null and landed_kind in ["location", "material", "blueprint", "mechanism", "structure", "equipment", "cartridge", "blank"]:
+			_trigger_jump_feedback(landed_kind, landed_target_id)
+	queue_redraw()
+
+func _enemy_wander_position_is_clear(enemy_id: String, candidate_rect: Rect2, rect: Rect2) -> bool:
+	return WorkshopEnemyProcessesData.wander_position_is_clear(
+		enemy_id,
+		candidate_rect,
+		_get_machine_card_data(rect),
+		_get_table_visual_cards(rect),
+		Callable(self, "_has_meaningful_overlap")
+	)
+
+func _trigger_enemy_landing_unit_feedback(enemy_rect: Rect2, rect: Rect2) -> void:
+	var operator_rect := Rect2(_table_operator_position, CARD_SIZE)
+	if _has_meaningful_overlap(enemy_rect, operator_rect, 0.18):
+		_trigger_jump_feedback("operator", 0)
+	for drone_slot_variant in _get_table_drone_data(rect):
+		var drone_slot: Dictionary = drone_slot_variant
+		if not bool(drone_slot.get("available_in_workshop", false)):
+			continue
+		if _has_meaningful_overlap(enemy_rect, Rect2(drone_slot.get("rect", Rect2())), 0.18):
+			_trigger_jump_feedback("bot", int(drone_slot.get("index", -1)))
+	for dog_slot_variant in _get_table_dog_data(rect):
+		var dog_slot: Dictionary = dog_slot_variant
+		if _has_meaningful_overlap(enemy_rect, Rect2(dog_slot.get("rect", Rect2())), 0.18):
+			_trigger_jump_feedback("dog", str(dog_slot.get("dog_id", "")))
 
 func _tick_combat_feedback(delta: float):
 	var active := false
@@ -886,32 +1089,14 @@ func _tick_combat_feedback(delta: float):
 		queue_redraw()
 
 func _emit_enemy_fight_feedback(enemy_id: String, fight_info: Dictionary, result: Dictionary):
-	var enemy_center := _get_table_card_center("enemy", enemy_id)
-	if bool(fight_info.get("use_operator", false)):
-		var operator_center := _get_table_card_center("operator", 0)
-		_trigger_attack_feedback("operator", 0, enemy_center - operator_center, int(result.get("operator_attack", 0)))
-		_trigger_damage_feedback("operator", 0, int(result.get("operator_damage", 0)))
-	for bot_attack in Array(result.get("bot_attacks", [])):
-		var attack_entry: Dictionary = bot_attack
-		var bot_index := int(attack_entry.get("bot_index", -1))
-		if bot_index == -1:
-			continue
-		var bot_center := _get_table_card_center("bot", bot_index)
-		_trigger_attack_feedback("bot", bot_index, enemy_center - bot_center, int(attack_entry.get("attack", 0)))
-	for bot_damage in Array(result.get("bot_damage", [])):
-		var damage_entry: Dictionary = bot_damage
-		_trigger_damage_feedback("bot", int(damage_entry.get("bot_index", -1)), int(damage_entry.get("damage", 0)))
-	for dog_attack in Array(result.get("dog_attacks", [])):
-		var dog_attack_entry: Dictionary = dog_attack
-		var dog_id := str(dog_attack_entry.get("dog_id", ""))
-		if dog_id.is_empty():
-			continue
-		var dog_center := _get_table_card_center("dog", dog_id)
-		_trigger_attack_feedback("dog", dog_id, enemy_center - dog_center, int(dog_attack_entry.get("attack", 0)))
-	for dog_damage in Array(result.get("dog_damage", [])):
-		var dog_damage_entry: Dictionary = dog_damage
-		_trigger_damage_feedback("dog", str(dog_damage_entry.get("dog_id", "")), int(dog_damage_entry.get("damage", 0)))
-	_trigger_damage_feedback("enemy", enemy_id, int(result.get("total_attack", 0)))
+	WorkshopEnemyProcessesData.emit_fight_feedback(
+		enemy_id,
+		fight_info,
+		result,
+		Callable(self, "_get_table_card_center"),
+		Callable(self, "_trigger_attack_feedback"),
+		Callable(self, "_trigger_damage_feedback")
+	)
 
 func _trigger_attack_feedback(kind: String, identifier, direction: Vector2, amount: int):
 	if amount <= 0:
@@ -946,6 +1131,12 @@ func _trigger_damage_feedback(kind: String, identifier, amount: int):
 		"timer": FLOATING_NUMBER_DURATION,
 		"duration": FLOATING_NUMBER_DURATION,
 		"width": 32.0,
+	})
+
+func _trigger_jump_feedback(kind: String, identifier) -> void:
+	var fx_key := _get_card_fx_key(kind, identifier)
+	_combat_card_fx[fx_key] = WorkshopCardRuntimeData.set_feedback_phase(Dictionary(_combat_card_fx.get(fx_key, {})), "jump", JUMP_FEEDBACK_DURATION, {
+		"seed": float((fx_key.hash() % 173) + 29),
 	})
 
 func _trigger_research_card_feedback(kind: String, identifier) -> void:
@@ -1122,6 +1313,17 @@ func _get_card_feedback_offset(kind: String, identifier) -> Vector2:
 			sin(failure_progress * 41.0 + fail_seed),
 			cos(failure_progress * 37.0 + fail_seed * 1.2)
 		) * amplitude
+	var jump_timer := float(entry.get("jump_timer", 0.0))
+	var jump_duration := maxf(float(entry.get("jump_duration", JUMP_FEEDBACK_DURATION)), 0.001)
+	if jump_timer > 0.0:
+		var jump_progress := 1.0 - jump_timer / jump_duration
+		var jump_amplitude := (1.0 - jump_progress) * 6.5
+		var jump_seed := float(entry.get("seed", 11.0))
+		offset += Vector2(
+			sin(jump_progress * TAU * 7.0 + jump_seed),
+			cos(jump_progress * TAU * 5.0 + jump_seed * 0.9)
+		) * jump_amplitude
+		offset += Vector2(0.0, -sin(clampf(jump_progress, 0.0, 1.0) * PI) * 5.0)
 	return offset
 
 func _get_table_card_center(kind: String, identifier) -> Vector2:
@@ -1140,7 +1342,13 @@ func _get_table_card_center(kind: String, identifier) -> Vector2:
 			return Vector2.ZERO
 
 func _is_charge_machine_operating() -> bool:
-	return true
+	if not GameState.is_run_active():
+		return false
+	if int(GameState.get_operator_state().get("energy", 0)) <= 0:
+		return false
+	var operator_rect := Rect2(_table_operator_position, CARD_SIZE)
+	var charge_rect := Rect2(_table_charge_position, CARD_SIZE)
+	return _has_meaningful_overlap(charge_rect, operator_rect, 0.30)
 
 func _get_charge_machine_target_bot_index(rect: Rect2) -> int:
 	_ensure_table_layout(rect)
@@ -2349,21 +2557,15 @@ func _get_enemy_cage_target(drop_rect: Rect2, source_enemy_id: String) -> Dictio
 	return {}
 
 func _get_storage_target(source_kind: String, drop_rect: Rect2) -> Dictionary:
-	var table_rect := _rect_in_root(map_region)
-	for card_info in _get_table_visual_cards(table_rect):
-		if str(card_info.get("kind", "")) != "structure":
-			continue
-		var crafted_id := str(card_info.get("structure_id", ""))
-		var source_id := str(_active_drag.get("%s_id" % source_kind, ""))
-		if crafted_id.is_empty() or crafted_id == source_id:
-			continue
-		if not GameState.is_storage_crafted_card(crafted_id):
-			continue
-		if GameState.is_tool_chest_crafted_card(crafted_id) and source_kind not in ["material", "structure", "blueprint", "equipment"]:
-			continue
-		if _has_meaningful_overlap(Rect2(card_info.get("rect", Rect2())), drop_rect, 0.30):
-			return card_info
-	return {}
+	return WorkshopStorageRuntimeData.get_storage_target(
+		_get_table_visual_cards(_rect_in_root(map_region)),
+		source_kind,
+		str(_active_drag.get("%s_id" % source_kind, "")),
+		drop_rect,
+		Callable(self, "_has_meaningful_overlap"),
+		Callable(GameState, "is_storage_crafted_card"),
+		Callable(GameState, "is_tool_chest_crafted_card")
+	)
 
 func _get_tank_target(drop_rect: Rect2) -> Dictionary:
 	var table_rect := _rect_in_root(map_region)
@@ -2588,30 +2790,17 @@ func _place_generated_dog_card(dog_id: String, source_rect: Rect2):
 	_set_state_table_card_position("dog", dog_id, generated_position)
 
 func _place_withdrawn_storage_card(withdrawn: Dictionary, source_rect: Rect2) -> void:
-	var withdrawn_kind := str(withdrawn.get("kind", ""))
-	var withdrawn_id := str(withdrawn.get("id", ""))
-	match withdrawn_kind:
-		"location":
-			if not withdrawn_id.is_empty():
-				_place_generated_location_card(withdrawn_id, source_rect)
-		"material":
-			if not withdrawn_id.is_empty():
-				_place_generated_material_card(withdrawn_id, source_rect)
-		"dog":
-			if not withdrawn_id.is_empty():
-				_place_generated_dog_card(withdrawn_id, source_rect)
-		"mechanism":
-			if not withdrawn_id.is_empty():
-				_place_generated_mechanism_card(withdrawn_id, source_rect)
-		"structure":
-			if not withdrawn_id.is_empty():
-				_place_generated_structure_card(withdrawn_id, source_rect)
-		"blueprint":
-			if not withdrawn_id.is_empty():
-				_place_generated_blueprint_card(withdrawn_id, source_rect)
-		"equipment":
-			if not withdrawn_id.is_empty():
-				_place_generated_equipment_card(withdrawn_id, source_rect)
+	WorkshopStorageRuntimeData.place_withdrawn_storage_card(
+		withdrawn,
+		source_rect,
+		Callable(self, "_place_generated_location_card"),
+		Callable(self, "_place_generated_material_card"),
+		Callable(self, "_place_generated_dog_card"),
+		Callable(self, "_place_generated_mechanism_card"),
+		Callable(self, "_place_generated_structure_card"),
+		Callable(self, "_place_generated_blueprint_card"),
+		Callable(self, "_place_generated_equipment_card")
+	)
 
 func _get_equipment_slot_rects_for_card(card_rect: Rect2) -> Array:
 	var face_rect := card_rect.grow(-3.0)
@@ -2797,7 +2986,10 @@ func _draw_map_bay(rect: Rect2):
 			"blueprint":
 				WorkshopArtData.draw_blueprint_card(self, Rect2(card_info["rect"]), Dictionary(card_info["card_data"]))
 			"mechanism":
-				WorkshopArtData.draw_mechanism_card(self, Rect2(card_info["rect"]), Dictionary(card_info["card_data"]))
+				var mechanism_card_state := Dictionary(card_info["card_data"]).duplicate(true)
+				if str(mechanism_card_state.get("type", "")) == "leak_detector":
+					mechanism_card_state["shelter_leaks"] = GameState.get_shelter_leaks()
+				WorkshopArtData.draw_mechanism_card(self, Rect2(card_info["rect"]), mechanism_card_state)
 			"structure":
 				WorkshopArtData.draw_structure_card(self, Rect2(card_info["rect"]), Dictionary(card_info["card_data"]))
 			"bot":
@@ -2958,7 +3150,7 @@ func _draw_process_bar(card_rect: Rect2, progress: float):
 func _get_active_process_states(rect: Rect2) -> Array:
 	_ensure_table_layout(rect)
 	var states: Array = []
-	if _is_charge_machine_operating() and _get_charge_machine_target_bot_index(rect) != -1 and GameState.has_charged_power_unit_available():
+	if _is_charge_machine_operating() and _get_charge_machine_target_bot_index(rect) != -1:
 		states.append({
 			"rect": Rect2(_table_charge_position, CARD_SIZE),
 			"cooldown": _charge_production_cooldown,
@@ -3022,6 +3214,27 @@ func _get_active_process_states(rect: Rect2) -> Array:
 			"rect": Rect2(fight_info.get("rect", Rect2())),
 			"cooldown": float(_enemy_fight_cooldowns.get(enemy_id, ENEMY_FIGHT_INTERVAL)),
 			"duration": ENEMY_FIGHT_INTERVAL,
+		})
+	for interaction_info in _get_enemy_card_interaction_states(rect):
+		var interaction_enemy_id := str(interaction_info.get("enemy_id", ""))
+		if interaction_enemy_id.is_empty():
+			continue
+		states.append({
+			"rect": Rect2(interaction_info.get("rect", Rect2())),
+			"cooldown": float(_enemy_card_interaction_cooldowns.get(interaction_enemy_id, ENEMY_CARD_INTERACTION_INTERVAL)),
+			"duration": ENEMY_CARD_INTERACTION_INTERVAL,
+		})
+	for wander_candidate_variant in _get_enemy_wander_candidates(rect):
+		if typeof(wander_candidate_variant) != TYPE_DICTIONARY:
+			continue
+		var wander_candidate: Dictionary = wander_candidate_variant
+		var wander_enemy_id := str(wander_candidate.get("enemy_id", ""))
+		if wander_enemy_id.is_empty():
+			continue
+		states.append({
+			"rect": Rect2(wander_candidate.get("rect", Rect2())),
+			"cooldown": float(_enemy_wander_cooldowns.get(wander_enemy_id, ENEMY_WANDER_INTERVAL)),
+			"duration": ENEMY_WANDER_INTERVAL,
 		})
 	return states
 
@@ -3254,30 +3467,28 @@ func _handle_bot_log_modal_click(root_point: Vector2):
 		return
 
 func _handle_storage_modal_click(root_point: Vector2):
-	var overlay_rect := _get_storage_overlay_rect()
-	if _storage_close_rect.has_point(root_point) or not overlay_rect.has_point(root_point):
-		_storage_open = false
+	var result: Dictionary = WorkshopStorageRuntimeData.handle_storage_modal_click(
+		root_point,
+		_get_storage_overlay_rect(),
+		_storage_close_rect,
+		_storage_prev_rect,
+		_storage_next_rect,
+		_storage_item_click_rects,
+		_storage_page_index,
+		_storage_container_id,
+		STORAGE_PAGE_SIZE,
+		Rect2(Vector2(_table_structure_positions.get(_storage_container_id, Vector2(size.x * 0.5 - CARD_SIZE.x * 0.5, size.y * 0.5 - CARD_SIZE.y * 0.5))), CARD_SIZE),
+		Callable(GameState, "get_crafted_storage_contents"),
+		Callable(GameState, "withdraw_crafted_storage_item"),
+		Callable(self, "_place_withdrawn_storage_card")
+	)
+	_storage_open = bool(result.get("storage_open", _storage_open))
+	_storage_page_index = int(result.get("storage_page_index", _storage_page_index))
+	if bool(result.get("clear_click_rects", false)):
 		_storage_item_click_rects.clear()
-		return
-	if _storage_prev_rect.has_point(root_point):
-		_storage_page_index = maxi(_storage_page_index - 1, 0)
-		return
-	if _storage_next_rect.has_point(root_point):
-		var stored_entries := GameState.get_crafted_storage_contents(_storage_container_id)
-		var page_count := maxi(int(ceili(float(stored_entries.size()) / float(STORAGE_PAGE_SIZE))), 1)
-		_storage_page_index = mini(_storage_page_index + 1, page_count - 1)
-		return
-	for click_info in _storage_item_click_rects:
-		var item_rect := Rect2(click_info.get("rect", Rect2()))
-		if not item_rect.has_point(root_point):
-			continue
-		var withdrawn := GameState.withdraw_crafted_storage_item(_storage_container_id, str(click_info.get("entry_id", "")))
-		if withdrawn.is_empty():
-			return
-		var container_rect := Rect2(Vector2(_table_structure_positions.get(_storage_container_id, Vector2(size.x * 0.5 - CARD_SIZE.x * 0.5, size.y * 0.5 - CARD_SIZE.y * 0.5))), CARD_SIZE)
-		_place_withdrawn_storage_card(withdrawn, container_rect)
-		EventBus.log_message.emit("%s withdrawn" % str(withdrawn.get("display_name", withdrawn.get("result", "Stored item"))))
-		return
+	var log_message := str(result.get("log_message", "")).strip_edges()
+	if not log_message.is_empty():
+		EventBus.log_message.emit(log_message)
 
 func _draw_journal_overlay():
 	_journal_recipe_click_rects.clear()
@@ -3521,18 +3732,26 @@ func _draw_storage_overlay():
 	draw_rect(_storage_close_rect, Color(0.42, 0.18, 0.16))
 	draw_rect(_storage_close_rect.grow(-1.0), Color(0.31, 0.14, 0.13))
 	_draw_outlined_text(_storage_close_rect.position + Vector2(0.0, 15.0), "X", HORIZONTAL_ALIGNMENT_CENTER, _storage_close_rect.size.x, FONT_SIZE_BANNER, TEXT, Color(0.12, 0.08, 0.06))
-	var container_card := _get_crafted_card_by_id(_storage_container_id)
+	var container_card := WorkshopStorageRuntimeData.get_structure_card_by_id(GameState.get_crafted_cards(), _storage_container_id)
 	if container_card.is_empty():
 		_storage_open = false
 		return
-	var title := str(container_card.get("display_name", container_card.get("result", "STORAGE"))).to_upper()
-	_draw_outlined_text(Vector2(page_rect.position.x + 28.0, page_rect.position.y + 34.0), title, HORIZONTAL_ALIGNMENT_LEFT, page_rect.size.x - 56.0, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
-	var left_rect := Rect2(page_rect.position + Vector2(24.0, 58.0), Vector2(180.0, page_rect.size.y - 96.0))
-	var right_rect := Rect2(page_rect.position + Vector2(226.0, 58.0), Vector2(page_rect.size.x - 250.0, page_rect.size.y - 96.0))
-	var preview_rect := Rect2(left_rect.position, Vector2(140.0, 172.0))
-	WorkshopArtData.draw_structure_card(self, preview_rect, container_card)
 	var stored_entries := GameState.get_crafted_storage_contents(_storage_container_id)
-	draw_string(ThemeDB.fallback_font, Vector2(left_rect.position.x, left_rect.position.y + 198.0), "STORED %d" % stored_entries.size(), HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x, FONT_SIZE_CARD_VALUE, STEEL_DARK)
+	var overlay_model: Dictionary = WorkshopStorageRuntimeData.build_storage_overlay_model(
+		container_card,
+		stored_entries,
+		page_rect,
+		_storage_page_index,
+		STORAGE_PAGE_SIZE
+	)
+	_storage_page_index = int(overlay_model.get("page_index", 0))
+	var title := str(overlay_model.get("title", "STORAGE"))
+	_draw_outlined_text(Vector2(page_rect.position.x + 28.0, page_rect.position.y + 34.0), title, HORIZONTAL_ALIGNMENT_LEFT, page_rect.size.x - 56.0, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
+	var left_rect := Rect2(overlay_model.get("left_rect", Rect2()))
+	var right_rect := Rect2(overlay_model.get("right_rect", Rect2()))
+	var preview_rect := Rect2(overlay_model.get("preview_rect", Rect2()))
+	WorkshopArtData.draw_structure_card(self, preview_rect, container_card)
+	draw_string(ThemeDB.fallback_font, Vector2(left_rect.position.x, left_rect.position.y + 198.0), "STORED %d" % int(overlay_model.get("stored_count", 0)), HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x, FONT_SIZE_CARD_VALUE, STEEL_DARK)
 	var storage_lines := _wrap_journal_text("Archive storage for portable table cards. Hostile enemy cards cannot be stored here. Click any row to withdraw it back to the table.", left_rect.size.x, FONT_SIZE_CARD_VALUE, 7)
 	for line_index in range(storage_lines.size()):
 		draw_string(ThemeDB.fallback_font, Vector2(left_rect.position.x, left_rect.position.y + 226.0 + float(line_index) * 16.0), storage_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x, FONT_SIZE_CARD_VALUE, STEEL_DARK)
@@ -3541,44 +3760,27 @@ func _draw_storage_overlay():
 		for line_index in range(empty_lines.size()):
 			draw_string(ThemeDB.fallback_font, Vector2(right_rect.position.x, right_rect.position.y + 28.0 + float(line_index) * 18.0), empty_lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x, FONT_SIZE_VALUE, STEEL_DARK)
 		return
-	var page_count := maxi(int(ceili(float(stored_entries.size()) / float(STORAGE_PAGE_SIZE))), 1)
-	_storage_page_index = clampi(_storage_page_index, 0, page_count - 1)
-	var start_index := _storage_page_index * STORAGE_PAGE_SIZE
-	var end_index := mini(start_index + STORAGE_PAGE_SIZE, stored_entries.size())
-	var row_y := right_rect.position.y
-	for entry_index in range(start_index, end_index):
-		var entry: Dictionary = stored_entries[entry_index]
-		var row_rect := Rect2(Vector2(right_rect.position.x, row_y), Vector2(right_rect.size.x, 34.0))
+	var page_count := int(overlay_model.get("page_count", 1))
+	for row_variant in Array(overlay_model.get("rows", [])):
+		var row: Dictionary = Dictionary(row_variant)
+		var row_rect := Rect2(row.get("rect", Rect2()))
 		draw_rect(row_rect, Color(0.84, 0.78, 0.62))
 		draw_rect(row_rect, PANEL_BORDER, false, 1.0)
-		var label := str(entry.get("display_name", entry.get("result", "ITEM"))).to_upper()
-		if str(entry.get("kind", "")) == "material":
-			label = "%s  x%d" % [label, maxi(int(entry.get("quantity", 1)), 1)]
-		elif not Dictionary(entry.get("captive_enemy", {})).is_empty():
-			label = "%s [%s]" % [label, str(Dictionary(entry.get("captive_enemy", {})).get("display_name", "CAGED")).to_upper()]
+		var label := str(row.get("label", "ITEM"))
 		draw_string(ThemeDB.fallback_font, Vector2(row_rect.position.x + 8.0, row_rect.position.y + 22.0), label, HORIZONTAL_ALIGNMENT_LEFT, row_rect.size.x - 90.0, FONT_SIZE_CARD_VALUE, STEEL_DARK)
 		draw_string(ThemeDB.fallback_font, Vector2(row_rect.end.x - 76.0, row_rect.position.y + 22.0), "WITHDRAW", HORIZONTAL_ALIGNMENT_LEFT, 70.0, FONT_SIZE_CARD_META + 1, TAPE_SHADE)
-		_storage_item_click_rects.append({"rect": row_rect, "entry_id": str(entry.get("entry_id", ""))})
-		row_y += 40.0
-	if _storage_page_index > 0:
-		_storage_prev_rect = Rect2(Vector2(page_rect.position.x + 16.0, page_rect.end.y - 34.0), Vector2(24.0, 18.0))
+		_storage_item_click_rects.append({"rect": row_rect, "entry_id": str(row.get("entry_id", ""))})
+	_storage_prev_rect = Rect2(overlay_model.get("prev_rect", Rect2()))
+	if not _storage_prev_rect.is_equal_approx(Rect2()):
 		draw_rect(_storage_prev_rect, Color(0.79, 0.72, 0.56))
 		draw_rect(_storage_prev_rect, PANEL_BORDER, false, 1.0)
 		draw_string(ThemeDB.fallback_font, Vector2(_storage_prev_rect.position.x, _storage_prev_rect.position.y + 14.0), "<", HORIZONTAL_ALIGNMENT_CENTER, _storage_prev_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
-	if _storage_page_index < page_count - 1:
-		_storage_next_rect = Rect2(Vector2(page_rect.end.x - 56.0, page_rect.end.y - 34.0), Vector2(24.0, 18.0))
+	_storage_next_rect = Rect2(overlay_model.get("next_rect", Rect2()))
+	if not _storage_next_rect.is_equal_approx(Rect2()):
 		draw_rect(_storage_next_rect, Color(0.79, 0.72, 0.56))
 		draw_rect(_storage_next_rect, PANEL_BORDER, false, 1.0)
 		draw_string(ThemeDB.fallback_font, Vector2(_storage_next_rect.position.x, _storage_next_rect.position.y + 14.0), ">", HORIZONTAL_ALIGNMENT_CENTER, _storage_next_rect.size.x, FONT_SIZE_BANNER, STEEL_DARK)
 	draw_string(ThemeDB.fallback_font, Vector2(page_rect.position.x, page_rect.end.y - 18.0), "PAGE %d / %d" % [_storage_page_index + 1, page_count], HORIZONTAL_ALIGNMENT_CENTER, page_rect.size.x, FONT_SIZE_CARD_META + 2, STEEL_DARK)
-
-func _get_crafted_card_by_id(card_id: String) -> Dictionary:
-	if card_id.is_empty():
-		return {}
-	for crafted_card in GameState.get_crafted_cards():
-		if str(Dictionary(crafted_card).get("id", "")) == card_id:
-			return Dictionary(crafted_card)
-	return {}
 
 func _draw_journal_index_page(page_rect: Rect2, left_page: Rect2, right_page: Rect2, entry: Dictionary) -> void:
 	_draw_outlined_text(Vector2(left_page.position.x, left_page.position.y + 4.0), str(entry.get("title", "INDEX")), HORIZONTAL_ALIGNMENT_LEFT, left_page.size.x, FONT_SIZE_BANNER, STEEL_DARK, Color(0.96, 0.92, 0.84))
@@ -4022,48 +4224,37 @@ func _get_table_dog_data(rect: Rect2) -> Array:
 
 func _get_enemy_fight_states(rect: Rect2) -> Array:
 	_ensure_table_layout(rect)
-	var states: Array = []
-	var operator_rect := Rect2(_table_operator_position, CARD_SIZE)
-	var drones := _get_table_drone_data(rect)
-	var dogs := _get_table_dog_data(rect)
-	for enemy_card in GameState.get_enemy_cards():
-		var enemy_id := str(enemy_card.get("id", ""))
-		if enemy_id.is_empty():
-			continue
-		var enemy_rect := Rect2(Vector2(_table_enemy_positions.get(enemy_id, rect.position)), CARD_SIZE)
-		var use_operator := _has_meaningful_overlap(enemy_rect, operator_rect, 0.30)
-		var bot_indices: Array = []
-		var dog_ids: Array = []
-		for drone_slot in drones:
-			if not bool(drone_slot.get("available_in_workshop", false)):
-				continue
-			if int(drone_slot.get("power_charge", 0)) <= 0:
-				continue
-			if _has_meaningful_overlap(enemy_rect, Rect2(drone_slot.get("rect", Rect2())), 0.30):
-				bot_indices.append(int(drone_slot.get("index", -1)))
-		for dog_slot in dogs:
-			var dog_card: Dictionary = Dictionary(dog_slot.get("card_data", {}))
-			if int(dog_card.get("energy", 0)) <= 0:
-				continue
-			if int(dog_card.get("hp", 0)) <= 0:
-				continue
-			if str(dog_card.get("status", "active")) == "dead":
-				continue
-			if _has_meaningful_overlap(enemy_rect, Rect2(dog_slot.get("rect", Rect2())), 0.30):
-				dog_ids.append(str(dog_slot.get("dog_id", "")))
-		if not use_operator and bot_indices.is_empty() and dog_ids.is_empty():
-			_enemy_fight_cooldowns.erase(enemy_id)
-			continue
-		if not _enemy_fight_cooldowns.has(enemy_id):
-			_enemy_fight_cooldowns[enemy_id] = ENEMY_FIGHT_INTERVAL
-		states.append({
-			"enemy_id": enemy_id,
-			"rect": enemy_rect,
-			"use_operator": use_operator,
-			"bot_indices": bot_indices,
-			"dog_ids": dog_ids,
-		})
-	return states
+	var fight_state_result: Dictionary = WorkshopEnemyProcessesData.get_fight_states(
+		GameState.get_enemy_cards(),
+		_table_enemy_positions,
+		rect.position,
+		_table_operator_position,
+		CARD_SIZE,
+		_get_table_drone_data(rect),
+		_get_table_dog_data(rect),
+		_enemy_fight_cooldowns,
+		ENEMY_FIGHT_INTERVAL,
+		Callable(self, "_has_meaningful_overlap")
+	)
+	_enemy_fight_cooldowns = Dictionary(fight_state_result.get("cooldowns", _enemy_fight_cooldowns)).duplicate(true)
+	return Array(fight_state_result.get("states", []))
+
+func _get_enemy_wander_candidates(rect: Rect2) -> Array:
+	_ensure_table_layout(rect)
+	var result: Dictionary = WorkshopEnemyProcessesData.get_wander_candidates(
+		GameState.get_enemy_cards(),
+		_table_enemy_positions,
+		rect.position,
+		CARD_SIZE,
+		_get_enemy_fight_states(rect),
+		_get_enemy_card_interaction_states(rect),
+		_enemy_wander_cooldowns,
+		ENEMY_WANDER_INTERVAL,
+		Callable(self, "_is_card_locked_by_active_process"),
+		Callable(self, "_is_dragging_table_card")
+	)
+	_enemy_wander_cooldowns = Dictionary(result.get("cooldowns", _enemy_wander_cooldowns)).duplicate(true)
+	return Array(result.get("candidates", []))
 
 func _draw_shelter_marker(origin: Vector2, cell_size: float):
 	var shelter_center: Vector2 = origin + (GameState.get_shelter_position() + Vector2.ONE * 0.5) * cell_size

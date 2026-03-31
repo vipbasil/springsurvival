@@ -1020,7 +1020,75 @@ static func draw_structure_card(canvas: Control, rect: Rect2, card_data: Diction
 	_draw_structure_like_card(canvas, rect, card_data, "structure")
 
 static func draw_mechanism_card(canvas: Control, rect: Rect2, card_data: Dictionary) -> void:
+	if str(card_data.get("type", "")) == "leak_detector":
+		_draw_leak_detector_card(canvas, rect, card_data)
+		return
 	_draw_structure_like_card(canvas, rect, card_data, "mechanism")
+
+static func _draw_leak_detector_card(canvas: Control, rect: Rect2, card_data: Dictionary) -> void:
+	var shell := _draw_card_variant(canvas, rect, "mechanism")
+	var face_rect: Rect2 = shell["face_rect"]
+	var art_rect: Rect2 = shell["art_rect"]
+	var info_rect: Rect2 = shell["info_rect"]
+	_draw_band_title(canvas, face_rect, "LEAK DETECTOR", STEEL_DARK)
+	_draw_leak_detector_panel(canvas, art_rect, Dictionary(card_data.get("shelter_leaks", {})))
+	_draw_card_text(canvas, _get_info_slot(info_rect, "meta"), _get_leak_profile_text(Dictionary(card_data.get("shelter_leaks", {}))), "meta_center", TAPE_SHADE)
+
+static func _draw_leak_detector_panel(canvas: Control, art_rect: Rect2, shelter_leaks: Dictionary) -> void:
+	var panel_rect := _draw_framed_panel(canvas, _fit_rect(art_rect, 4.0), 0.0, Color(0.83, 0.76, 0.58))
+	canvas.draw_rect(panel_rect.grow(-3.0), Color(0.91, 0.86, 0.72))
+	var dial_size := Vector2((panel_rect.size.x - 12.0) * 0.5, (panel_rect.size.y - 12.0) * 0.5)
+	var channels := [
+		{"label": "TRACE", "rect": Rect2(panel_rect.position + Vector2(3.0, 3.0), dial_size)},
+		{"label": "NOISE", "rect": Rect2(panel_rect.position + Vector2(9.0 + dial_size.x, 3.0), dial_size)},
+		{"label": "WASTE", "rect": Rect2(panel_rect.position + Vector2(3.0, 9.0 + dial_size.y), dial_size)},
+		{"label": "HEAT", "rect": Rect2(panel_rect.position + Vector2(9.0 + dial_size.x, 9.0 + dial_size.y), dial_size)},
+	]
+	for dial_variant in channels:
+		var dial: Dictionary = dial_variant
+		var channel_name := str(dial.get("label", "")).to_lower()
+		_draw_leak_detector_dial(canvas, Rect2(dial.get("rect", Rect2())), str(dial.get("label", "")), clampf(float(shelter_leaks.get(channel_name, 0.0)), 0.0, 100.0))
+
+static func _draw_leak_detector_dial(canvas: Control, rect: Rect2, label: String, value: float) -> void:
+	var dial_rect := _draw_framed_panel(canvas, rect, 0.0, Color(0.89, 0.84, 0.70))
+	var center := Vector2(dial_rect.position.x + dial_rect.size.x * 0.5, dial_rect.position.y + dial_rect.size.y * 0.58)
+	var radius := minf(dial_rect.size.x, dial_rect.size.y) * 0.28
+	var start_angle := PI * 1.10
+	var end_angle := PI * 1.90
+	var safe_end := lerpf(start_angle, end_angle, 0.25)
+	var warn_end := lerpf(start_angle, end_angle, 0.50)
+	var danger_end := lerpf(start_angle, end_angle, 0.75)
+	canvas.draw_arc(center, radius, start_angle, safe_end, 20, BIO_ENERGY, 2.0)
+	canvas.draw_arc(center, radius, safe_end, warn_end, 12, ACCENT, 2.0)
+	canvas.draw_arc(center, radius, warn_end, danger_end, 12, Color(0.84, 0.47, 0.20), 2.0)
+	canvas.draw_arc(center, radius, danger_end, end_angle, 12, DANGER, 2.0)
+	canvas.draw_circle(center, radius * 0.12, STEEL_DARK)
+	var needle_angle := lerpf(start_angle, end_angle, clampf(value / 100.0, 0.0, 1.0))
+	var needle_tip := center + Vector2(cos(needle_angle), sin(needle_angle)) * (radius - 2.0)
+	canvas.draw_line(center, needle_tip, STEEL_DARK, 2.0)
+	_draw_card_text(canvas, Rect2(Vector2(dial_rect.position.x, dial_rect.position.y + 2.0), Vector2(dial_rect.size.x, 8.0)), label, "meta_center", STEEL_DARK)
+	_draw_card_text(canvas, Rect2(Vector2(dial_rect.position.x, dial_rect.end.y - 10.0), Vector2(dial_rect.size.x, 8.0)), _get_leak_band_label(value), "meta_center", TAPE_SHADE)
+
+static func _get_leak_band_label(value: float) -> String:
+	if value >= 75.0:
+		return "DANGER"
+	if value >= 50.0:
+		return "WARN"
+	if value >= 25.0:
+		return "WATCH"
+	return "SAFE"
+
+static func _get_leak_profile_text(shelter_leaks: Dictionary) -> String:
+	var max_value := 0.0
+	for channel in ["trace", "noise", "waste", "heat"]:
+		max_value = maxf(max_value, float(shelter_leaks.get(channel, 0.0)))
+	if max_value >= 75.0:
+		return "PROFILE: CRITICAL"
+	if max_value >= 50.0:
+		return "PROFILE: RISING"
+	if max_value >= 25.0:
+		return "PROFILE: WATCHED"
+	return "PROFILE: CALM"
 
 static func _get_tank_slot_token(slot_name: String, slot_data: Dictionary) -> String:
 	if slot_data.is_empty():

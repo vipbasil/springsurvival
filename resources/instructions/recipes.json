@@ -24,7 +24,8 @@
   ],
   "location_facility": [
     {"id": "facility_tool_chest", "result": "TOOL CHEST", "parts": ["BLUEPRINT", "OPERATOR", "FACILITY", "METAL x1", "HIDE x1"]},
-    {"id": "facility_tank", "result": "TANK", "parts": ["BLUEPRINT", "OPERATOR", "FACILITY", "METAL x2", "HIDE x1"]}
+    {"id": "facility_tank", "result": "TANK", "parts": ["BLUEPRINT", "OPERATOR", "FACILITY", "METAL x2", "HIDE x1"]},
+    {"id": "facility_leak_detector", "result": "LEAK DETECTOR", "parts": ["BLUEPRINT", "OPERATOR", "FACILITY", "METAL x2", "POWER UNIT x1", "FIBER x1"]}
   ],
   "location_nest": [
     {"id": "nest_brood_cage", "result": "BROOD CAGE", "parts": ["BLUEPRINT", "OPERATOR", "NEST", "METAL x1", "HIDE x1"]}

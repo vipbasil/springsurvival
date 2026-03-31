@@ -1,2 +1,4 @@
 res://scripts/core/GameState.gd
 res://scripts/ui/WorkshopArt.gd
+res://scripts/workshop_main.gd
+res://scripts/ui/WorkshopCardRuntime.gd

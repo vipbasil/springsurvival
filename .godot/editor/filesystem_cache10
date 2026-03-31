@@ -11,7 +11,7 @@ LORE.md::TextFile::-1::1773755119::0::1::::<><><>0<>0<><>::
 README.md::TextFile::-1::1774689392::0::1::::<><><>0<>0<><>::
 TODO.md::TextFile::-1::1774472290::0::1::::<><><>0<>0<><>::
 ::res://assets/::1774471235
-::res://assets/cards/::1774791028
+::res://assets/cards/::1774811509
 algaes.svg::CompressedTexture2D::6398599749028272486::1774304860::1774304972::1::::<><><>0<>0<>fbc7e9ec5c8cfbab3e9352b69b784835<>res://.godot/imported/algaes.svg-2aa7610fd6db9cb76b2983ccd01aa2e1.ctex::
 archive_shelf.png::CompressedTexture2D::4602775256063393414::1774735828::1774735895::1::::<><><>0<>0<>8f2a3c020ebff0ffdfb9705fe4ae1f9e<>res://.godot/imported/archive_shelf.png-fb816ea70c4a35e8bc1a635d22da5322.ctex::
 archive_shelf.svg::CompressedTexture2D::4473577121543604576::1774736372::1774736851::1::::<><><>0<>0<>445624fa5cd845fe7069673e5e8832a3<>res://.godot/imported/archive_shelf.svg-33bb2b774f38d4c0dfe671d028df2511.ctex::
@@ -73,6 +73,18 @@ location_pond.svg::CompressedTexture2D::7365489793810465612::1774114064::1774114
 location_ruin.svg::CompressedTexture2D::9065726609471578566::1774111812::1774112117::1::::<><><>0<>0<>77a1a3756b38fe4d0ce8293d61571744<>res://.godot/imported/location_ruin.svg-d8776f58d3762a41c9d341cef25cd40a.ctex::
 location_surveillance_zone.svg::CompressedTexture2D::2623857823371121654::1774096031::1774096920::1::::<><><>0<>0<>a5190445e23a311477cefec94f646a68<>res://.godot/imported/location_surveillance_zone.svg-d64886eb14d914838ea1767a40f1eda9.ctex::
 location_tower.svg::CompressedTexture2D::5823307567757277377::1774084465::1774084501::1::::<><><>0<>0<>884863ab55f6b76b6b3b7c2de21a6937<>res://.godot/imported/location_tower.svg-1d5c14121104f886ddd5cee65ff4111a.ctex::
+mantis_drone.svg::CompressedTexture2D::2730794744791564981::1774811383::1774811539::1::::<><><>0<>0<>deb95e61a41eaeee4945e772a8eabce5<>res://.godot/imported/mantis_drone.svg-c473d1e5b4fa0a147c8071830afd8247.ctex::
+mantis_drone_5color.svg::CompressedTexture2D::8600622898551863843::1774811509::1774811539::1::::<><><>0<>0<>5ebae02f7887a2cee32e598376de50cc<>res://.godot/imported/mantis_drone_5color.svg-d6c5c7a9d9640de39618fb86ea69814a.ctex::
+mantis_drone_5color_flat.png::CompressedTexture2D::7371029009367945469::1774811509::1774811539::1::::<><><>0<>0<>522f522cc29559d813d14672b7c68c70<>res://.godot/imported/mantis_drone_5color_flat.png-678583e25e50518f6989af763494a73f.ctex::
+mantis_drone_assault_6601.png::CompressedTexture2D::5411821317424896076::1774810867::1774811539::1::::<><><>0<>0<>3e8d2078a7502c52b991acc868d9d24a<>res://.godot/imported/mantis_drone_assault_6601.png-10196392592d0a65703f5ed5b72fa957.ctex::
+mantis_drone_assault_6602.png::CompressedTexture2D::8944245330582951410::1774810816::1774811539::1::::<><><>0<>0<>46adb72b3050c8358c30b2ad07fe276f<>res://.godot/imported/mantis_drone_assault_6602.png-de7a36fa0091be3882f590eb72f04954.ctex::
+mantis_drone_flat.png::CompressedTexture2D::5995121879595783730::1774811383::1774811539::1::::<><><>0<>0<>43bbdd852a9a170bb3457b22068b3caf<>res://.godot/imported/mantis_drone_flat.png-745c4262edcbbcab9163063b3907a079.ctex::
+mantis_drone_fullref_ollama.png::CompressedTexture2D::1960348177451604764::1774810402::1774811539::1::::<><><>0<>0<>b4efaa743290455b014b08675a70d364<>res://.godot/imported/mantis_drone_fullref_ollama.png-520844fc06a9bdf327cc28dd4c4c35bd.ctex::
+mantis_drone_ollama.png::CompressedTexture2D::6439856856431372492::1774810352::1774811539::1::::<><><>0<>0<>dd4459dfd01be17bb21c253e3b1070b0<>res://.godot/imported/mantis_drone_ollama.png-cd1e8c27f60b53fe68f66838daeee913.ctex::
+mantis_drone_prompt7701.png::CompressedTexture2D::8172510208644737377::1774811134::1774811539::1::::<><><>0<>0<>254c8b68d0a29afdbf1590ed51c0a3b0<>res://.godot/imported/mantis_drone_prompt7701.png-2b27864b1c8fb75b9f863a4a6b5a7346.ctex::
+mantis_drone_prompt7702.png::CompressedTexture2D::9104218977342400354::1774811187::1774811539::1::::<><><>0<>0<>892f84cf1b12c3f23cd77cf5133ecff8<>res://.godot/imported/mantis_drone_prompt7702.png-329c175d3ce5f3ab186f7b67f183bf04.ctex::
+mantis_drone_refined_5501.png::CompressedTexture2D::4112800544744991153::1774810569::1774811539::1::::<><><>0<>0<>88fb54d83be6dc22cdf8ab152897b983<>res://.godot/imported/mantis_drone_refined_5501.png-4bd1a08b6f02720db6275e8cacca3a7a.ctex::
+mantis_drone_refined_5502.png::CompressedTexture2D::1653446993239038596::1774810622::1774811539::1::::<><><>0<>0<>93dc48925f490405bdcefe21207b7aed<>res://.godot/imported/mantis_drone_refined_5502.png-55bf248610a9743d2963ce797c458091.ctex::
 mealworms.svg::CompressedTexture2D::8511460939964439369::1774570061::1774571109::1::::<><><>0<>0<>eb8414922b5f9ab2cb0242387ffda35d<>res://.godot/imported/mealworms.svg-faed72674da191f5b73b00f31f0ce3b4.ctex::
 mealworms_flat.png::CompressedTexture2D::8008852632221895667::1774570061::1774571109::1::::<><><>0<>0<>936eb6e2b663c52cf70957ca6d5a2884<>res://.godot/imported/mealworms_flat.png-a6dca29cc7afdd608abc2e975183ef06.ctex::
 meat.svg::CompressedTexture2D::4520091442731160080::1774199515::1774199553::1::::<><><>0<>0<>a2c30f8f5cf77ff145dc0e245b0cbfe5<>res://.godot/imported/meat.svg-da45ee2359066a4df7c3baa338ee738f.ctex::
@@ -126,10 +138,10 @@ woolfhound.svg::CompressedTexture2D::8834166246580405045::1774128103::1774129447
 woolfspack.svg::CompressedTexture2D::6150378164587839939::1774125244::1774126016::1::::<><><>0<>0<>76bb7f7eca88a3b915aea4d3b25c03a5<>res://.godot/imported/woolfspack.svg-744480e65a0a26bb65259242a19c4a47.ctex::
 ::res://project_memory/::1774475656
 canon.md::TextFile::-1::1774470136::0::1::::<><><>0<>0<><>::
-decisions.md::TextFile::-1::1774789138::0::1::::<><><>0<>0<><>::
+decisions.md::TextFile::-1::1774804338::0::1::::<><><>0<>0<><>::
 open-questions.md::TextFile::-1::1774475656::0::1::::<><><>0<>0<><>::
 regressions.md::TextFile::-1::1774735015::0::1::::<><><>0<>0<><>::
-systems.md::TextFile::-1::1774789119::0::1::::<><><>0<>0<><>::
+systems.md::TextFile::-1::1774804357::0::1::::<><><>0<>0<><>::
 ::res://resources/::1773572322
 ::res://resources/instructions/::1774275146
 enemy_loot.json::JSON::-1::1774789075::0::1::::<><><>0<>0<><>::
@@ -161,7 +173,7 @@ Screenshot 2026-03-24 at 20.02.45.png::CompressedTexture2D::2326892684855246530:
 automaton.gd::GDScript::2746441041152879474::1773585609::0::1::::<>Node2D<><>0<>0<><>::
 grid.gd::GDScript::7017628564851871511::1773585609::0::1::::<>Node2D<><>0<>0<><>::
 main.gd::GDScript::52279524499472423::1773703211::0::1::::<>Node2D<><>0<>0<><>::
-workshop_main.gd::GDScript::9144521010352201::1774758476::0::1::::<>Control<><>0<>0<><>::
+workshop_main.gd::GDScript::9144521010352201::1774807940::0::1::::<>Control<><>0<>0<><>::
 ::res://scripts/automata/::1773572457
 Automaton.gd::GDScript::4908595298831043970::1773585609::0::1::::<>Node2D<><>0<>0<><>::
 ::res://scripts/automaton/::1773572457
@@ -175,7 +187,7 @@ TapeProgramComponent.gd::GDScript::6521514458476315437::1773585609::0::1::::Tape
 WorldObject.gd::GDScript::8481976651834610445::1773585609::0::1::::<>Node2D<><>0<>0<><>::
 ::res://scripts/core/::1773736235
 EventBus.gd::GDScript::1892509149909003324::1773874011::0::1::::<>Node<><>0<>0<><>::
-GameState.gd::GDScript::9197809722779253060::1774788995::0::1::::<>Node<><>0<>0<><>::
+GameState.gd::GDScript::9197809722779253060::1774801424::0::1::::<>Node<><>0<>0<><>::
 WorldObject.gd::GDScript::7033133235859225282::1773585609::0::1::::WorldObject<>Node2D<><>0<>0<><>::
 ::res://scripts/data/::1773598853
 InstructionLibrary.gd::GDScript::8134138306017286675::1774209590::0::1::::<>Node<><>0<>0<><>::
@@ -192,7 +204,7 @@ AutomatonPanel.gd::GDScript::2422187267235036247::1773593067::0::1::::<>Control<
 LogPanel.gd::GDScript::8885541713723157784::1773585609::0::1::::<>Control<><>0<>0<><>::
 TapeEditorPanel.gd::GDScript::916766459632910270::1773624099::0::1::::<>Control<><>0<>0<><>::
 WorkshopArt.gd::GDScript::1134817459086517449::1774791092::0::1::::WorkshopArt<>RefCounted<><>0<>0<><>::
-WorkshopCardRuntime.gd::GDScript::887497819160177035::1774650425::0::1::::WorkshopCardRuntime<>RefCounted<><>0<>0<><>::
+WorkshopCardRuntime.gd::GDScript::887497819160177035::1774804517::0::1::::WorkshopCardRuntime<>RefCounted<><>0<>0<><>::
 WorkshopTableController.gd::GDScript::4990187153596744611::1774650425::0::1::::WorkshopTableController<>RefCounted<><>0<>0<><>::
 ::res://scripts/world/::1773572457
 GridMap.gd::GDScript::6000961359595570112::1773585609::0::1::::<>Node2D<><>0<>0<><>::

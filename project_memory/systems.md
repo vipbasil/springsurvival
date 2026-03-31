@@ -47,7 +47,7 @@
   - starter journal is seeded with FIELD, POND, FIBER, BIOMASS plus operator-specific known subjects
   - current demo tape is START LOOP: SCN, MOV, ROT 4, DIE
 - `power_unit` now lives in `material_cards`, not a separate resource stack. It has two live recharge paths:
-  - `CHARGE MACHINE` consumes up to `50` `power_unit` quantity automatically when a workshop drone is placed on the machine; operator overlap is no longer required.
+  - `CHARGE MACHINE` requires operator overlap with the machine and a workshop drone on the machine. Each cycle spends `1` operator energy and gives that drone `+50` power.
   - dropping a `power_unit` material card directly onto a workshop drone transfers charge from that specific card into the drone and reduces the card quantity immediately.
 - Current implemented Ark operator roster:
   - OP. LERA
@@ -78,6 +78,11 @@
 - DOG is now a real unit card family on the table. Dogs have energy, HP, base attack, base armor, and the same 3 equipment slots used by other units. They can equip normal equipment cards, be fed with BONE or DRY RATIONS for energy, and be treated with MEDICINE for HP.
 - Dogs now participate in table combat through the same collision loop as operator and drones. If a DOG card overlaps an enemy card and has HP and energy remaining, it attacks during the enemy-fight tick, spends 1 energy for that fight, and takes mitigated HP damage back from the enemy based on its armor.
 - Enemy roster now includes `WARDEN`, a heavy machine enforcer with high attack, high HP, and real enemy armor. Enemy combat now supports enemy-side armor as a live stat instead of faking toughness through HP alone.
+- Loose hostile enemy cards on the workshop table now have a slow wander process. If an enemy is idle (not in combat, not in cage capture, not being dragged), it keeps a long movement cooldown and then drifts to a nearby empty table position. The movement uses the same process-bar overlay system as other timed table actions.
+- Idle hostile enemies now have a second table process besides wandering: if they overlap a valid non-hostile table card, they start a timed interaction instead of wandering. Current interaction split:
+  - operator / drones / dogs: fight
+  - materials / blueprints / equipment / programmed tapes / blank tapes: steal
+  - locations / mechanisms / structures: destroy
 - If a dog is reduced to 0 HP in combat, it dies permanently, is removed from the table, and drops animal loot using its stored source enemy type. Current tamed dogs come from wolves, so they drop the same loot family as wolf-pack animals.
 - TANK now lives in the `mechanism` research/card family. Internally it still persists in the old portable-card array for save compatibility, but the live runtime, journal, and table logic treat it as a mechanism rather than a structure.
 - The tank now runs as a slow continuous cycle machine with 3 slots:
@@ -92,3 +97,25 @@
 - Tank cards now show a compact slot/state summary on-card so the loaded culture, feed, recipe, and running/idle state are readable at a glance.
 - Double-clicking a tank is now the stop/unload action. It aborts any active tank batch, clears the batch state immediately, and ejects all loaded tank cards back to the table in one action instead of withdrawing only one slot.
 - Journal preview rendering now uses the actual card art for equipment, structures, and mechanisms instead of generic placeholder blocks, so newer card assets show up in the journal once the subject kind is supported.
+- Shelter leak profile is now live in the save/runtime layer:
+  - `TRACE`: physical evidence of operator/drone activity and repeated route habits
+  - `NOISE`: audible disturbance from combat, charging, and machine work
+  - `WASTE`: biological residue, rot, and dirty process byproducts
+  - `HEAT`: thermal leakage from charging and active mechanisms
+- Current live leak behavior:
+  - values are persistent per shelter and decay slowly over time
+  - current first producers are:
+    - charge-machine cycles
+    - tank cycle start/completion
+    - bot recovery / retrieval start
+    - enemy fights
+  - current first response hook:
+    - location encounter chance and enemy weighting now read the live leak profile
+    - machine enemies bias toward `HEAT` and `TRACE`
+    - animal threats bias toward `NOISE` and `WASTE`
+- Current readout object:
+  - `LEAK DETECTOR`
+  - mechanism card
+  - four analog dials in one panel
+  - reveals current shelter leak state but does not generate it
+  - current footer profile bands are `CALM / WATCHED / RISING / CRITICAL`

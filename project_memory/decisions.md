@@ -29,10 +29,11 @@
 - Knowledge must persist between runs. Journal discoveries and learned formulas are the roguelite carryover; shelter state and local inventory are not.
 - TOOL CHEST and ARCHIVE SHELF should not share the same interaction model. TOOL CHEST is direct card-native storage: drop portable non-NPC cards onto it to store them, and double-click it to withdraw the most recently stored card via LIFO. ARCHIVE SHELF keeps the explicit overlay browsing model and should accept all portable state-table cards except hostile enemy cards.
 - Power Unit should be a normal `material` card, not a separate `resource`/slotted power-card family. Legacy power slots should migrate into `material: power_unit`.
-- CHARGE MACHINE should refill a workshop drone by consuming up to `50` `power_unit` quantity from material cards. It should no longer manufacture a separate installable power card.
-- CHARGE MACHINE is now automatic. It should not require operator overlap. If a workshop drone is placed on the charge machine and `power_unit` material exists, the machine can consume up to `50` units and refill the drone by itself.
+- CHARGE MACHINE should be manual operator charging, not stored-unit charging. It requires operator + charge station + drone, and each completed cycle spends `1` operator energy to transfer `50` power into the drone.
 - Direct card use should still work too: dropping a `power_unit` material card directly onto a workshop drone immediately transfers charge from that card into the drone and drains the card's quantity.
-- Drone max power charge is `200`, but the charge machine still transfers only `50` power units per operating cycle. `power_unit` material quantities should stay on the smaller transfer scale rather than inflating to the drone max-charge value.
+- Drone max power charge is `200`, and the charge machine transfers `50` power per operating cycle.
+- Idle hostile NPC cards on the workshop table should slowly wander as a timed process. If an enemy is not currently fighting, not being captured, and not being dragged, it should occasionally reposition by a small random step instead of staying perfectly static forever.
+- Hostile table collisions should resolve as timed enemy interactions. If an idle enemy overlaps portable non-hostile cards, it should not just sit there: it starts an interaction bar and then either steals or destroys the target based on card type. Unit cards still resolve through the fight loop instead of the steal/destroy loop.
 - Generated card art should target an old minimalist flat-color poster look: hyper minimal, geometric, clean silhouette, poster-like flat illustration, pure white background only, and a strict max-4-color palette. Default palette: deep navy `#1F2A44`, parchment cream `#F2E9DA`, burnt ochre `#D9822B`, soft steel gray `#8A8F98`. No gradients, glows, vignettes, soft shadows, or extra colors. Hard-edged flat highlight and shadow planes are desired and are one of the key style traits; what is forbidden is soft airbrushed shading, not poster-style tonal blocks. Shapes should stay flat and vector-friendly so outputs can be cleaned and converted to SVG with minimal path complexity.
 - For image generation, use these four reference images together as the default style pack unless explicitly overridden:
   - `/Users/vasilibraga/Downloads/5j3eWWkFs2HxE02P (1).png`
@@ -61,3 +62,9 @@
 - Journal preview pages must use the real card renderer for supported subject kinds. If the project has dedicated art for an equipment, structure, or mechanism, the journal should show that art instead of a text placeholder.
 - Drone handling should be type-driven, not slot-driven. Runtime, journal, naming, commands, and rendering should read an explicit `drone_type` definition instead of assuming `slot 0 = spider` and `slot 1 = butterfly`.
 - Heavy hostile machines should use real enemy armor, not just inflated HP. `WARDEN` is now the heavy machine-enforcer tier: high attack, high HP, high armor, and low-frequency presence in machine-heavy locations.
+- Shelter exposure should be modeled as a leak profile, not a generic pollution bar. The first four channels are `TRACE`, `NOISE`, `WASTE`, and `HEAT`.
+- The player-facing readout for shelter exposure should be a `LEAK DETECTOR` mechanism card with four analog voltmeter-like dials on one panel, not a HUD bar stack.
+- Leak response should start at location encounters, not everywhere at once. The first live weighting layer is:
+  - machine threats (`surveillance_drone`, `infantry_drone`, `warden`) respond mainly to `HEAT` and `TRACE`
+  - biological threats (`wolf_pack`, `grizzly`) respond mainly to `NOISE` and `WASTE`
+  - `stalker` responds mainly to `TRACE`
